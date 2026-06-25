@@ -1,14 +1,21 @@
 {
 	"name": "artefact",
-	"module": "src/main.ts",
+	"version": "0.1.0",
 	"type": "module",
 	"private": true,
+	"bin": {
+		"artefact": "./dist/main.js"
+	},
+	"exports": {
+		".": "./dist/main.js"
+	},
 	"scripts": {
+		"build": "bun run scripts/build.ts",
+		"start": "bun run src/main.ts",
 		"fix": "bun run check",
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
-		"lint": "bun x @biomejs/biome lint --fix .",
-		"start": "bun run src/main.ts"
+		"lint": "bun x @biomejs/biome lint --fix ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
