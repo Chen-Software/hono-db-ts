@@ -36,8 +36,8 @@ export function run(argv = process.argv.slice(2)) {
         console.error("Error: add requires two numbers");
         process.exit(1);
       }
-      const a = parseNumber(args[0], "a");
-      const b = parseNumber(args[1], "b");
+      const a = parseNumber(args[0]!, "a");
+      const b = parseNumber(args[1]!, "b");
       console.log(a + b);
       break;
     }
@@ -47,8 +47,8 @@ export function run(argv = process.argv.slice(2)) {
         console.error("Error: subtract requires two numbers");
         process.exit(1);
       }
-      const a = parseNumber(args[0], "a");
-      const b = parseNumber(args[1], "b");
+      const a = parseNumber(args[0]!, "a");
+      const b = parseNumber(args[1]!, "b");
       console.log(a - b);
       break;
     }

@@ -12,6 +12,7 @@
 	"scripts": {
 		"build": "bun run scripts/build.ts",
 		"start": "bun run src/main.ts",
+		"test": "bun test",
 		"fix": "bun run check",
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
