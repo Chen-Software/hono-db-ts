@@ -6,6 +6,7 @@
 	"scripts": {
 		"db:generate": "bun x drizzle-kit generate --dialect sqlite --schema ./src/schema.ts",
 		"db:migrate": "bun run scripts/db-migrate.ts",
+		"db:seed": "bun run scripts/db-seed.ts",
 		"fix": "bun run check",
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
