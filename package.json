@@ -12,9 +12,13 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.5",
-		"@types/bun": "latest"
+		"@types/bun": "latest",
+		"drizzle-kit": "^0.31.10"
 	},
 	"peerDependencies": {
 		"typescript": "^5.9.3"
+	},
+	"dependencies": {
+		"drizzle-orm": "^0.45.2"
 	}
 }
