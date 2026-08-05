@@ -1,6 +1,5 @@
+import * as schema from "./schema";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
 
-const query = sql`select "hello world" as text`;
-const result = db.get<{ text: string }>(query);
+const result = await db.select().from(schema.movies);
 console.log(result);
