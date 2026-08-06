@@ -1,43 +1,59 @@
 /**
  * Build the storage-agnostic repository for the active dialect.
  *
- * Uses Bun macros (`src/macros/db-client.ts`, `src/macros/db-repo.ts`) that
- * inline the module specifiers of the active dialect's client + repo at build
- * time. The static `await import(<literal>)` lets the bundler resolve them and
- * **tree-shake away every other dialect's driver** — so a `d1` build does not
- * bundle `@libsql/client`, and a `turso` build does not bundle `postgres`, etc.
+ * The client comes from the unified `src/db/client.ts` `createClient()`, which
+ * auto-selects the local dev vs remote client based on `NODE_ENV`. The matching
+ * repo implementation is then picked by dialect. Each repo module stays
+ * separate so the Worker build (via `src/worker/<dialect>.ts`) keeps its
+ * single-backend tree-shaking.
  *
- * Used by the local Bun entry (`main.ts`). The Worker entry (`src/worker.ts`)
- * selects D1 vs Neon from bindings instead.
+ * Used by the local Bun entry (`main.ts`). The Worker entry
+ * (`src/worker/<dialect>.ts`) constructs its repo from Worker bindings instead.
  */
 
 import type { MoviesRepo } from "./movies-repo";
-import type { SqliteDb } from "../db/sqlite-client";
-import type { PostgresDb } from "../db/postgres-client";
-import type { TursoDb } from "../db/turso-client";
-import { clientModule } from "../macros/db-client" with { type: "macro" };
-import { repoModule } from "../macros/db-repo" with { type: "macro" };
-
-type ClientModule = { createClientFromEnv: () => unknown };
-type RepoModule = Record<string, (db: unknown) => MoviesRepo>;
+import { createClient } from "../db/client";
+import { createSqliteClient, type SqliteDb } from "../db/sqlite-client";
+import { createTursoMoviesRepo } from "./movies-repo-turso";
+import { createPostgresMoviesRepo } from "./movies-repo-postgres";
+import { createSqliteMoviesRepo } from "./movies-repo-sqlite";
+import { dbDialect } from "../macros/db-dialect" with { type: "macro" };
 
 /**
- * Build the repo for the active dialect. Async because it statically imports
- * the dialect-specific client + repo modules (resolved + tree-shaken at build).
+ * Build the repo for the active dialect using `createClient()` (local dev vs
+ * remote is chosen automatically from the environment).
  */
 export async function createRepo(): Promise<MoviesRepo> {
-	const clientMod = (await import(clientModule())) as ClientModule;
-	const repoMod = (await import(repoModule())) as RepoModule;
+	const dialect = dbDialect();
 
-	const db = clientMod.createClientFromEnv();
-
-	// Each repo module exports exactly one `create<X>MoviesRepo` factory.
-	for (const [name, factory] of Object.entries(repoMod)) {
-		if (typeof factory === "function" && name.startsWith("create") && name.endsWith("MoviesRepo")) {
-			return factory(db);
+	switch (dialect) {
+		case "turso":
+		case "tursodb":
+		case "turso-cloud": {
+			const { db } = await createClient();
+			return createTursoMoviesRepo(db as Parameters<typeof createTursoMoviesRepo>[0]);
+		}
+		case "neon":
+		case "postgres":
+		case "postgresql":
+		case "pg": {
+			const { db } = await createClient();
+			return createPostgresMoviesRepo(
+				db as Parameters<typeof createPostgresMoviesRepo>[0],
+			);
+		}
+		case "sqlite":
+		case "d1":
+		default: {
+			// d1 maps to the local SQLite client for local runs; D1 itself is a
+			// Worker binding handled by `src/worker/d1.ts`.
+			const db =
+				dialect === "d1"
+					? createSqliteClient("sqlite.db")
+					: ((await createClient()).db as SqliteDb);
+			return createSqliteMoviesRepo(db);
 		}
 	}
-	throw new Error(`No repo factory found in ${repoModule()}`);
 }
 
-export type { SqliteDb, PostgresDb, TursoDb };
+export type { SqliteDb };

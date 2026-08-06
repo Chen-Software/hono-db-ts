@@ -1,14 +1,16 @@
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { Movie, MoviesRepo } from "./movies-repo";
 
 /**
- * Build a movies repository backed by a Cloudflare D1 binding.
+ * Build a movies repository backed by a Drizzle D1 client (created from a
+ * Cloudflare D1 binding via `createClient({ d1: env.DB })` — see
+ * https://orm.drizzle.team/docs/sqlite/connect-cloudflare-d1).
  */
-export function createD1MoviesRepo(d1: D1Database): MoviesRepo {
-	const db = drizzle(d1, { schema });
-
+export function createD1MoviesRepo(
+	db: DrizzleD1Database<typeof schema>,
+): MoviesRepo {
 	return {
 		async list() {
 			return db.select().from(schema.movies).all();
