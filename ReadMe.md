@@ -52,8 +52,15 @@ For Postgres dialect testing:
 
 ```bash
 docker compose up -d # start local Postgres on :5432
-# then set DATABASE_TYPE=postgres and DATABASE_URL in .env
+bun run db:migrate:postgres # apply the Postgres migrations
+bun run test:postgres      # run the Postgres endpoint tests
+# then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
 ```
+
+The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the same
+`/movies` API surface against a live Postgres. They are **opt-in** — the default
+`bun test` only runs the SQLite tests — and require a running Postgres plus applied
+migrations.
 
 ## Build process
 
@@ -129,7 +136,8 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the Hono server in watch mode (Bun)       |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun test`             | Run the test suite                              |
+| `bun test`             | Run the SQLite endpoint tests                   |
+| `bun run test:postgres` | Run the Postgres endpoint tests (needs a running Postgres) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
@@ -214,10 +222,12 @@ src/
   repo/
     movies-repo.ts       # storage-agnostic MoviesRepo interface
     movies-repo-sqlite.ts# bun:sqlite implementation
+    movies-repo-postgres.ts # postgres implementation
     movies-repo-d1.ts    # Cloudflare D1 implementation
   routes/
     movies.ts        # /movies REST handlers
-    movies.test.ts   # /movies endpoint tests
+    movies.test.ts   # SQLite /movies endpoint tests
+    movies-postgres.test.ts # Postgres /movies endpoint tests (opt-in)
 scripts/
   build.ts               # Bun.build: bundle server + Worker (runs macros)
   db-migrate.ts          # apply SQLite migrations

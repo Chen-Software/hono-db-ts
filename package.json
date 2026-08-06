@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "bun --watch src/main.ts",
 		"dev:wrangler": "bun x wrangler dev",
-		"test": "bun test",
+		"test": "bun test src/routes/movies.test.ts",
+		"test:postgres": "bun test src/routes/movies-postgres.test.ts",
 		"db:generate:sqlite": "bun x drizzle-kit generate --config drizzle.config.sqlite.ts",
 		"db:generate:postgres": "bun x drizzle-kit generate --config drizzle.config.postgres.ts",
 		"db:generate": "bun run db:generate:sqlite && bun run db:generate:postgres",
