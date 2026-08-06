@@ -58,26 +58,34 @@ const argv = process.argv.slice(2);
 const explicitEnvFlag = argv.find((a) => a.startsWith("--env-file="));
 if (!explicitEnvFlag && !process.env["__TEST_DEV_ENV_LOADED__"]) {
 	const devEnv = devEnvFile(); // macro -> literal dev env path
-	// Pass a CLEAN env (system vars + marker only) — NOT the first exec's
-	// process.env. The first exec auto-loaded `.env` (production DB vars like
-	// TURSO_URL) into process.env; if we inherit it, those already-set vars win
-	// over --env-file. With a clean env, Bun loads `.env` then applies
-	// --env-file AFTER it, so the dev values win.
-	const cleanEnv: Record<string, string> = {
-		PATH: process.env["PATH"] ?? "",
-		HOME: process.env["HOME"] ?? "",
-		SHELL: process.env["SHELL"] ?? "",
-		USER: process.env["USER"] ?? "",
-		TERM: process.env["TERM"] ?? "",
-		LANG: process.env["LANG"] ?? "",
-		__TEST_DEV_ENV_LOADED__: "1",
-	};
+	// Start a child with a CLEAN env (system vars + marker only) — NOT this
+	// process's env, which auto-loaded production `.env` (e.g. a TURSO_URL
+	// placeholder). With a clean env, Bun loads `.env` then applies --env-file
+	// AFTER it, so the dev values win. The child re-runs this script with the
+	// dev env loaded (marker prevents another re-exec).
 	const r = spawnSync(
 		"bun",
 		["run", `--env-file=${devEnv}`, import.meta.path, ...argv],
-		{ cwd: root, stdio: "inherit", env: cleanEnv },
+		{ cwd: root, stdio: "inherit", env: { ...buildCleanEnv(), __TEST_DEV_ENV_LOADED__: "1" } },
 	);
 	process.exit(r.status ?? 1);
+}
+
+/**
+ * A minimal env with only system vars — used for spawning Bun subprocesses so
+ * that `--env-file` (not an inherited, `.env`-polluted process.env) decides the
+ * DB/config vars. Keeps the common system vars a script needs.
+ */
+function buildCleanEnv(): Record<string, string> {
+	const pick = (...keys: string[]) => {
+		const o: Record<string, string> = {};
+		for (const k of keys) {
+			const v = process.env[k];
+			if (v !== undefined) o[k] = v;
+		}
+		return o;
+	};
+	return pick("PATH", "HOME", "SHELL", "USER", "TERM", "LANG", "LC_ALL", "PWD");
 }
 
 // Flag parsing.
@@ -354,10 +362,10 @@ if (setupScript) {
 // package.json) and recurses into this script infinitely. Unit-only runs pass no
 // --env-file at all — unit tests are env-agnostic.
 //
-// The child inherits this process's env. We re-exec'd with `--env-file=<devEnv>`
-// at the top, and Bun applies `--env-file` after auto-loading `.env`, so the dev
-// env values (e.g. TURSO_URL) already win in process.env — the child gets the
-// correct dev config with no manual key stripping needed.
+// The child runs in a clean env with `--env-file=<envFile>`, so Bun's own env
+// loading (`.env` then `--env-file`, with --env-file winning) provides the
+// correct dev config — production `.env` values never leak in. Unit-only runs
+// pass no --env-file and get the clean env too.
 const args = [
 	"test",
 	`--timeout=${timeoutMs}`,
@@ -370,5 +378,6 @@ const args = [
 const result = spawnSync("bun", args, {
 	cwd: root,
 	stdio: "inherit",
+	env: buildCleanEnv(),
 });
 process.exit(result.status ?? 1);
