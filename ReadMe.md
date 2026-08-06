@@ -20,7 +20,8 @@ bun run db:generate  # (re)generate SQL migrations from the schema
 bun run db:migrate   # apply migrations to the SQLite database
 ```
 
-By default the app uses SQLite (`sqlite.db`).
+By default **local dev** uses SQLite (`sqlite.db`), and the generic `.env.example`
+defaults to the production `d1` dialect.
 
 ## Environment configuration
 
@@ -31,7 +32,7 @@ file you want; the relevant scripts already point at them:
 | ----------------------- | --------------- | ----------------------------------------- |
 | `.env.dev`              | `sqlite`        | `bun run dev` (local dev)                 |
 | `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
-| `.env.example`          | —               | generic reference for copy/paste          |
+| `.env.example`          | `d1`            | generic reference — defaults to the production dialect (`d1`) |
 
 - **`bun:sqlite` is local-dev only** — it cannot run inside a Cloudflare Worker.
   The Worker always uses the D1 binding (`env.DB`) via `src/worker.ts`, so the
@@ -52,13 +53,7 @@ Variables:
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `sqlite`                                             |
-| `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
-| `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
-
-| Variable          | Description                                   | Default                                              |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `sqlite`                                             |
+| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `d1` (in `.env.example`) / `sqlite` (in `.env.dev`)  |
 | `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
 | `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
 
@@ -73,9 +68,9 @@ Variables:
 
 ### Dialects
 
-- `sqlite` (default) — local `bun:sqlite` driver.
-- `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres).
-- `d1` — the Cloudflare Worker's D1 binding (`env.DB`). There is **no local driver** for it; locally this throws a clear error. Use `bun run worker:dev` (or deploy) for the D1 path.
+- `d1` (production default) — the Cloudflare Worker's D1 binding (`env.DB`). There is **no local driver** for it; locally this throws a clear error. Use `bun run worker:dev` (or deploy) for the D1 path.
+- `sqlite` (local dev default) — local `bun:sqlite` driver, used via `bun run dev`.
+- `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres), used via `bun run dev:postgres`.
 
 For Postgres dialect testing:
 
@@ -88,8 +83,9 @@ bun run test:postgres      # run the Postgres endpoint tests
 
 The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the same
 `/movies` API surface against a live Postgres. They are **opt-in** — the default
-`bun test` only runs the SQLite tests — and require a running Postgres plus applied
-migrations.
+`bun test` only runs the SQLite tests (loading `.env.dev`) — and require a running
+Postgres plus applied migrations. `bun run test:postgres` loads
+`.env.example.postgres`.
 
 ## Build process
 
@@ -166,8 +162,8 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
 | `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.example.postgres`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun test`             | Run the SQLite endpoint tests                   |
-| `bun run test:postgres` | Run the Postgres endpoint tests (needs a running Postgres) |
+| `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
+| `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.example.postgres`, needs a running Postgres) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
