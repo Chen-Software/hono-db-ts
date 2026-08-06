@@ -23,9 +23,9 @@ bun run dev          # start the Hono server in watch mode
 
 By default the app uses SQLite (`sqlite.db`).
 
-## Environment configuration
+## Environment configuration (`.env`)
 
-The app reads its database dialect from the environment **at build time** via Bun macros (`src/macros/db.ts`). Copy `.env.example` to `.env` and set:
+Copy `.env.example` to `.env` and set:
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
@@ -33,7 +33,20 @@ The app reads its database dialect from the environment **at build time** via Bu
 | `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
 | `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
 
-> `DATABASE_TYPE` is baked in at bundle time by the macros, which only run locally or in CI — they never execute on the Cloudflare Worker. `d1` refers to the Worker's D1 binding (`env.DB`), which has no local driver; use `bun run worker:dev` for that path.
+### When is `DATABASE_TYPE` read?
+
+`DATABASE_TYPE` / `DATABASE_URL` are **build-time** values. They are read **once, at bundle time** by the macros in `src/macros/db.ts` (which run under `bun run dev`, `bun run build`, and CI) and inlined into the emitted code as literals. They are **never** read at runtime and are **not** part of the Cloudflare Worker bundle:
+
+- **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
+- **Cloudflare Worker** — the Worker uses the `env.DB` D1 binding directly (`src/worker.ts`) and has no macros; `DATABASE_TYPE` is irrelevant there.
+
+> Because the value is baked in at build time, change `DATABASE_TYPE` in `.env` and **restart** `bun run dev` / re-run `bun run build` for it to take effect.
+
+### Dialects
+
+- `sqlite` (default) — local `bun:sqlite` driver.
+- `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres).
+- `d1` — the Cloudflare Worker's D1 binding (`env.DB`). There is **no local driver** for it; locally this throws a clear error. Use `bun run worker:dev` (or deploy) for the D1 path.
 
 For Postgres dialect testing:
 
@@ -42,9 +55,27 @@ docker compose up -d # start local Postgres on :5432
 # then set DATABASE_TYPE=postgres and DATABASE_URL in .env
 ```
 
+## Build process
+
+`bun run build` runs `scripts/build.ts`, which uses [`Bun.build`](https://bun.com/docs/bundler) to bundle the app **and execute the macros** (`import ... with { type: "macro" }`) at build time. Output goes to `dist/`:
+
+| Output | Source                     | Target   | Notes                                   |
+| ------ | -------------------------- | -------- | --------------------------------------- |
+| `dist/server.js` | `src/main.ts`       | `bun`    | Local server bundle; macros are inlined |
+| `dist/worker.js` | `src/worker.ts`     | `browser`| Cloudflare Worker bundle (no macros)    |
+
+Both are emitted with `minify` and an external sourcemap. A failing job aborts the build with a non-zero exit code.
+
+```bash
+DATABASE_TYPE=sqlite  bun run build   # bake in the sqlite dialect
+DATABASE_TYPE=postgres bun run build  # bake in the postgres dialect
+```
+
+> The macros read `process.env` at build time, so the `DATABASE_TYPE`/`DATABASE_URL` present in the environment when you run `build`/`dev`/CI are the ones baked in.
+
 ## Deploy to Cloudflare Workers
 
-The app ships with a `wrangler.jsonc` and a Workers entry point (`src/main.ts`) that stores movies in **D1**.
+The app ships with a `wrangler.jsonc` and a dedicated Worker entry (`src/worker.ts`) that stores movies in **D1**. `bun run deploy` runs the build (macros) first, then deploys.
 
 ### 1. Create the D1 database
 
@@ -52,7 +83,7 @@ The app ships with a `wrangler.jsonc` and a Workers entry point (`src/main.ts`) 
 bun x wrangler d1 create movies-db
 ```
 
-Copy the printed `database_id` into `wrangler.jsonc` (replace the `REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder).
+Copy the printed `database_id` into `wrangler.jsonc`. (This repo already has `movies-db` configured with a real `database_id`, so on a fresh clone you only need to do this if you use a different database name.)
 
 ### 2. Apply the schema to D1
 
@@ -85,10 +116,10 @@ bun run worker:types # regenerate worker-configuration.d.ts
 bun run worker:types
 ```
 
-Pass the `CloudflareBindings` as generics when instantiating `Hono`:
+Pass the `CloudflareBindings` as generics when instantiating `Hono` in the Worker entry:
 
 ```ts
-// src/main.ts
+// src/worker.ts
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 ```
 
