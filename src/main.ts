@@ -30,7 +30,11 @@ export function createApp(repo: MoviesRepo) {
  *   we use the D1-backed repository.
  */
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+	async fetch(
+		request: Request,
+		env: CloudflareBindings,
+		ctx: ExecutionContext,
+	) {
 		const repo: MoviesRepo = env.DB
 			? createD1MoviesRepo(env.DB)
 			: (await import("./repo/movies-repo-sqlite")).createSqliteMoviesRepo();
