@@ -125,15 +125,15 @@ For Postgres dialect testing:
 ```bash
 docker compose up -d # start local Postgres on :5432
 DATABASE_TYPE=postgres bun run db:migrate # apply the Postgres migrations
-bun run test:postgres      # run the Postgres endpoint tests
+bun run test               # run the endpoint tests for the active DATABASE_TYPE
 # then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
 ```
 
 The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the same
-`/movies` API surface against a live Postgres. They are **opt-in** — the default
-`bun test` only runs the SQLite tests (loading `.env.dev`) — and require a running
-Postgres plus applied migrations. `bun run test:postgres` loads
-`.env.dev.postgres`.
+`/movies` API surface against a live Postgres. `bun run test` is **dialect-aware**:
+it runs the test file matching the active `DATABASE_TYPE` with the db-type dev env
+(`.env.dev.<type>`), overridable with `--env-file=<file>`. Postgres tests require
+a running Postgres plus applied migrations.
 
 ### Neon (serverless Postgres)
 
@@ -152,7 +152,7 @@ cp .env.example.neon .env    # copy the Neon template to .env
 bun run dev                  # local dev (uses .env.dev.neon → a local Postgres)
 bun run db:migrate           # apply migrations to Neon (prod, reads .env)
 bun run db:migrate --dev     # apply migrations to the local Postgres
-bun run test:neon            # run the endpoint tests against Neon
+bun run test                 # run the endpoint tests (dialect-aware)
 bun run deploy:neon          # deploy the Worker to use Neon via Hyperdrive
 ```
 
@@ -170,7 +170,7 @@ modes; `TURSO_URL` decides local vs cloud.
   ```bash
   bun run dev                  # run against file:///…/tursodb.db
   bun run db:migrate --dev     # apply SQLite migrations to the local file
-  bun run test:tursodb         # endpoint tests against local TursoDB
+  bun run test                 # endpoint tests (dialect-aware, uses .env.dev.turso)
   ```
 - **Turso Cloud** (`.env.example.turso-cloud`, `TURSO_URL=libsql://…` + token):
   ```bash
@@ -183,7 +183,7 @@ modes; `TURSO_URL` decides local vs cloud.
 
   bun run dev                  # run against Turso Cloud
   bun run db:migrate           # apply SQLite migrations (prod, reads .env)
-  bun run test:turso           # endpoint tests against Turso Cloud
+  bun run test                 # endpoint tests (dialect-aware, uses .env.dev.turso)
   ```
 - **Deploy the Turso worker** — the Worker uses `@libsql/client/http` (not
   WebSocket), which reads `env.TURSO_URL` (var) and `env.TURSO_AUTH_TOKEN`
@@ -323,11 +323,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
-| `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.dev.postgres`, needs a running Postgres) |
-| `bun run test:neon`    | Run the Postgres endpoint tests against Neon (loads `.env.neon`) |
-| `bun run test:tursodb` | Run the endpoint tests against local TursoDB (loads `.env.dev.turso`) |
-| `bun run test:turso`   | Run the endpoint tests against Turso Cloud (loads `.env.turso`) |
+| `bun test`             | Run the endpoint tests for the active `DATABASE_TYPE` (dev env; `--env-file` to override) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
