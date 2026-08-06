@@ -74,7 +74,11 @@ async function buildWorker(): Promise<boolean> {
 	const result = await build({
 		entrypoints: [resolve(root, "src", "worker.ts")],
 		outdir,
-		target: "browser",
+		// Cloudflare Workers run on V8 with `nodejs_compat`, so the `node` target
+		// is used — it allows the node builtins (e.g. the `postgres` driver's
+		// `tls`/`perf_hooks`) that `browser` rejects. SQLite-family dialects
+		// (d1/turso) bundle fine under `node` too (no node builtins used).
+		target: "node",
 		format: "esm",
 		minify: true,
 		sourcemap: "external",
