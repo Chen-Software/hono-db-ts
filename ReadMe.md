@@ -132,8 +132,7 @@ A movie has:
 
 ```
 src/
-  index.ts           # Cloudflare Workers entry (D1)
-  main.ts            # local Bun entry (bun:sqlite)
+  main.ts            # unified entry (local bun:sqlite + Cloudflare Workers D1)
   schema.ts          # Drizzle table definitions
   db.ts              # local bun:sqlite connection
   repo/

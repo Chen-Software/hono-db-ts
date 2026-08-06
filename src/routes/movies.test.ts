@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { db } from "../db";
+import { createApp } from "../main";
+import { createSqliteMoviesRepo } from "../repo/movies-repo-sqlite";
 import { movies } from "../schema";
 
 let app: Hono;
@@ -12,9 +14,8 @@ interface JsonMovie {
 	releaseYear: number | null;
 }
 
-beforeAll(async () => {
-	const { default: main } = await import("../main");
-	app = main;
+beforeAll(() => {
+	app = createApp(createSqliteMoviesRepo());
 });
 
 // Reset the table between tests so runs are deterministic
