@@ -29,10 +29,13 @@
  * Timeouts (Bun `--timeout`): unit runs default to 10s, integration / mixed
  * runs to 30s; `--timeout=<ms>` overrides either.
  *
- * The env file may set `INTEGRATION_TEST_SETUP_SCRIPT` to a command run once
- * before integration tests (e.g. `docker compose up -d` for postgres/neon),
- * plus `INTEGRATION_TEST_SETUP_TIMEOUT` (ms, default 120s) to cap how long it
- * may run. d1 / turso / sqlite leave both unset.
+ * Before integration tests the runner runs `INTEGRATION_TEST_SETUP_SCRIPT` if
+ * set (env file or CI env). It may be a `.ts` path (run via `bun run`), a
+ * `.sh`/`.bash` path (run via `bash`), or an inline shell command. Cap its
+ * runtime with `INTEGRATION_TEST_SETUP_TIMEOUT` (ms, default 120s) and disable
+ * with `INTEGRATION_TEST_SETUP_SKIP=1`. A ready-to-use Postgres setup is
+ * `scripts/postgres-container-setup.ts` (detects the container runtime and runs
+ * `<runtime> compose up -d`). d1 / turso / sqlite run no setup.
  *
  * Per-file and total elapsed times are printed by bun's default reporter; this
  * script keeps a single spawn and surfaces them as-is.
@@ -235,19 +238,35 @@ if (hasIntegration && !existsSync(envFileResolved)) {
 const defaultTimeout = isUnit ? 10_000 : 30_000;
 const timeoutMs = timeoutOverride ?? String(defaultTimeout);
 
-// Optional integration-test setup command + its timeout, read from the loaded
-// env file. For postgres/neon, INTEGRATION_TEST_SETUP_SCRIPT is
-// `docker compose up -d` and INTEGRATION_TEST_SETUP_TIMEOUT (ms) caps how long
-// it may run; d1/turso/sqlite leave both unset.
-const setupScript = hasIntegration
-	? readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SCRIPT")
-	: undefined;
-const setupTimeoutRaw = hasIntegration
-	? readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_TIMEOUT")
-	: undefined;
+// Optional integration-test setup, only relevant when integration tests are
+// selected. INTEGRATION_TEST_SETUP_SCRIPT may be:
+//   - a path to a `.ts` file   -> run via `bun run <path>`
+//   - a path to a `.sh`/`.bash`-> run via `bash <path>`
+//   - any other string         -> run as an inline shell command (`sh -c`)
+// Set INTEGRATION_TEST_SETUP_SKIP=1 to disable, and
+// INTEGRATION_TEST_SETUP_TIMEOUT (ms) to cap how long it may run.
+const setupSkip = readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SKIP");
+const setupValue = readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SCRIPT");
+const setupTimeoutRaw = readEnvValue(
+	envFileResolved,
+	"INTEGRATION_TEST_SETUP_TIMEOUT",
+);
 const setupTimeoutMs = Number(setupTimeoutRaw ?? "120000");
 const setupTimeout =
 	Number.isFinite(setupTimeoutMs) && setupTimeoutMs > 0 ? setupTimeoutMs : 120_000;
+
+// Turn the env value into a runnable command line.
+let setupScript: string | undefined;
+if (hasIntegration && setupSkip !== "1" && setupSkip !== "true" && setupValue) {
+	const p = setupValue.trim();
+	if (p.endsWith(".ts")) {
+		setupScript = `bun run ${p}`;
+	} else if (p.endsWith(".sh") || p.endsWith(".bash")) {
+		setupScript = `bash ${p}`;
+	} else {
+		setupScript = p;
+	}
+}
 
 // Remaining args (minus our flags) pass through to `bun test`.
 const skip = new Set([
@@ -292,8 +311,8 @@ console.log(
 		(setupScript ? ` setup="${setupScript}"` : ""),
 );
 
-// Run the optional integration setup (e.g. `docker compose up -d`) before tests,
-// with a bounded timeout so a stuck setup can't hang the whole run.
+// Run the optional integration setup (from INTEGRATION_TEST_SETUP_SCRIPT) before
+// tests, with a bounded timeout so a stuck setup can't hang the whole run.
 if (setupScript) {
 	console.log(`[test] running setup (${setupTimeout}ms timeout): ${setupScript}`);
 	const setup = spawnSync(setupScript, {
@@ -309,11 +328,11 @@ if (setupScript) {
 			console.error(
 				`  timed out after ${setupTimeout}ms — the command did not finish.\n` +
 					"  Likely causes & fixes:\n" +
-					"    - Docker daemon not running -> start Docker Desktop / colima, then retry.\n" +
-					"    - First image pull is slow  -> run `docker compose pull` once, then retry.\n" +
+					"    - The container daemon isn't running (start Docker Desktop / colima / podman, or the `container` service).\n" +
+					"    - First image pull is slow  -> run `<runtime> compose pull` once, then retry.\n" +
 					"    - Port 5432 already in use   -> `lsof -i :5432` to find the process.\n" +
 					"  Raise the budget via INTEGRATION_TEST_SETUP_TIMEOUT in the env file, or\n" +
-					"  skip setup by removing INTEGRATION_TEST_SETUP_SCRIPT.",
+					"  skip setup with INTEGRATION_TEST_SETUP_SKIP=1.",
 			);
 		} else if (setup.status !== 0) {
 			console.error(`  exited with status ${setup.status}`);

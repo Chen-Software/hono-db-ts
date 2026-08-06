@@ -140,12 +140,17 @@ suffix matches the active `DATABASE_TYPE`, using the db-type dev env
 narrow the run — `--unit`, `--integration`, or `--test <name>` (matches a test
 file whose path contains `<name>`). These are mutually exclusive with `--all`.
 
-The runner auto-starts dependencies before integration tests via the
-`INTEGRATION_TEST_SETUP_SCRIPT` var in the db-type env file: `.env.dev.postgres`
-and `.env.dev.neon` set it to `docker compose up -d`; d1/turso/sqlite leave it
-unset. Per-test timeouts default to 10s for `--unit` and 30s for integration /
-mixed runs, overridable with `--timeout=<ms>`; coverage is opt-in via
-`--coverage` (+ optional `--coverage-dir=<dir>`).
+Before integration tests the runner runs `INTEGRATION_TEST_SETUP_SCRIPT` if set.
+It may be a `.ts` path (run via `bun run`), a `.sh`/`.bash` path (run via
+`bash`), or an inline shell command. A ready-to-use Postgres setup is
+`scripts/postgres-container-setup.ts`, which detects a container runtime
+(priority `container` > `podman` > `docker`) and runs `<runtime> compose up -d`,
+or skips (exit 0) when none is available so a CI-provided Postgres can be used.
+Cap its runtime with `INTEGRATION_TEST_SETUP_TIMEOUT` (ms, default 120s) or
+disable it with `INTEGRATION_TEST_SETUP_SKIP=1`. d1/turso/sqlite run no setup.
+Per-test timeouts default to 10s for `--unit` and 30s for integration / mixed
+runs, overridable with `--timeout=<ms>`; coverage is opt-in via `--coverage`
+(+ optional `--coverage-dir=<dir>`).
 
 ### Neon (serverless Postgres)
 
@@ -335,7 +340,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override; `--coverage` (+ optional `--coverage-dir=<dir>`) for text + lcov coverage; `--timeout=<ms>` / `--setup-timeout=<ms>` to override per-test / setup-script timeouts. Auto-runs `INTEGRATION_TEST_SETUP_SCRIPT` (e.g. `docker compose up -d`, 120s cap) before integration tests. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive. Bun's reporter prints per-file and total elapsed times |
+| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override; `--coverage` (+ optional `--coverage-dir=<dir>`) for text + lcov coverage; `--timeout=<ms>` to override the per-test timeout. Runs `INTEGRATION_TEST_SETUP_SCRIPT` (`.ts`/`.sh`/`.bash` path or inline) before integration tests; `scripts/postgres-container-setup.ts` detects container runtime + `compose up -d`; control via `_SCRIPT`/`_TIMEOUT`/`_SKIP`. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive. Bun's reporter prints per-file and total elapsed times |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
