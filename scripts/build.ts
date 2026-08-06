@@ -9,16 +9,17 @@
  * Emits to `dist/`:
  *   - `dist/main.js` — local Bun server entry (`src/main.ts`, target `bun`).
  *   - `dist/worker.js` — Cloudflare Worker entry (`src/worker.ts`, target
- *     `browser`). Bundling it here under Bun lets the Worker use Bun macros
+ *     `node`). Bundling it here under Bun lets the Worker use Bun macros
  *     (e.g. `src/macros/db-worker.ts`) so **only the active backend** is
- *     bundled — `wrangler.jsonc` points `main` at this prebuilt bundle.
+ *     bundled — `wrangler.jsonc` points `main` at this prebuilt bundle. The
+ *     `node` target matches Workers' `nodejs_compat` runtime (no browser APIs).
  *
  * Entry points are discovered from the top level of `src/`:
  *   - include: every `src/*.ts`
  *   - exclude: `*.test.ts`, and library modules that are imported by entries
  *     rather than standalone bundles (e.g. `app.ts`, the shared Hono factory).
  * `main.ts` bundles for the local Bun runtime; `worker.ts` for the Worker
- * (browser) target. Any other discovered entry defaults to `bun`.
+ * (node) target. Any other discovered entry defaults to `bun`.
  *
  * Also (re)generates `wrangler.jsonc` from `.env` via `wrangler.config.ts`, so
  * a single `bun run build` produces everything the deploy step needs.
@@ -29,9 +30,10 @@
  */
 
 import { build, type BuildConfig } from "bun";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { generateWranglerConfig } from "../wrangler.config";
+import { workerModule } from "../src/macros/db-worker" with { type: "macro" };
 
 const root = resolve(import.meta.dir, "..");
 const outdir = resolve(root, "dist");
@@ -39,9 +41,14 @@ const outdir = resolve(root, "dist");
 /** Library modules under `src/` that are imported by entries, not bundled alone. */
 const EXCLUDED_ENTRIES = new Set(["app.ts"]);
 
-/** Map an entry file name to its build target (unknown -> local Bun). */
+/**
+ * Map an entry file name to its build target.
+ * The Cloudflare Worker runs on V8 with `nodejs_compat` (no browser APIs), so
+ * it's bundled for the Node target — `browser` would inject browser shims and
+ * break Workers. Local Bun entries use `bun`.
+ */
 function entryTarget(file: string): BuildConfig["target"] {
-	return file === "worker.ts" ? "browser" : "bun";
+	return file === "worker.ts" ? "node" : "bun";
 }
 
 /** Map an entry file name to its stable output name. */
