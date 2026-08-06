@@ -8,7 +8,7 @@
  * Each dialect runs a LOCAL dev server with a local driver:
  *   - `d1`        -> local `sqlite` driver (closest to D1), `.env.dev.d1`
  *   - `sqlite`    -> Bun server with `.env.dev`
- *   - `postgres`  -> Bun server with `.env.example.postgres` (local Postgres)
+ *   - `postgres`  -> Bun server with `.env.dev.postgres` (local Postgres)
  *   - `neon`      -> Bun server with `.env.dev.neon` against a LOCAL Postgres
  *                    (Neon Local via `docker compose up -d`)
  *   - `turso`     -> Bun server with `.env.dev.turso` (local `file://` libSQL)

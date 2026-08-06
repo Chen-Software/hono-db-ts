@@ -34,10 +34,10 @@ file you want; the relevant scripts already point at them:
 | `.env.dev.d1`           | `sqlite`        | `bun run dev` (local D1 → sqlite driver)  |
 | `.env.dev.turso`        | `turso` (file://) | `bun run dev` (local TursoDB)           |
 | `.env.dev.neon`         | `neon`          | `bun run dev` (local Neon)                |
-| `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
+| `.env.dev.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
 | `.env.neon` (gitignored) | `neon`         | `bun run dev:neon` (Neon serverless PG)   |
 | `.env.example.neon`     | `neon`          | Neon template (copy to `.env.dev.neon`)   |
-| `.env.example.tursodb`  | `turso` (file://) | local TursoDB template                   |
+| `.env.dev.turso`        | `turso` (file://) | `bun run dev` (local TursoDB)           |
 | `.env.turso` (gitignored) | `turso` (libsql://) | `bun run dev:turso` (Turso Cloud)       |
 | `.env.example.turso-cloud` | `turso` (libsql://) | Turso Cloud template (copy to `.env.turso`) |
 | `.env.example`          | `d1`            | generic reference — D1 is the deployable default |
@@ -46,7 +46,7 @@ file you want; the relevant scripts already point at them:
 > `DATABASE_TYPE` from `.env` (defaults to `d1` when missing):
 >   - `d1` → local **`sqlite`** driver (closest to D1), `.env.dev.d1`
 >   - `sqlite` → Bun server, `.env.dev`
->   - `postgres` → Bun server, `.env.example.postgres`
+>   - `postgres` → Bun server, `.env.dev.postgres`
 >   - `neon` → local **Postgres** (Neon Local, via `docker compose up -d`),
 >     Bun server, `.env.dev.neon`
 >   - `turso` → local `file://` libSQL SDK, `.env.dev.turso` (never Turso Cloud)
@@ -77,7 +77,7 @@ explicitly:
 
 ```bash
 bun run dev                      # picks env file from .env's DATABASE_TYPE
-bun run dev:postgres             # postgres (.env.example.postgres)
+bun run dev:postgres             # postgres (.env.dev.postgres)
 bun run dev:neon                 # neon (.env.dev.neon — needs a Neon project linked)
 bun run dev:tursodb              # local TursoDB (file:///…/tursodb.db, .env.dev.turso)
 bun run dev:turso                # Turso Cloud (.env.turso — needs a Turso DB + token)
@@ -101,7 +101,7 @@ Variables:
 - **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
 - **Cloudflare Worker** — the Worker reads its database binding at runtime (`env.HYPERDRIVE` → Neon, else `env.DB` → D1) and has no macros; `DATABASE_TYPE` / `DATABASE_URL` are irrelevant there.
 
-> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`, `.env.neon` for `bun run dev:neon`, `.env.example.tursodb` for `bun run dev:tursodb`, `.env.turso` for `bun run dev:turso`) and **restart** the dev server / re-run `bun run build` for it to take effect.
+> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.dev.postgres` for `bun run dev:postgres`, `.env.dev.neon` for `bun run dev:neon`, `.env.dev.turso` for `bun run dev:tursodb`, `.env.turso` for `bun run dev:turso`) and **restart** the dev server / re-run `bun run build` for it to take effect.
 
 ### Dialects
 
@@ -129,7 +129,7 @@ The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the 
 `/movies` API surface against a live Postgres. They are **opt-in** — the default
 `bun test` only runs the SQLite tests (loading `.env.dev`) — and require a running
 Postgres plus applied migrations. `bun run test:postgres` loads
-`.env.example.postgres`.
+`.env.dev.postgres`.
 
 ### Neon (serverless Postgres)
 
@@ -313,13 +313,13 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | Script                 | Description                                     |
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
-| `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.example.postgres`) |
+| `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.dev.postgres`) |
 | `bun run dev:neon`     | Start the Hono server against Neon (loads `.env.neon`) |
 | `bun run dev:tursodb`  | Start the Hono server against local TursoDB (loads `.env.example.tursodb`) |
 | `bun run dev:turso`    | Start the Hono server against Turso Cloud (loads `.env.turso`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
-| `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.example.postgres`, needs a running Postgres) |
+| `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.dev.postgres`, needs a running Postgres) |
 | `bun run test:neon`    | Run the Postgres endpoint tests against Neon (loads `.env.neon`) |
 | `bun run test:tursodb` | Run the endpoint tests against local TursoDB (loads `.env.example.tursodb`) |
 | `bun run test:turso`   | Run the endpoint tests against Turso Cloud (loads `.env.turso`) |
@@ -402,7 +402,7 @@ A movie has:
 .env.dev.turso         # local TursoDB dev config (loaded by `bun run dev`)
 .env.dev.neon          # local Neon dev config (loaded by `bun run dev`)
 .env.example           # generic env template
-.env.example.postgres  # Postgres env template (loaded by `bun run dev:postgres`)
+.env.dev.postgres  # Postgres local dev config (loaded by `bun run dev:postgres`)
 .env.neon              # Neon config (gitignored, loaded by `bun run dev:neon`)
 .env.example.neon      # Neon template (copy to `.env.dev.neon`)
 .env.example.tursodb   # local TursoDB template

@@ -14,7 +14,7 @@
  * Mapping (all LOCAL — never cloud/production):
  *   - `d1`        -> `.env.dev.d1` (sets DATABASE_TYPE=sqlite, closest to D1)
  *   - `sqlite`    -> `.env.dev`
- *   - `postgres`  -> `.env.example.postgres`
+ *   - `postgres`  -> `.env.dev.postgres`
  *   - `neon`      -> `.env.dev.neon` (local Postgres)
  *   - `turso`     -> `.env.dev.turso` (local `file://` libSQL)
  */
@@ -61,7 +61,7 @@ export function devEnvFile(): string {
 
 	const typeFile = {
 		sqlite: ".env.dev",
-		postgres: ".env.example.postgres",
+		postgres: ".env.dev.postgres",
 		neon: ".env.dev.neon",
 		turso: ".env.dev.turso",
 		d1: ".env.dev.d1",
