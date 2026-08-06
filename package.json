@@ -5,10 +5,16 @@
 	"private": true,
 	"scripts": {
 		"dev": "bun --watch src/main.ts",
-    	"dev:wrangler": "bun x wrangler dev",
+		"dev:wrangler": "bun x wrangler dev",
 		"test": "bun test",
-		"db:generate": "bun x drizzle-kit generate --dialect sqlite --schema ./src/schema.ts",
-		"db:migrate": "bun run scripts/db-migrate.ts",
+		"db:generate:sqlite": "bun x drizzle-kit generate --config drizzle.config.sqlite.ts",
+		"db:generate:postgres": "bun x drizzle-kit generate --config drizzle.config.postgres.ts",
+		"db:generate": "bun run db:generate:sqlite && bun run db:generate:postgres",
+		"db:migrate:sqlite": "bun run scripts/db-migrate.ts",
+		"db:migrate:postgres": "bun run scripts/db-migrate-postgres.ts",
+		"db:migrate": "bun run db:migrate:sqlite && bun run db:migrate:postgres",
+		"db:push:sqlite": "bun x drizzle-kit push --config drizzle.config.sqlite.ts",
+		"db:push:postgres": "bun x drizzle-kit push --config drizzle.config.postgres.ts",
 		"db:seed": "bun run db:seed:bun && bun run db:seed:d1",
 		"db:seed:bun": "bun run scripts/db-seed.ts",
 		"db:seed:d1": "bun x wrangler d1 execute movies-db --remote --file ./drizzle/seed.sql",
@@ -20,6 +26,7 @@
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
 		"lint": "bun x @biomejs/biome lint --fix .",
+		"typecheck": "bun x tsc --noEmit",
 		"start": "bun run src/main.ts"
 	},
 	"devDependencies": {
@@ -36,6 +43,7 @@
 		"drizzle-orm": "^0.45.2",
 		"drizzle-zod": "^0.8.3",
 		"hono": "^4",
+		"postgres": "^3.4.9",
 		"zod": "^4.4.3"
 	}
 }

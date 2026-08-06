@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
-import { db } from "../db";
+import { sqliteDb as db } from "../db";
 import { createApp } from "../main";
 import { createSqliteMoviesRepo } from "../repo/movies-repo-sqlite";
 import { movies } from "../schema";

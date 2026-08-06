@@ -16,16 +16,28 @@ A starter project for a REST API built with **Hono** and **Drizzle ORM**, run on
 ```bash
 bun install          # install dependencies
 cp .env.example .env # configure DATABASE_TYPE / DATABASE_URL
-bun run db:generate  # (re)generate SQL migrations from src/schema.ts
+bun run db:generate  # (re)generate SQL migrations from the schema
 bun run db:migrate   # apply migrations to the SQLite database
 bun run dev          # start the Hono server in watch mode
 ```
 
-By default the app uses SQLite (`sqlite.db`). For Postgres dialect testing:
+By default the app uses SQLite (`sqlite.db`).
+
+## Environment configuration
+
+The app reads its database dialect from the environment. Copy `.env.example` to `.env` and set:
+
+| Variable          | Description                                   | Default                                              |
+| ----------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `DATABASE_TYPE`   | Dialect: `sqlite` or `postgres`               | `sqlite`                                             |
+| `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
+| `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
+
+For Postgres dialect testing:
 
 ```bash
 docker compose up -d # start local Postgres on :5432
-# then point DATABASE_URL at the Postgres instance in .env
+# then set DATABASE_TYPE=postgres and DATABASE_URL in .env
 ```
 
 ## Deploy to Cloudflare Workers
@@ -46,7 +58,7 @@ Generate the SQL migration, then run it against D1:
 
 ```bash
 bun run db:generate
-bun x wrangler d1 execute movies-db --remote --file ./drizzle/0000_*.sql
+bun x wrangler d1 execute movies-db --remote --file ./drizzle/sqlite/0000_*.sql
 ```
 
 ### 3. Deploy
@@ -84,15 +96,21 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the Hono server in watch mode (Bun)       |
 | `bun test`             | Run the test suite                              |
-| `bun run db:generate`  | Generate SQL migrations from the schema         |
-| `bun run db:migrate`   | Apply migrations to the SQLite database         |
-| `bun run db:seed`      | Seed the database                               |
-| `bun run deploy`       | Deploy the Worker to Cloudflare                 |
-| `bun run deploy:dry-run` | Validate the Worker bundle without deploying |
-| `bun run worker:dev`   | Run the Worker locally with wrangler            |
-| `bun run worker:types` | Regenerate Worker binding types                 |
-| `bun run check`        | Lint & format check (Biome)                     |
-| `bun run start`        | Run the server without watch mode               |
+| `bun run typecheck`    | Run `tsc --noEmit`                              |
+| `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
+| `bun run db:generate:sqlite` | Generate SQLite migrations               |
+| `bun run db:generate:postgres` | Generate Postgres migrations            |
+| `bun run db:migrate`   | Apply migrations to SQLite **and** Postgres      |
+| `bun run db:migrate:sqlite` | Apply SQLite migrations                   |
+| `bun run db:migrate:postgres` | Apply Postgres migrations               |
+| `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
+| `bun run db:seed`      | Seed local SQLite and remote D1                  |
+| `bun run deploy`       | Deploy the Worker to Cloudflare                  |
+| `bun run deploy:dry-run` | Validate the Worker bundle without deploying  |
+| `bun run worker:dev`   | Run the Worker locally with wrangler             |
+| `bun run worker:types` | Regenerate Worker binding types                  |
+| `bun run check`        | Lint & format check (Biome)                      |
+| `bun run start`        | Run the server without watch mode                |
 
 ## API
 
@@ -146,8 +164,10 @@ A movie has:
 ```
 src/
   main.ts            # unified entry (local bun:sqlite + Cloudflare Workers D1)
-  schema.ts          # Drizzle table definitions
-  db.ts              # local bun:sqlite connection
+  schema.ts          # re-exports the movie schema (see src/db/schema)
+  db/
+    index.ts         # dialect factory (reads DATABASE_TYPE) + Drizzle clients
+    schema/          # movies table & Zod schemas (sqlite.ts / postgres.ts)
   repo/
     movies-repo.ts       # storage-agnostic MoviesRepo interface
     movies-repo-sqlite.ts# bun:sqlite implementation
@@ -156,8 +176,9 @@ src/
     movies.ts        # /movies REST handlers
     movies.test.ts   # /movies endpoint tests
 scripts/
-  db-migrate.ts      # apply migrations
-  db-seed.ts         # seed data
+  db-migrate.ts          # apply SQLite migrations
+  db-migrate-postgres.ts # apply Postgres migrations
+  db-seed.ts             # seed data
 wrangler.jsonc       # Cloudflare Workers configuration
 worker-configuration.d.ts # generated Worker binding types
 docker-compose.yml   # local Postgres for dialect testing

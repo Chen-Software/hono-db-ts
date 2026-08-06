@@ -1,4 +1,4 @@
-import { db } from "src/db";
+import { sqliteDb as db } from "src/db";
 import * as schema from "src/schema";
 
 await db.insert(schema.movies).values([

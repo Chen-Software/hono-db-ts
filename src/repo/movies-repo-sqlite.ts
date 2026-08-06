@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db";
+import { sqliteDb as db } from "../db";
 import { movies } from "../schema";
 import type { Movie, MoviesRepo } from "./movies-repo";
 
