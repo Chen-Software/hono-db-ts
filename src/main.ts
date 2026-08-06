@@ -1,17 +1,19 @@
 /**
  * Local Bun entry point.
  *
- * Runs under `bun run dev` / `bun run start`. The repository is selected at
- * build time by `DATABASE_TYPE` via the `src/macros/db-client.ts` +
- * `src/macros/db-repo.ts` macros (see `src/repo/factory.ts`), which tree-shake
- * away unused dialect drivers from the bundle.
+ * Runs under `bun run dev` / `bun run start`. The repository is selected via
+ * `src/repo/movies-repo.ts` `createRepo()`, which uses the unified
+ * `src/db/client.ts` `createClient()` to build the right repo from `.env` /
+ * `NODE_ENV`. `createClient()` dynamic-imports only the active dialect's driver,
+ * tree-shaking away unused ones from the local bundle.
  *
- * The Cloudflare Worker uses a separate entry (`src/worker.ts`) that selects
- * D1 vs Neon from bindings, so this module is never bundled into the Worker.
+ * The Cloudflare Worker uses separate entries (`src/worker/<dialect>.ts`) that
+ * select the backend from bindings, so this module is never bundled into the
+ * Worker.
  */
 
 import { createApp } from "./app";
-import { createRepo } from "./repo/factory";
+import { createRepo } from "./repo/create-repo";
 
 export { createApp };
 

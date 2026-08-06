@@ -4,7 +4,7 @@ import { createApp } from "../app";
 import type { PostgresDb } from "../db/postgres-client";
 import { createPostgresClient } from "../db/postgres-client";
 import * as pgSchema from "../db/schema/postgres";
-import { createPostgresMoviesRepo } from "../repo/movies-repo-postgres";
+import { createPostgresMoviesRepo } from "../repo/movies-repo";
 
 /**
  * Postgres endpoint tests.

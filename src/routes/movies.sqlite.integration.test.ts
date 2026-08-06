@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { createApp } from "../app";
 import { sqliteDb as db } from "../db";
 import { movies } from "../db/schema";
-import { createSqliteMoviesRepo } from "../repo/movies-repo-sqlite";
+import { createSqliteMoviesRepo } from "../repo/movies-repo";
 
 let app: Hono;
 
@@ -15,7 +15,7 @@ interface JsonMovie {
 }
 
 beforeAll(() => {
-	app = createApp(createSqliteMoviesRepo());
+	app = createApp(createSqliteMoviesRepo(db));
 });
 
 // Reset the table between tests so runs are deterministic

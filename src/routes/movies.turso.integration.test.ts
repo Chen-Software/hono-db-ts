@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { createApp } from "../app";
 import { createTursoClient } from "../db/turso-client";
 import { movies } from "../db/schema";
-import { createTursoMoviesRepo } from "../repo/movies-repo-turso";
+import { createSqliteMoviesRepo } from "../repo/movies-repo";
 
 /**
  * Turso endpoint tests.
@@ -23,7 +23,7 @@ let app: Hono;
 
 beforeAll(() => {
 	const db = createTursoClient({ url, authToken });
-	app = createApp(createTursoMoviesRepo(db));
+	app = createApp(createSqliteMoviesRepo(db));
 });
 
 afterAll(async () => {
