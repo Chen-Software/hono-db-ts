@@ -77,3 +77,31 @@ export function devEnvFile(): string {
 	}
 	return typeFile;
 }
+
+/**
+ * Parse a `.env`-style file into a plain object — inlined at build time.
+ * @param file path relative to the project root (e.g. ".env.dev.turso").
+ */
+export function loadEnvFile(file: string): Record<string, string> {
+	const root = resolve(process.cwd(), ".");
+	const out: Record<string, string> = {};
+	try {
+		for (const line of readFileSync(resolve(root, file), "utf8").split("\n")) {
+			const t = line.trim();
+			if (!t || t.startsWith("#") || !t.includes("=")) continue;
+			const eq = t.indexOf("=");
+			const key = t.slice(0, eq).trim();
+			let value = t.slice(eq + 1).trim();
+			if (
+				(value.startsWith('"') && value.endsWith('"')) ||
+				(value.startsWith("'") && value.endsWith("'"))
+			) {
+				value = value.slice(1, -1);
+			}
+			out[key] = value;
+		}
+	} catch {
+		// file may not exist
+	}
+	return out;
+}

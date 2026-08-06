@@ -6,51 +6,42 @@
  *   - **`--dev`**         -> the matching `.env.dev.<type>` (via the
  *     `src/macros/dev-env.ts` macro).
  *
- * Dispatches to the matching client/schema:
- *   - `sqlite` / `d1`        -> bun:sqlite, `src/db/schema/sqlite`
- *   - `turso`                -> @libsql/client, `src/db/schema/sqlite`
- *   - `postgres` / `neon`    -> postgres-js, `src/db/schema/postgres`
+ * Where the seed goes:
+ *   - `d1` (prod, default)  -> **remote** Cloudflare D1 via `wrangler d1 execute
+ *     --remote`. `d1` + `--dev` seeds the local `sqlite.db` instead.
+ *   - `sqlite`              -> local `sqlite.db`.
+ *   - `turso`               -> @libsql/client, `src/db/schema/sqlite`.
+ *   - `postgres` / `neon`   -> postgres-js, `src/db/schema/postgres`.
  *
  * Usage:
  *   bun run db:seed                  # seed the active DATABASE_TYPE (.env)
- *   bun run db:seed --dev            # seed using .env.dev.<type>
+ *   bun run db:seed --dev            # seed using .env.dev.<type> (local)
  *   DATABASE_TYPE=neon bun run db:seed  # force neon/postgres
  */
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
-import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
+import {
+	devEnvFile,
+	loadEnvFile as loadDevEnv,
+} from "../src/macros/dev-env" with { type: "macro" };
+import { seedRemoteD1 } from "./remotes/d1";
+import { seedRemoteTurso } from "./remotes/turso";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { movies } from "../src/db/schema/sqlite";
 
 const isDev = process.argv.includes("--dev");
 
-/** Merge a `.env`-style file into `process.env` (does not override existing). */
-function loadEnvFile(file: string): void {
-	try {
-		for (const line of readFileSync(file, "utf8").split("\n")) {
-			const t = line.trim();
-			if (!t || t.startsWith("#") || !t.includes("=")) continue;
-			const eq = t.indexOf("=");
-			const key = t.slice(0, eq).trim();
-			let value = t.slice(eq + 1).trim();
-			if (
-				(value.startsWith('"') && value.endsWith('"')) ||
-				(value.startsWith("'") && value.endsWith("'"))
-			) {
-				value = value.slice(1, -1);
-			}
-			if (process.env[key] === undefined) process.env[key] = value;
-		}
-	} catch {
-		// file may not exist
-	}
-}
-
-// In --dev mode, load the matching .env.dev.<type> (its DATABASE_TYPE then
-// drives the dialect below). Otherwise use the auto-loaded .env.
+// In --dev mode, load the matching .env.dev.<type> via the env macro (its
+// DATABASE_TYPE then drives the dialect below). Dev values override the
+// auto-loaded `.env` (e.g. the local `file:tursodb.db` URL replaces the cloud
+// `libsql://` URL). Otherwise use the auto-loaded `.env`.
 if (isDev) {
 	const devFile = devEnvFile();
-	loadEnvFile(resolve(process.cwd(), devFile));
+	const devVars = loadDevEnv(devFile);
+	for (const [k, v] of Object.entries(devVars)) {
+		process.env[k] = v;
+	}
 	console.log(`[db:seed] --dev → env-file=${devFile}`);
 }
 
@@ -65,9 +56,11 @@ const dialect = dbDialect();
 switch (dialect) {
 	case "sqlite":
 	case "d1": {
-		const { Database } = await import("bun:sqlite");
-		const { drizzle } = await import("drizzle-orm/bun-sqlite");
-		const { movies } = await import("../src/db/schema/sqlite");
+		// d1 in prod (no --dev) seeds the REMOTE Cloudflare D1 database.
+		if (dialect === "d1" && !isDev) {
+			seedRemoteD1(seedRows);
+			break;
+		}
 
 		const db = drizzle(new Database("sqlite.db"));
 		await db.insert(movies).values(seedRows);
@@ -76,22 +69,8 @@ switch (dialect) {
 	}
 
 	case "turso": {
-		const { createClient } = await import("@libsql/client");
-		const { drizzle } = await import("drizzle-orm/libsql");
-		const { movies } = await import("../src/db/schema/sqlite");
-
-		const url =
-			process.env["TURSO_URL"] ??
-			`file:///${resolve(process.cwd(), "tursodb.db")}`;
-		const authToken =
-			process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
-		const client = createClient({
-			url,
-			...(authToken ? { authToken } : {}),
-		});
-		const db = drizzle(client);
-		await db.insert(movies).values(seedRows);
-		console.log(`Seeding complete (turso → ${url}).`);
+		const client = await seedRemoteTurso(seedRows);
+		client.close();
 		break;
 	}
 
