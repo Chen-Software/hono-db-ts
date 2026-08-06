@@ -5,6 +5,13 @@ import { movies } from "../schema";
 
 let app: Hono;
 
+// Minimal JSON response shape returned by the API
+interface JsonMovie {
+	id: number;
+	title: string;
+	releaseYear: number | null;
+}
+
 beforeAll(async () => {
 	const { default: main } = await import("../main");
 	app = main;
@@ -36,7 +43,7 @@ describe("POST /movies", () => {
 			body: JSON.stringify({ title: "Inception", releaseYear: 2010 }),
 		});
 		expect(res.status).toBe(201);
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		expect(data.title).toBe("Inception");
 		expect(data.releaseYear).toBe(2010);
 		expect(typeof data.id).toBe("number");
@@ -67,7 +74,7 @@ describe("POST /movies", () => {
 			body: JSON.stringify({ title: "Interstellar" }),
 		});
 		expect(res.status).toBe(201);
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		expect(data.title).toBe("Interstellar");
 		expect(data.releaseYear).toBeNull();
 	});
@@ -84,14 +91,14 @@ describe("GET /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "The Matrix", releaseYear: 1999 }),
 		});
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		movieId = data.id;
 	});
 
 	it("returns a movie by id", async () => {
 		const res = await app.request(`/movies/${movieId}`);
 		expect(res.status).toBe(200);
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		expect(data.id).toBe(movieId);
 		expect(data.title).toBe("The Matrix");
 	});
@@ -118,7 +125,7 @@ describe("PUT /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "Old Title", releaseYear: 2000 }),
 		});
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		movieId = data.id;
 	});
 
@@ -129,7 +136,7 @@ describe("PUT /movies/:id", () => {
 			body: JSON.stringify({ title: "New Title", releaseYear: 2001 }),
 		});
 		expect(res.status).toBe(200);
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		expect(data.title).toBe("New Title");
 		expect(data.releaseYear).toBe(2001);
 	});
@@ -164,7 +171,7 @@ describe("DELETE /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "To Be Deleted" }),
 		});
-		const data = await res.json();
+		const data = (await res.json()) as JsonMovie;
 		movieId = data.id;
 	});
 

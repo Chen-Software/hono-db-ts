@@ -1,0 +1,5 @@
+# Local development secrets for `wrangler dev`.
+# Copy to `.dev.vars` (gitignored) and fill in values.
+# There are no secrets required for this template yet.
+# Example:
+# MY_SECRET=some-value

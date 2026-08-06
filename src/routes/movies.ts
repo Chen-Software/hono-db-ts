@@ -1,127 +1,87 @@
-import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { db } from "../db";
-import { movies } from "../schema";
+import type { MoviesRepo } from "../repo/movies-repo";
+import { movieIdSchema, movieInsertSchema, movieUpdateSchema } from "../zod";
 
-const app = new Hono();
+/**
+ * Create the /movies REST routes bound to a movies repository.
+ * Storage-agnostic — works with both the local bun:sqlite driver and Cloudflare D1.
+ * Request/response payloads are validated with zod schemas derived from the Drizzle table.
+ */
+export function createMoviesRoutes(repo: MoviesRepo) {
+	const app = new Hono();
 
-// GET /movies — list all movies
-app.get("/", (c: Context) => {
-	const result = db.select().from(movies).all();
-	return c.json(result);
-});
+	// GET /movies — list all movies
+	app.get("/", async (c: Context) => {
+		const result = await repo.list();
+		return c.json(result);
+	});
 
-// GET /movies/:id — get a single movie
-app.get("/:id", (c: Context) => {
-	const id = Number(c.req.param("id"));
-	if (Number.isNaN(id)) {
-		return c.json({ error: "Invalid id" }, 400);
-	}
-
-	const movie = db.select().from(movies).where(eq(movies.id, id)).get();
-	if (!movie) {
-		return c.json({ error: "Movie not found" }, 404);
-	}
-
-	return c.json(movie);
-});
-
-// POST /movies — create a movie
-app.post("/", async (c: Context) => {
-	const body = await c.req.json<{ title?: string; releaseYear?: number }>();
-
-	if (typeof body.title !== "string" || body.title.trim().length === 0) {
-		return c.json({ error: "title is required" }, 400);
-	}
-	if (
-		body.releaseYear !== undefined &&
-		(typeof body.releaseYear !== "number" ||
-			!Number.isInteger(body.releaseYear))
-	) {
-		return c.json({ error: "releaseYear must be an integer" }, 400);
-	}
-
-	const result = db
-		.insert(movies)
-		.values({
-			title: body.title.trim(),
-			releaseYear: body.releaseYear ?? null,
-		})
-		.run();
-
-	const movie = db
-		.select()
-		.from(movies)
-		.where(eq(movies.id, Number(result.lastInsertRowid)))
-		.get();
-
-	return c.json(movie, 201);
-});
-
-// PUT /movies/:id — update a movie
-app.put("/:id", async (c: Context) => {
-	const id = Number(c.req.param("id"));
-	if (Number.isNaN(id)) {
-		return c.json({ error: "Invalid id" }, 400);
-	}
-
-	const existing = db.select().from(movies).where(eq(movies.id, id)).get();
-	if (!existing) {
-		return c.json({ error: "Movie not found" }, 404);
-	}
-
-	const body = await c.req.json<{
-		title?: string;
-		releaseYear?: number | null;
-	}>();
-	const updates: { title?: string; releaseYear?: number | null } = {};
-
-	if (body.title !== undefined) {
-		if (typeof body.title !== "string" || body.title.trim().length === 0) {
-			return c.json({ error: "title must be a non-empty string" }, 400);
+	// GET /movies/:id — get a single movie
+	app.get("/:id", async (c: Context) => {
+		const id = movieIdSchema.safeParse(c.req.param("id"));
+		if (!id.success) {
+			return c.json({ error: "Invalid id" }, 400);
 		}
-		updates.title = body.title.trim();
-	}
 
-	if (body.releaseYear !== undefined) {
-		if (body.releaseYear !== null) {
-			if (
-				typeof body.releaseYear !== "number" ||
-				!Number.isInteger(body.releaseYear)
-			) {
-				return c.json({ error: "releaseYear must be an integer or null" }, 400);
-			}
+		const movie = await repo.get(id.data);
+		if (!movie) {
+			return c.json({ error: "Movie not found" }, 404);
 		}
-		updates.releaseYear = body.releaseYear;
-	}
 
-	if (Object.keys(updates).length === 0) {
-		return c.json({ error: "No fields to update" }, 400);
-	}
+		return c.json(movie);
+	});
 
-	db.update(movies).set(updates).where(eq(movies.id, id)).run();
+	// POST /movies — create a movie
+	app.post("/", async (c: Context) => {
+		const body = movieInsertSchema.safeParse(await c.req.json());
+		if (!body.success) {
+			return c.json({ error: body.error.flatten() }, 400);
+		}
 
-	const movie = db.select().from(movies).where(eq(movies.id, id)).get();
+		const movie = await repo.create(body.data);
+		return c.json(movie, 201);
+	});
 
-	return c.json(movie);
-});
+	// PUT /movies/:id — update a movie
+	app.put("/:id", async (c: Context) => {
+		const id = movieIdSchema.safeParse(c.req.param("id"));
+		if (!id.success) {
+			return c.json({ error: "Invalid id" }, 400);
+		}
 
-// DELETE /movies/:id — delete a movie
-app.delete("/:id", (c: Context) => {
-	const id = Number(c.req.param("id"));
-	if (Number.isNaN(id)) {
-		return c.json({ error: "Invalid id" }, 400);
-	}
+		const existing = await repo.get(id.data);
+		if (!existing) {
+			return c.json({ error: "Movie not found" }, 404);
+		}
 
-	const existing = db.select().from(movies).where(eq(movies.id, id)).get();
-	if (!existing) {
-		return c.json({ error: "Movie not found" }, 404);
-	}
+		const body = movieUpdateSchema.safeParse(await c.req.json());
+		if (!body.success) {
+			return c.json({ error: body.error.flatten() }, 400);
+		}
 
-	db.delete(movies).where(eq(movies.id, id)).run();
+		if (Object.keys(body.data).length === 0) {
+			return c.json({ error: "No fields to update" }, 400);
+		}
 
-	return c.json({ message: "Deleted" });
-});
+		const movie = await repo.update(id.data, body.data);
+		return c.json(movie);
+	});
 
-export { app as moviesRoutes };
+	// DELETE /movies/:id — delete a movie
+	app.delete("/:id", async (c: Context) => {
+		const id = movieIdSchema.safeParse(c.req.param("id"));
+		if (!id.success) {
+			return c.json({ error: "Invalid id" }, 400);
+		}
+
+		const removed = await repo.remove(id.data);
+		if (!removed) {
+			return c.json({ error: "Movie not found" }, 404);
+		}
+
+		return c.json({ message: "Deleted" });
+	});
+
+	return app;
+}
