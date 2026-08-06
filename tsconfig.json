@@ -5,7 +5,9 @@
 		"target": "ESNext",
 		"module": "Preserve",
 		"moduleDetection": "force",
+    	"types": ["bun"],
 		"jsx": "react-jsx",
+		"jsxImportSource": "hono/jsx",
 		"allowJs": true,
 
 		// Bundler mode
