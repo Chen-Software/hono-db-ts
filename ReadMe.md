@@ -34,6 +34,9 @@ file you want; the relevant scripts already point at them:
 | `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
 | `.env.neon` (gitignored) | `neon`         | `bun run dev:neon` (Neon serverless PG)   |
 | `.env.example.neon`     | `neon`          | Neon template (copy to `.env.neon`)       |
+| `.env.example.tursodb`  | `turso` (file://) | `bun run dev:tursodb` (local TursoDB file) |
+| `.env.turso` (gitignored) | `turso` (libsql://) | `bun run dev:turso` (Turso Cloud)       |
+| `.env.example.turso-cloud` | `turso` (libsql://) | Turso Cloud template (copy to `.env.turso`) |
 | `.env.example`          | `d1`            | generic reference — D1 is the deployable default |
 
 **LOCAL-ONLY dialects (never available on Cloudflare Workers):**
@@ -62,6 +65,8 @@ explicitly:
 bun run dev                      # sqlite (.env.dev)
 bun run dev:postgres             # postgres (.env.example.postgres)
 bun run dev:neon                 # neon (.env.neon — needs a Neon project linked)
+bun run dev:tursodb              # local TursoDB (file:///…/tursodb.db)
+bun run dev:turso                # Turso Cloud (.env.turso — needs a Turso DB + token)
 bun run --env-file=.env.example postgres… # or any file, explicitly
 ```
 
@@ -69,8 +74,10 @@ Variables:
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, `neon`, or `d1`| `d1` (in `.env.example`) / `sqlite` (in `.env.dev`)  |
+| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, `neon`, `turso`, or `d1` | `d1` (in `.env.example`) / `sqlite` (in `.env.dev`) |
 | `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
+| `TURSO_URL`       | Turso connection URL (`file:///` local, `libsql://` cloud) | `file:///…/tursodb.db` (local)             |
+| `TURSO_AUTH_TOKEN`| Turso Cloud auth token (cloud only)           | —                                                  |
 | `DATABASE_POOL_SIZE` | Postgres/Neon connection pool size (optional) | `10`                                                 |
 
 ### When is `DATABASE_TYPE` read?
@@ -80,7 +87,7 @@ Variables:
 - **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
 - **Cloudflare Worker** — the Worker reads its database binding at runtime (`env.HYPERDRIVE` → Neon, else `env.DB` → D1) and has no macros; `DATABASE_TYPE` / `DATABASE_URL` are irrelevant there.
 
-> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`, `.env.neon` for `bun run dev:neon`) and **restart** the dev server / re-run `bun run build` for it to take effect.
+> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`, `.env.neon` for `bun run dev:neon`, `.env.example.tursodb` for `bun run dev:tursodb`, `.env.turso` for `bun run dev:turso`) and **restart** the dev server / re-run `bun run build` for it to take effect.
 
 ### Dialects
 
@@ -88,6 +95,7 @@ Variables:
 - `sqlite` (local dev default) — local `bun:sqlite` driver, used via `bun run dev`.
 - `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres), used via `bun run dev:postgres`.
 - `neon` — serverless Postgres hosted on Neon. Uses the same `postgres-js` driver + schema as `postgres`, but reads a Neon connection string. Used via `bun run dev:neon`.
+- `turso` — Turso (edge SQLite, SQLite-compatible). `TURSO_URL` decides local vs cloud: `file:///` (local TursoDB, `bun run dev:tursodb`) or `libsql://` + `TURSO_AUTH_TOKEN` (Turso Cloud, `bun run dev:turso`). `tursodb` / `turso-cloud` are accepted aliases.
 
 For Postgres dialect testing:
 
@@ -127,6 +135,48 @@ bun run deploy:neon          # deploy the Worker to use Neon via Hyperdrive
 `.env.neon` is gitignored because it holds real credentials (incl. the
 `HYPERDRIVE_ID`); commit the `.env.example.neon` template instead.
 
+### Turso (edge SQLite)
+
+Turso is a SQLite-compatible edge database, so it reuses the SQLite schema and
+repo (with an **async** libSQL client). A single `DATABASE_TYPE=turso` covers both
+modes; `TURSO_URL` decides local vs cloud.
+
+- **Local TursoDB** (`.env.example.tursodb`, `TURSO_URL=file:///…`, no account):
+  ```bash
+  bun run dev:tursodb         # run against file:///…/tursodb.db
+  bun run db:migrate:tursodb  # apply SQLite migrations to the local file
+  bun run test:tursodb        # endpoint tests against local TursoDB
+  ```
+- **Turso Cloud** (`.env.example.turso-cloud`, `TURSO_URL=libsql://…` + token):
+  ```bash
+  # one-time setup
+  turso auth login
+  turso db create movies-db
+  turso db show movies-db --url            # → TURSO_URL
+  turso db tokens create movies-db         # → TURSO_AUTH_TOKEN
+  cp .env.example.turso-cloud .env.turso   # fill in the values
+
+  bun run dev:turso                        # run against Turso Cloud
+  bun run db:migrate:turso                 # apply SQLite migrations
+  bun run test:turso                       # endpoint tests against Turso Cloud
+  ```
+- **Deploy the Turso worker** — the Worker uses `@libsql/client/http` (not
+  WebSocket), which reads `env.TURSO_URL` (var) and `env.TURSO_AUTH_TOKEN`
+  (secret):
+  ```bash
+  bun run deploy:turso                     # build + wrangler deploy --env=turso
+  # one-time: store the token as a Worker secret (not a plain var)
+  echo "$TURSO_AUTH_TOKEN" | bun x wrangler secret put TURSO_AUTH_TOKEN --env=turso
+  ```
+  The generated `wrangler.jsonc` keeps only `TURSO_URL` in `vars`; the token is
+  a secret. Deploys as `movies-worker-turso` at
+  `https://movies-worker-turso.<account>.workers.dev`.
+
+`.env.turso` is gitignored (real token); commit `.env.example.turso-cloud`
+instead. `turso` is a SQLite-compatible **local/remote dev** path — it does not
+ship to the Cloudflare Worker (which uses D1 or Neon via Hyperdrive).
+(`tursodb` / `turso-cloud` are accepted aliases for `DATABASE_TYPE=turso`.)
+
 ## Build process
 
 `bun run build` runs `scripts/build.ts`, which uses [`Bun.build`](https://bun.com/docs/bundler) to bundle the app **and execute the macros** (`import ... with { type: "macro" }`) at build time. Output goes to `dist/`:
@@ -156,6 +206,7 @@ The app ships with a `wrangler.jsonc` and a dedicated Worker entry (`src/worker.
 
 - **top-level (default, `bun run deploy`)** — D1 only, **no Hyperdrive** → deploys `movies-worker` using D1.
 - **`neon` environment (`bun run deploy:neon`)** — adds a **Hyperdrive** binding → deploys `movies-worker-neon` using Neon.
+- **`turso` environment (`bun run deploy:turso`)** — `TURSO_URL` var + `TURSO_AUTH_TOKEN` secret → deploys `movies-worker-turso` using Turso Cloud (via `@libsql/client/http`).
 
 This keeps `DATABASE_TYPE=d1` (`wrangler.jsonc` top-level) free of Hyperdrive, while
 `DATABASE_TYPE=neon` (`--env=neon`) carries it — automatically matching the dialect.
@@ -210,8 +261,10 @@ bun run db:migrate:neon   # requires .env.neon (the Neon connection string)
 ```bash
 bun run deploy            # deploy D1 worker `movies-worker` (no Hyperdrive)
 bun run deploy:neon       # deploy Neon worker `movies-worker-neon` (with Hyperdrive)
+bun run deploy:turso      # deploy Turso worker `movies-worker-turso` (TURSO_URL var + token secret)
 bun run deploy:dry-run        # validate the D1 bundle without deploying
 bun run deploy:dry-run:neon   # validate the Neon bundle without deploying
+bun run deploy:dry-run:turso  # validate the Turso bundle without deploying
 ```
 
 ### Local Workers development
@@ -243,10 +296,14 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
 | `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.example.postgres`) |
 | `bun run dev:neon`     | Start the Hono server against Neon (loads `.env.neon`) |
+| `bun run dev:tursodb`  | Start the Hono server against local TursoDB (loads `.env.example.tursodb`) |
+| `bun run dev:turso`    | Start the Hono server against Turso Cloud (loads `.env.turso`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
 | `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.example.postgres`, needs a running Postgres) |
 | `bun run test:neon`    | Run the Postgres endpoint tests against Neon (loads `.env.neon`) |
+| `bun run test:tursodb` | Run the endpoint tests against local TursoDB (loads `.env.example.tursodb`) |
+| `bun run test:turso`   | Run the endpoint tests against Turso Cloud (loads `.env.turso`) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
@@ -255,13 +312,17 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:migrate:sqlite` | Alias forcing the SQLite migration        |
 | `bun run db:migrate:postgres` | Alias forcing the Postgres migration     |
 | `bun run db:migrate:neon` | Alias forcing the Neon migration (loads `.env.neon`) |
+| `bun run db:migrate:tursodb` | Alias forcing the local TursoDB migration (loads `.env.example.tursodb`) |
+| `bun run db:migrate:turso` | Alias forcing the Turso Cloud migration (loads `.env.turso`) |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |
 | `bun run deploy`       | Build (runs macros) then deploy D1 worker (no Hyperdrive) |
 | `bun run deploy:neon`  | Deploy the Neon worker via `--env=neon` (with Hyperdrive) |
+| `bun run deploy:turso` | Deploy the Turso worker via `--env=turso` (TURSO_URL var + token secret) |
 | `bun run deploy:dry-run` | Build then validate the D1 bundle without deploying |
 | `bun run deploy:dry-run:neon` | Validate the Neon bundle without deploying   |
+| `bun run deploy:dry-run:turso` | Validate the Turso bundle without deploying   |
 | `bun run worker:dev`   | Run the Worker locally with wrangler             |
 | `bun run worker:types` | Regenerate Worker binding types                  |
 | `bun run check`        | Lint & format check (Biome)                      |
@@ -322,6 +383,9 @@ A movie has:
 .env.example.postgres  # Postgres env template (loaded by `bun run dev:postgres`)
 .env.neon              # Neon config (gitignored, loaded by `bun run dev:neon`)
 .env.example.neon      # Neon template (copy to `.env.neon`)
+.env.example.tursodb   # local TursoDB template (loaded by `bun run dev:tursodb`)
+.env.turso             # Turso Cloud config (gitignored, loaded by `bun run dev:turso`)
+.env.example.turso-cloud # Turso Cloud template (copy to `.env.turso`)
 compose.yml            # local Postgres server for dialect testing
 src/
   app.ts             # pure createApp(repo) Hono factory (no DB, no macros)
@@ -335,6 +399,7 @@ src/
     sqlite-client.ts # bun:sqlite Drizzle client (local)
     postgres-client.ts # postgres Drizzle client (local)
     neon-client.ts   # Worker client: postgres-js via Hyperdrive (nodejs_compat)
+    turso-client.ts  # Turso (libSQL) client — local file or cloud (async)
     schema/
       index.ts       # re-exports the SQLite movie schema for app code
       sqlite.ts      # SQLite movies table & Zod schemas
@@ -343,7 +408,9 @@ src/
     movies-repo.ts       # storage-agnostic MoviesRepo interface
     movies-repo-sqlite.ts# bun:sqlite implementation
     movies-repo-postgres.ts # postgres/Neon implementation (used locally + Worker)
+    movies-repo-turso.ts # Turso (libSQL, async) implementation
     movies-repo-d1.ts    # Cloudflare D1 implementation
+    factory.ts       # pick the repo for the active DATABASE_TYPE
   routes/
     movies.ts        # /movies REST handlers
     movies.test.ts   # SQLite /movies endpoint tests

@@ -10,10 +10,12 @@
  *   bun run wrangler.config.ts          # standalone generator
  *   bun run generate:wrangler           # npm alias for the above
  *
- *   - `DATABASE_TYPE`    -> `d1` keeps the top-level D1 binding; `neon` omits
- *                            it so the generated config has no D1 settings.
+ *   - `DATABASE_TYPE`    -> `d1` keeps the top-level D1 binding; `neon` / `turso`
+ *                            use their own environment with the DB binding(s).
  *   - `D1_DATABASE_ID`   -> top-level D1 binding `database_id`
  *   - `HYPERDRIVE_ID`    -> `neon` env Hyperdrive binding `id`
+ *   - `TURSO_URL` + `TURSO_AUTH_TOKEN` -> `turso` env vars (Cloud Worker uses
+ *     `@libsql/client/web`). Prefer `wrangler secret put TURSO_AUTH_TOKEN` in prod.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -62,8 +64,10 @@ export function buildWranglerConfig(
 	const val = (key: string) => overrides[key] || env[key] || process.env[key] || "";
 	const dialect = (val("DATABASE_TYPE") || "d1").toLowerCase();
 	const isNeon = dialect === "neon";
+	const isTurso = dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
 	const d1Id = val("D1_DATABASE_ID");
 	const hdId = val("HYPERDRIVE_ID");
+	const tursoUrl = val("TURSO_URL");
 
 	const config: Config = isNeon
 		? {
@@ -84,20 +88,40 @@ export function buildWranglerConfig(
 					},
 				},
 			}
-		: {
-				name: "movies-worker",
-				main: "src/worker.ts",
-				compatibility_date: "2026-08-06",
-				compatibility_flags: ["nodejs_compat"],
-				observability: { enabled: true },
-				d1_databases: [
-					{
-						binding: "DB",
-						database_name: "movies-db",
-						database_id: d1Id || "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+		: isTurso
+			? {
+					name: "movies-worker",
+					main: "src/worker.ts",
+					compatibility_date: "2026-08-06",
+					compatibility_flags: ["nodejs_compat"],
+					observability: { enabled: true },
+					env: {
+						turso: {
+							name: "movies-worker-turso",
+							// TURSO_AUTH_TOKEN is set as a Worker SECRET
+							// (`wrangler secret put TURSO_AUTH_TOKEN --env=turso`),
+							// so only the non-sensitive URL lives in vars.
+							vars: {
+								TURSO_URL:
+									tursoUrl || "REPLACE_WITH_YOUR_TURSO_URL",
+							},
+						},
 					},
-				],
-			};
+				}
+			: {
+					name: "movies-worker",
+					main: "src/worker.ts",
+					compatibility_date: "2026-08-06",
+					compatibility_flags: ["nodejs_compat"],
+					observability: { enabled: true },
+					d1_databases: [
+						{
+							binding: "DB",
+							database_name: "movies-db",
+							database_id: d1Id || "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+						},
+					],
+				};
 	return config;
 }
 
@@ -118,6 +142,10 @@ export function generateWranglerConfig(): string[] {
 		missing.push("D1_DATABASE_ID");
 	if (!(fileEnv["HYPERDRIVE_ID"] || process.env["HYPERDRIVE_ID"]))
 		missing.push("HYPERDRIVE_ID");
+	if (!(fileEnv["TURSO_URL"] || process.env["TURSO_URL"]))
+		missing.push("TURSO_URL");
+	if (!(fileEnv["TURSO_AUTH_TOKEN"] || process.env["TURSO_AUTH_TOKEN"]))
+		missing.push("TURSO_AUTH_TOKEN");
 	return missing;
 }
 

@@ -4,14 +4,19 @@
  *
  *   - `sqlite` (default)   -> `drizzle/sqlite`  (local `sqlite.db`)
  *   - `postgres` / `neon`  -> `drizzle/postgres` (local Postgres or Neon)
+ *   - `turso` -> `drizzle/sqlite` (Turso reuses SQLite schema; `tursodb` /
+ *     `turso-cloud` are aliases)
  *   - `d1`                 -> error: D1 has no local migrator; use `wrangler d1`
  *
  * Usage:
  *   bun run db:migrate                      # sqlite (default)
  *   DATABASE_TYPE=neon bun run db:migrate   # neon/postgres
  *   bun run --env-file=.env.neon db:migrate # neon (reads DATABASE_URL)
+ *   bun run db:migrate:tursodb              # local TursoDB
+ *   bun run db:migrate:turso-cloud          # Turso Cloud
  */
 
+import { resolve } from "node:path";
 import type { DbDialect } from "../src/macros/db";
 
 function activeDialect(): DbDialect {
@@ -19,6 +24,8 @@ function activeDialect(): DbDialect {
 	if (type === "postgres" || type === "postgresql" || type === "pg")
 		return "postgres";
 	if (type === "neon") return "neon";
+	if (type === "turso" || type === "tursodb" || type === "turso-cloud")
+		return "turso";
 	if (type === "d1") return "d1";
 	return "sqlite";
 }
@@ -43,6 +50,30 @@ switch (dialect) {
 		const db = drizzle(sqlite);
 		migrate(db, { migrationsFolder: "./drizzle/sqlite" });
 		console.log(`SQLite migrations applied to ${url}`);
+		break;
+	}
+
+	case "turso": {
+		const { migrate } = await import("drizzle-orm/libsql/migrator");
+		const { drizzle } = await import("drizzle-orm/libsql");
+		const { createClient } = await import("@libsql/client");
+
+		// Prefer TURSO_URL; do NOT fall back to DATABASE_URL (it may point at a
+		// Postgres/Neon URL from another dialect's config). Default to a local file.
+		// TURSO_URL decides local (`file://`) vs cloud (`libsql://`).
+		const url =
+			process.env["TURSO_URL"] ??
+			`file:///${resolve(process.cwd(), "tursodb.db")}`;
+		const authToken =
+			process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
+		const client = createClient({
+			url,
+			...(authToken ? { authToken } : {}),
+		});
+		const db = drizzle(client);
+		await migrate(db, { migrationsFolder: "./drizzle/sqlite" });
+		const kind = url.startsWith("file:") ? "TursoDB" : "Turso Cloud";
+		console.log(`${kind} migrations applied to ${url}`);
 		break;
 	}
 

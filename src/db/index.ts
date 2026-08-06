@@ -13,15 +13,21 @@
  * never imports this module and instead uses D1 directly.
  */
 
+import { resolve } from "node:path";
 import { dialect as macroDialect } from "../macros/db" with { type: "macro" };
 import type { DbDialect } from "../macros/db";
 import type { PostgresDb } from "./postgres-client";
 import { createPostgresClient } from "./postgres-client";
 import type { SqliteDb } from "./sqlite-client";
 import { createSqliteClient } from "./sqlite-client";
+import type { TursoDb } from "./turso-client";
+import { createTursoClient } from "./turso-client";
 
 const DEFAULT_SQLITE_URL = "sqlite.db";
 const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
+// libSQL `file:` URLs need an absolute path for the `file:///` form (two `//`
+// plus the path). Compute it from the project root so it works anywhere.
+const DEFAULT_TURSO_LOCAL_URL = `file:///${resolve(process.cwd(), "tursodb.db")}`;
 
 let instance: Db | undefined;
 
@@ -38,10 +44,15 @@ function resolveDialect(): DbDialect {
  * Falls back to the dialect-appropriate default when `DATABASE_URL` is unset.
  */
 function resolveUrl(): string {
-	const url = process.env["DATABASE_URL"];
+	const url =
+		process.env["DATABASE_URL"] ??
+		process.env["TURSO_URL"] ??
+		process.env["TURSO_DB_URL"];
 	if (url) return url;
 	const d = macroDialect();
-	return d === "postgres" || d === "neon" ? DEFAULT_PG_URL : DEFAULT_SQLITE_URL;
+	if (d === "postgres" || d === "neon") return DEFAULT_PG_URL;
+	if (d === "turso") return DEFAULT_TURSO_LOCAL_URL;
+	return DEFAULT_SQLITE_URL;
 }
 
 // The SQLite client is always the local `sqlite.db` file — it must NOT read the
@@ -53,13 +64,22 @@ function resolveSqliteUrl(): string {
 function createDb(dialect: DbDialect, url: string): Db {
 	if (dialect === "postgres" || dialect === "neon")
 		return createPostgresClient(url, poolSize());
+	if (dialect === "turso") {
+		// Turso reuses the SQLite-compatible schema; only the connection differs.
+		// TURSO_URL decides local (`file://`) vs cloud (`libsql://`); cloud needs
+		// TURSO_AUTH_TOKEN, local does not.
+		return createTursoClient({
+			url,
+			authToken: process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"],
+		});
+	}
 	if (dialect === "d1") {
 		// D1 is a Cloudflare Worker runtime binding (`env.DB`), so there is no
 		// local driver to construct. Use `src/worker.ts` + `wrangler dev` instead.
 		throw new Error(
 			"`DATABASE_TYPE=d1` is a Worker-runtime binding and has no local " +
 				"driver. Use `bun run worker:dev` (which reads env.DB) or set " +
-				"`DATABASE_TYPE` to `sqlite` / `postgres` / `neon` locally.",
+				"`DATABASE_TYPE` to `sqlite` / `postgres` / `neon` / `turso` locally.",
 		);
 	}
 	return createSqliteClient(url);
@@ -91,7 +111,7 @@ function isPostgresDb(db: Db): db is PostgresDb {
 	return !isSqliteDb(db);
 }
 
-export type Db = SqliteDb | PostgresDb;
+export type Db = SqliteDb | PostgresDb | TursoDb;
 
 export type { DbDialect };
 

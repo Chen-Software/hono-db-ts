@@ -13,8 +13,11 @@
  *
  * Build-time env vars
  * -------------------
- * - `DATABASE_TYPE` — `sqlite` | `postgres` | `neon` | `d1` (default `sqlite`).
- * - `DATABASE_URL`  — connection URL for `sqlite`/`postgres`/`neon`.
+ * - `DATABASE_TYPE` — `sqlite` | `postgres` | `neon` | `turso` | `d1`
+ *   (default `sqlite`). `tursodb` / `turso-cloud` are accepted as aliases for
+ *   `turso`; `TURSO_URL` (`file://` local vs `libsql://` cloud) distinguishes them.
+ * - `DATABASE_URL`  — connection URL for `sqlite`/`postgres`/`neon`/`turso`.
+ *   Turso may also use `TURSO_URL` + `TURSO_AUTH_TOKEN`.
  * - `DATABASE_POOL_SIZE` — postgres/neon pool size (default `10`).
  *
  * The macros run locally or in CI — never on the Cloudflare Worker. The Worker
@@ -26,20 +29,24 @@
 const DEFAULT_SQLITE_URL = "sqlite.db";
 const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
 
-type DbDialect = "sqlite" | "postgres" | "neon" | "d1";
+type DbDialect = "sqlite" | "postgres" | "neon" | "turso" | "d1";
 
 function normalizeDialect(raw: string | undefined): DbDialect {
 	const type = (raw ?? "sqlite").toLowerCase();
 	if (type === "postgres" || type === "postgresql" || type === "pg")
 		return "postgres";
 	if (type === "neon") return "neon";
+	// `tursodb` (local file) and `turso-cloud` (cloud) both map to `turso`; the
+	// TURSO_URL scheme (`file://` vs `libsql://`) tells them apart.
+	if (type === "turso" || type === "tursodb" || type === "turso-cloud")
+		return "turso";
 	if (type === "d1") return "d1";
 	if (type === "sqlite") return "sqlite";
 	// Unknown values fall back to SQLite rather than throwing at bundle time.
 	return "sqlite";
 }
 
-/** Resolved dialect ("sqlite" | "postgres" | "neon" | "d1") — inlined at build time. */
+/** Resolved dialect — inlined at build time. */
 export function dialect(): DbDialect {
 	return normalizeDialect(process.env["DATABASE_TYPE"]);
 }
@@ -60,6 +67,16 @@ export function isPostgres(): boolean {
 /** Whether the build targets the Neon (serverless Postgres) dialect. */
 export function isNeon(): boolean {
 	return dialect() === "neon";
+}
+
+/** Whether the build targets Turso (SQLite-compatible, local or cloud). */
+export function isTurso(): boolean {
+	return dialect() === "turso";
+}
+
+/** Alias of `isTurso()` — kept for callers that reasoned about local-only. */
+export function isTursoDb(): boolean {
+	return dialect() === "turso";
 }
 
 /** Whether the build targets the Cloudflare D1 dialect. */
