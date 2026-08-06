@@ -18,21 +18,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
 
 const root = resolve(import.meta.dir, "..");
 
-function activeDialect(): string {
-	const type = (process.env["DATABASE_TYPE"] || "d1").toLowerCase();
-	if (type === "postgres" || type === "postgresql" || type === "pg")
-		return "postgres";
-	if (type === "neon") return "neon";
-	if (type === "turso" || type === "tursodb" || type === "turso-cloud")
-		return "turso";
-	if (type === "d1") return "d1";
-	return "sqlite";
-}
-
-const dialect = activeDialect();
+// Default `d1` is handled by the macro's sqlite normalization in the map below
+// (sqlite and d1 share the same test file). This keeps the macro reusable.
+const dialect = dbDialect();
 
 // Test file + default dev env per dialect.
 const testTargets: Record<string, { file: string; env: string }> = {

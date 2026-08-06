@@ -19,8 +19,8 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
 import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
-import type { DbDialect } from "../src/macros/db";
 
 const isDev = process.argv.includes("--dev");
 
@@ -54,18 +54,7 @@ if (isDev) {
 	console.log(`[db:migrate] --dev → env-file=${devFile}`);
 }
 
-function activeDialect(): DbDialect {
-	const type = (process.env["DATABASE_TYPE"] ?? "sqlite").toLowerCase();
-	if (type === "postgres" || type === "postgresql" || type === "pg")
-		return "postgres";
-	if (type === "neon") return "neon";
-	if (type === "turso" || type === "tursodb" || type === "turso-cloud")
-		return "turso";
-	if (type === "d1") return "d1";
-	return "sqlite";
-}
-
-const dialect = activeDialect();
+const dialect = dbDialect();
 
 switch (dialect) {
 	case "sqlite": {

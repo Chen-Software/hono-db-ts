@@ -19,6 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
 import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 
 const isDev = process.argv.includes("--dev");
@@ -53,24 +54,14 @@ if (isDev) {
 	console.log(`[db:push] --dev → env-file=${devFile}`);
 }
 
-function activeDialect(): string {
-	const type = (process.env["DATABASE_TYPE"] ?? "sqlite").toLowerCase();
-	if (type === "postgres" || type === "postgresql" || type === "pg")
-		return "postgres";
-	if (type === "neon") return "neon";
-	if (type === "turso" || type === "tursodb" || type === "turso-cloud")
-		return "turso";
-	if (type === "d1") return "d1";
-	return "sqlite";
-}
-
 // sqlite / turso / d1 → sqlite config; postgres / neon → postgres config.
-const isPostgresDialect = ["postgres", "neon"].includes(activeDialect());
+const dialect = dbDialect();
+const isPostgresDialect = dialect === "postgres" || dialect === "neon";
 const config = isPostgresDialect
 	? "drizzle.config.postgres.ts"
 	: "drizzle.config.sqlite.ts";
 
-console.log(`[db:push] dialect=${activeDialect()} → config=${config}`);
+console.log(`[db:push] dialect=${dialect} → config=${config}`);
 const result = spawnSync(
 	"bun",
 	["x", "drizzle-kit", "push", "--config", config],
