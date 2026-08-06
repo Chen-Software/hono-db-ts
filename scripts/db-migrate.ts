@@ -1,23 +1,58 @@
 /**
- * Dispatches the migration to the dialect selected by `DATABASE_TYPE`
- * (build-time value in `src/macros/db.ts`).
+ * Dispatches the migration to the dialect selected by `DATABASE_TYPE`.
  *
- *   - `sqlite` (default)   -> `drizzle/sqlite`  (local `sqlite.db`)
- *   - `postgres` / `neon`  -> `drizzle/postgres` (local Postgres or Neon)
- *   - `turso` -> `drizzle/sqlite` (Turso reuses SQLite schema; `tursodb` /
- *     `turso-cloud` are aliases)
- *   - `d1`                 -> error: D1 has no local migrator; use `wrangler d1`
+ * The dialect comes from the active env:
+ *   - **default (prod)**  -> `.env` (auto-loaded by Bun).
+ *   - **`--dev`**         -> the matching `.env.dev.<type>` (via the
+ *     `src/macros/dev-env.ts` macro), e.g. `.env.dev.neon` → local Postgres.
+ *
+ *   - `sqlite`            -> `drizzle/sqlite`  (local `sqlite.db`)
+ *   - `postgres` / `neon` -> `drizzle/postgres` (local Postgres or Neon)
+ *   - `turso`             -> `drizzle/sqlite` (Turso reuses SQLite schema)
+ *   - `d1`                -> error: D1 has no local migrator; use `wrangler d1`
  *
  * Usage:
- *   bun run db:migrate                      # sqlite (default)
- *   DATABASE_TYPE=neon bun run db:migrate   # neon/postgres
- *   bun run --env-file=.env.neon db:migrate # neon (reads DATABASE_URL)
- *   bun run db:migrate:tursodb              # local TursoDB
- *   bun run db:migrate:turso-cloud          # Turso Cloud
+ *   bun run db:migrate                  # migrate the active DATABASE_TYPE (.env)
+ *   bun run db:migrate --dev            # migrate using .env.dev.<type>
+ *   DATABASE_TYPE=neon bun run db:migrate   # force neon/postgres (prod)
  */
 
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 import type { DbDialect } from "../src/macros/db";
+
+const isDev = process.argv.includes("--dev");
+
+/** Merge a `.env`-style file into `process.env` (does not override existing). */
+function loadEnvFile(file: string): void {
+	try {
+		for (const line of readFileSync(file, "utf8").split("\n")) {
+			const t = line.trim();
+			if (!t || t.startsWith("#") || !t.includes("=")) continue;
+			const eq = t.indexOf("=");
+			const key = t.slice(0, eq).trim();
+			let value = t.slice(eq + 1).trim();
+			if (
+				(value.startsWith('"') && value.endsWith('"')) ||
+				(value.startsWith("'") && value.endsWith("'"))
+			) {
+				value = value.slice(1, -1);
+			}
+			if (process.env[key] === undefined) process.env[key] = value;
+		}
+	} catch {
+		// file may not exist
+	}
+}
+
+// In --dev mode, load the matching .env.dev.<type> (its DATABASE_TYPE then
+// drives the dialect below). Otherwise use the auto-loaded .env.
+if (isDev) {
+	const devFile = devEnvFile();
+	loadEnvFile(resolve(process.cwd(), devFile));
+	console.log(`[db:migrate] --dev → env-file=${devFile}`);
+}
 
 function activeDialect(): DbDialect {
 	const type = (process.env["DATABASE_TYPE"] ?? "sqlite").toLowerCase();

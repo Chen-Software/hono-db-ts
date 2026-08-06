@@ -124,7 +124,7 @@ For Postgres dialect testing:
 
 ```bash
 docker compose up -d # start local Postgres on :5432
-bun run db:migrate:postgres # apply the Postgres migrations
+DATABASE_TYPE=postgres bun run db:migrate # apply the Postgres migrations
 bun run test:postgres      # run the Postgres endpoint tests
 # then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
 ```
@@ -150,7 +150,8 @@ cp .env.example.neon .env    # copy the Neon template to .env
 
 # then use the neon dialect
 bun run dev                  # local dev (uses .env.dev.neon → a local Postgres)
-bun run db:migrate:neon      # apply migrations to Neon
+bun run db:migrate           # apply migrations to Neon (prod, reads .env)
+bun run db:migrate --dev     # apply migrations to the local Postgres
 bun run test:neon            # run the endpoint tests against Neon
 bun run deploy:neon          # deploy the Worker to use Neon via Hyperdrive
 ```
@@ -168,7 +169,7 @@ modes; `TURSO_URL` decides local vs cloud.
 - **Local TursoDB** (`.env.dev.turso`, `TURSO_URL=file:///…`, no account):
   ```bash
   bun run dev                  # run against file:///…/tursodb.db
-  bun run db:migrate:tursodb   # apply SQLite migrations to the local file
+  bun run db:migrate --dev     # apply SQLite migrations to the local file
   bun run test:tursodb         # endpoint tests against local TursoDB
   ```
 - **Turso Cloud** (`.env.example.turso-cloud`, `TURSO_URL=libsql://…` + token):
@@ -181,7 +182,7 @@ modes; `TURSO_URL` decides local vs cloud.
   cp .env.example.turso-cloud .env         # copy the Turso template to .env
 
   bun run dev                  # run against Turso Cloud
-  bun run db:migrate:turso     # apply SQLite migrations
+  bun run db:migrate           # apply SQLite migrations (prod, reads .env)
   bun run test:turso           # endpoint tests against Turso Cloud
   ```
 - **Deploy the Turso worker** — the Worker uses `@libsql/client/http` (not
@@ -257,7 +258,7 @@ To make the Worker use Neon instead of D1:
 bun x wrangler hyperdrive create neon-hyperdrive \
   --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
 
-# 2. Set HYPERDRIVE_ID in your .env / .env.neon (e.g.
+# 2. Set HYPERDRIVE_ID in your .env (e.g.
 #    HYPERDRIVE_ID=<the id from `wrangler hyperdrive list`>). The build
 #    (wrangler.config.ts) generates wrangler.jsonc from it under
 #    env.neon.hyperdrive[].id. The top-level D1 env stays free of Hyperdrive.
@@ -279,7 +280,8 @@ bun x wrangler d1 execute movies-db --remote --file ./drizzle/sqlite/0000_*.sql
 For Neon, apply the Postgres migrations to the Neon database:
 
 ```bash
-bun run db:migrate:neon   # requires .env.neon (the Neon connection string)
+bun run db:migrate   # migrates the active DATABASE_TYPE from .env (prod)
+bun run db:migrate --dev   # migrates using .env.dev.<type> (local)
 ```
 
 ### 5. Deploy
@@ -330,12 +332,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
 | `bun run db:generate:postgres` | Generate Postgres migrations            |
-| `bun run db:migrate`   | Apply migrations for the active `DATABASE_TYPE` (`sqlite`/`postgres`/`neon`; `d1` errors) |
-| `bun run db:migrate:sqlite` | Alias forcing the SQLite migration        |
-| `bun run db:migrate:postgres` | Alias forcing the Postgres migration     |
-| `bun run db:migrate:neon` | Alias forcing the Neon migration (loads `.env.neon`) |
-| `bun run db:migrate:tursodb` | Alias forcing the local TursoDB migration (loads `.env.dev.turso`) |
-| `bun run db:migrate:turso` | Alias forcing the Turso Cloud migration (loads `.env.turso`) |
+| `bun run db:migrate`   | Migrate the active `DATABASE_TYPE` (`.env`); `--dev` uses `.env.dev.<type>` |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |

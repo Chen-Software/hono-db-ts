@@ -14,7 +14,7 @@ import { createPostgresMoviesRepo } from "../repo/movies-repo-postgres";
  *
  * PREREQUISITES (run `bun run test:postgres`):
  *   1. A running Postgres — `docker compose up -d`.
- *   2. Migrations applied — `bun run db:migrate:postgres`.
+ *   2. Migrations applied — `DATABASE_TYPE=postgres bun run db:migrate`.
  *
  * The test is opt-in (not part of `bun test`) because it needs a live DB.
  */

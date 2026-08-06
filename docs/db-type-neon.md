@@ -115,7 +115,8 @@ Then use Neon locally:
 
 ```bash
 bun run dev                 # run the app against Neon (local Postgres via .env.dev.neon)
-bun run db:migrate:neon     # apply Postgres migrations to Neon
+bun run db:migrate          # apply Postgres migrations to Neon (prod, reads .env)
+bun run db:migrate --dev    # apply migrations to the local Postgres
 bun run test:neon           # endpoint tests against Neon
 ```
 
@@ -191,7 +192,7 @@ else                      → D1 (env.DB)
 | Script | Purpose |
 | ------ | ------- |
 | `bun run dev` | Run the app against Neon (local Postgres) |
-| `bun run db:migrate:neon` | Apply Postgres migrations to Neon |
+| `bun run db:migrate` | Apply Postgres migrations to Neon (prod); `--dev` = local Postgres |
 | `bun run test:neon` | Endpoint tests against Neon |
 | `bun run deploy:neon` | Deploy `movies-worker-neon` (with Hyperdrive) |
 | `bun run deploy:dry-run:neon` | Validate the Neon bundle without deploying |

@@ -48,7 +48,7 @@ Env example files:
 
 ```bash
 bun run dev                  # run against file:///…/tursodb.db
-bun run db:migrate:tursodb   # apply SQLite migrations to the local file
+bun run db:migrate --dev     # apply SQLite migrations to the local file
 bun run test:tursodb         # endpoint tests against local TursoDB
 ```
 
@@ -78,7 +78,7 @@ Then use it locally:
 
 ```bash
 bun run dev                  # run the app against Turso Cloud
-bun run db:migrate:turso     # apply SQLite migrations to Turso Cloud
+bun run db:migrate           # apply SQLite migrations (prod, reads .env)
 bun run test:turso           # endpoint tests against Turso Cloud
 ```
 
@@ -163,8 +163,8 @@ else                      → D1 (env.DB)
 | Script | Purpose |
 | ------ | ------- |
 | `bun run dev` | Run the app against local TursoDB or Turso Cloud |
-| `bun run db:migrate:tursodb` | Migrate local TursoDB |
-| `bun run db:migrate:turso` | Migrate Turso Cloud |
+| `bun run db:migrate --dev` | Migrate local TursoDB |
+| `bun run db:migrate` | Migrate Turso Cloud (prod) |
 | `bun run test:tursodb` | Endpoint tests against local TursoDB |
 | `bun run test:turso` | Endpoint tests against Turso Cloud |
 | `bun run deploy:turso` | Deploy `movies-worker-turso` |
