@@ -115,15 +115,17 @@ bunx neon link               # picks your Neon org/project/branch
 bunx neon checkout main      # pin a branch
 bunx neon env pull           # writes DATABASE_URL etc. into .env
 cp .env.example.neon .env.neon
+# fill in HYPERDRIVE_ID (from `bun x wrangler hyperdrive list`) for deploys
 
 # then use the neon dialect
 bun run dev:neon             # run the app against Neon
 bun run db:migrate:neon      # apply migrations to Neon
 bun run test:neon            # run the endpoint tests against Neon
+bun run deploy:neon          # deploy the Worker to use Neon via Hyperdrive
 ```
 
-`.env.neon` is gitignored because it holds real credentials; commit the
-`.env.example.neon` template instead.
+`.env.neon` is gitignored because it holds real credentials (incl. the
+`HYPERDRIVE_ID`); commit the `.env.example.neon` template instead.
 
 ## Build process
 
@@ -178,10 +180,10 @@ To make the Worker use Neon instead of D1:
 bun x wrangler hyperdrive create neon-hyperdrive \
   --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
 
-# 2. Put the returned Hyperdrive `id` under "env" -> "neon" -> "hyperdrive" in
-#    wrangler.jsonc, replacing REPLACE_WITH_YOUR_HYPERDRIVE_ID (or use
-#    ${HYPERDRIVE_ID}). Keep the top-level free of Hyperdrive so the default
-#    D1 deploy stays clean.
+# 2. Set HYPERDRIVE_ID in your .env / .env.neon (e.g.
+#    HYPERDRIVE_ID=<the id from `wrangler hyperdrive list`>). The build
+#    (wrangler.config.ts) generates wrangler.jsonc from it under
+#    env.neon.hyperdrive[].id. The top-level D1 env stays free of Hyperdrive.
 ```
 
 > Neon's guidance: use Hyperdrive with a standard TCP Postgres driver (`postgres-js`),
