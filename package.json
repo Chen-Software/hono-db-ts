@@ -4,7 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "bun --watch src/main.ts",
+		"dev": "bun run --env-file=.env.dev --watch src/main.ts",
 		"dev:wrangler": "bun x wrangler dev",
 		"test": "bun test src/routes/movies.test.ts",
 		"test:postgres": "bun test src/routes/movies-postgres.test.ts",
