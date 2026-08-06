@@ -48,6 +48,8 @@ const coverageDirArg = argv.find((a) => a.startsWith("--coverage-dir="));
 const coverageDir = coverageDirArg
 	? coverageDirArg.slice("--coverage-dir=".length)
 	: undefined;
+	? timeoutArg.slice("--timeout=".length)
+	: undefined;
 
 // Any bare positional arg that names a `.test.ts` file is an explicit file
 // filter (highest priority): only those files run, matching `bun test <file>`.
@@ -193,6 +195,12 @@ if (hasIntegration && !existsSync(envFileResolved)) {
 	process.exit(1);
 }
 
+// Per-category per-test timeout (Bun `--timeout=<ms>`). Defaults vary by mode:
+// unit tests are fast; integration / mixed runs get a larger budget for DB I/O.
+// `--timeout=<ms>` overrides the default.
+const defaultTimeout = isUnit ? 10_000 : 30_000;
+const timeoutMs = timeoutOverride ?? String(defaultTimeout);
+
 // Remaining args (minus our flags) pass through to `bun test`.
 const skip = new Set([
 	"--all",
@@ -202,10 +210,12 @@ const skip = new Set([
 	"--env-file",
 	"--coverage",
 	"--coverage-dir",
+	"--timeout",
 ]);
 const restArgs = argv.filter((a) => {
 	if (a.startsWith("--env-file=")) return false;
 	if (a.startsWith("--coverage-dir=")) return false;
+	if (a.startsWith("--timeout=")) return false;
 	if (skip.has(a)) return false;
 	if (a.endsWith(".test.ts")) return false; // consumed as explicit file filter
 	if (testFlagIdx !== -1 && argv.indexOf(a) === testFlagIdx + 1) return false;
@@ -230,7 +240,8 @@ const integrationSummary = isAll
 console.log(
 	`[test] dialect=${dialect} | mode=${filterLabel} | unit=${files.filter((f) => f.endsWith(".unit.test.ts")).length} ` +
 		`integration=[${integrationSummary}] env-file=${hasIntegration ? envFile : "none"} ` +
-		`coverage=${withCoverage ? "on" : "off"}`,
+		`coverage=${withCoverage ? "on" : "off"} timeout=${timeoutMs}ms` +
+		(setupScript ? ` setup="${setupScript}"` : ""),
 );
 
 // NOTE: `--env-file` MUST come AFTER `test`. If it precedes the `test`
@@ -239,6 +250,7 @@ console.log(
 // --env-file at all — unit tests are env-agnostic.
 const args = [
 	"test",
+	`--timeout=${timeoutMs}`,
 	...(hasIntegration ? [`--env-file=${envFile}`] : []),
 	...coverageArgs,
 	...files,
