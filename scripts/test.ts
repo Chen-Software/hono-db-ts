@@ -41,7 +41,7 @@
  * script keeps a single spawn and surfaces them as-is.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
 import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
@@ -49,27 +49,35 @@ import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 const root = resolve(import.meta.dir, "..");
 const argv = process.argv.slice(2);
 
-/** Read a single KEY=value from an env-style file (ignores comments/quotes). */
-function readEnvValue(file: string, key: string): string | undefined {
-	try {
-		for (const line of readFileSync(file, "utf8").split("\n")) {
-			const t = line.trim();
-			if (!t || t.startsWith("#") || !t.includes("=")) continue;
-			const eq = t.indexOf("=");
-			if (t.slice(0, eq).trim() !== key) continue;
-			let value = t.slice(eq + 1).trim();
-			if (
-				(value.startsWith('"') && value.endsWith('"')) ||
-				(value.startsWith("'") && value.endsWith("'"))
-			) {
-				value = value.slice(1, -1);
-			}
-			return value;
-		}
-	} catch {
-		// file may not exist
-	}
-	return undefined;
+// Re-exec this script with the dev env loaded via Bun's `--env-file` (unless an
+// explicit --env-file was already given or we've already loaded it). `bun run
+// scripts/test.ts` auto-loads only `.env`; the dev env (e.g. `.env.dev.turso`)
+// carries the per-dialect setup vars (INTEGRATION_TEST_SETUP_*) and DB config.
+// By loading it into THIS process through Bun, we avoid manually reading env
+// files — `process.env` then holds everything.
+const explicitEnvFlag = argv.find((a) => a.startsWith("--env-file="));
+if (!explicitEnvFlag && !process.env["__TEST_DEV_ENV_LOADED__"]) {
+	const devEnv = devEnvFile(); // macro -> literal dev env path
+	// Pass a CLEAN env (system vars + marker only) — NOT the first exec's
+	// process.env. The first exec auto-loaded `.env` (production DB vars like
+	// TURSO_URL) into process.env; if we inherit it, those already-set vars win
+	// over --env-file. With a clean env, Bun loads `.env` then applies
+	// --env-file AFTER it, so the dev values win.
+	const cleanEnv: Record<string, string> = {
+		PATH: process.env["PATH"] ?? "",
+		HOME: process.env["HOME"] ?? "",
+		SHELL: process.env["SHELL"] ?? "",
+		USER: process.env["USER"] ?? "",
+		TERM: process.env["TERM"] ?? "",
+		LANG: process.env["LANG"] ?? "",
+		__TEST_DEV_ENV_LOADED__: "1",
+	};
+	const r = spawnSync(
+		"bun",
+		["run", `--env-file=${devEnv}`, import.meta.path, ...argv],
+		{ cwd: root, stdio: "inherit", env: cleanEnv },
+	);
+	process.exit(r.status ?? 1);
 }
 
 // Flag parsing.
@@ -245,12 +253,12 @@ const timeoutMs = timeoutOverride ?? String(defaultTimeout);
 //   - any other string         -> run as an inline shell command (`sh -c`)
 // Set INTEGRATION_TEST_SETUP_SKIP=1 to disable, and
 // INTEGRATION_TEST_SETUP_TIMEOUT (ms) to cap how long it may run.
-const setupSkip = readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SKIP");
-const setupValue = readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SCRIPT");
-const setupTimeoutRaw = readEnvValue(
-	envFileResolved,
-	"INTEGRATION_TEST_SETUP_TIMEOUT",
-);
+//
+// The script re-executed itself with `--env-file=<devEnv>` at the top, so the
+// dev env vars are already in process.env — no manual env-file reading needed.
+const setupSkip = process.env["INTEGRATION_TEST_SETUP_SKIP"];
+const setupValue = process.env["INTEGRATION_TEST_SETUP_SCRIPT"];
+const setupTimeoutRaw = process.env["INTEGRATION_TEST_SETUP_TIMEOUT"];
 const setupTimeoutMs = Number(setupTimeoutRaw ?? "120000");
 const setupTimeout =
 	Number.isFinite(setupTimeoutMs) && setupTimeoutMs > 0 ? setupTimeoutMs : 120_000;
@@ -345,6 +353,11 @@ if (setupScript) {
 // subcommand, Bun treats `test` as a package script name (the `test` script in
 // package.json) and recurses into this script infinitely. Unit-only runs pass no
 // --env-file at all — unit tests are env-agnostic.
+//
+// The child inherits this process's env. We re-exec'd with `--env-file=<devEnv>`
+// at the top, and Bun applies `--env-file` after auto-loading `.env`, so the dev
+// env values (e.g. TURSO_URL) already win in process.env — the child gets the
+// correct dev config with no manual key stripping needed.
 const args = [
 	"test",
 	`--timeout=${timeoutMs}`,
@@ -353,5 +366,9 @@ const args = [
 	...files,
 	...restArgs,
 ];
-const result = spawnSync("bun", args, { cwd: root, stdio: "inherit" });
+
+const result = spawnSync("bun", args, {
+	cwd: root,
+	stdio: "inherit",
+});
 process.exit(result.status ?? 1);
