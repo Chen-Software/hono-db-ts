@@ -1,5 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm";
-import type { movies } from "../schema";
+import type { movies } from "../db/schema";
 
 export type Movie = InferSelectModel<typeof movies>;
 

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { sqliteDb as db } from "../db";
-import { movies } from "../schema";
+import { movies } from "../db/schema";
 import type { Movie, MoviesRepo } from "./movies-repo";
 
 export function createSqliteMoviesRepo(): MoviesRepo {

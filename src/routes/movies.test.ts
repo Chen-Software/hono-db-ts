@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { sqliteDb as db } from "../db";
+import { movies } from "../db/schema";
 import { createApp } from "../main";
 import { createSqliteMoviesRepo } from "../repo/movies-repo-sqlite";
-import { movies } from "../schema";
 
 let app: Hono;
 

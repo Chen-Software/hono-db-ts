@@ -19,7 +19,7 @@
  */
 export async function seedD1(d1: D1Database): Promise<void> {
 	const { drizzle } = await import("drizzle-orm/d1");
-	const schema = await import("../src/schema");
+	const schema = await import("../src/db/schema");
 
 	const db = drizzle(d1, { schema });
 

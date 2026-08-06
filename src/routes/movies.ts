@@ -1,7 +1,11 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import {
+	movieIdSchema,
+	movieInsertSchema,
+	movieUpdateSchema,
+} from "../db/schema";
 import type { MoviesRepo } from "../repo/movies-repo";
-import { movieIdSchema, movieInsertSchema, movieUpdateSchema } from "../schema";
 
 /**
  * Create the /movies REST routes bound to a movies repository.

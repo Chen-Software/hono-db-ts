@@ -164,10 +164,12 @@ A movie has:
 ```
 src/
   main.ts            # unified entry (local bun:sqlite + Cloudflare Workers D1)
-  schema.ts          # re-exports the movie schema (see src/db/schema)
   db/
     index.ts         # dialect factory (reads DATABASE_TYPE) + Drizzle clients
-    schema/          # movies table & Zod schemas (sqlite.ts / postgres.ts)
+    schema/
+      index.ts       # re-exports the SQLite movie schema for app code
+      sqlite.ts      # SQLite movies table & Zod schemas
+      postgres.ts    # Postgres movies table & Zod schemas
   repo/
     movies-repo.ts       # storage-agnostic MoviesRepo interface
     movies-repo-sqlite.ts# bun:sqlite implementation
