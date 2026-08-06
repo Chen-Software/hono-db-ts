@@ -3,7 +3,7 @@
 		// Environment setup & latest features
 		"lib": ["ESNext"],
 		"target": "ESNext",
-		"module": "Preserve",
+		"module": "ESNext",
 		"moduleDetection": "force",
 		"types": ["bun", "@cloudflare/workers-types"],
 		"jsx": "react-jsx",
