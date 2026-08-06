@@ -25,13 +25,15 @@ By default the app uses SQLite (`sqlite.db`).
 
 ## Environment configuration
 
-The app reads its database dialect from the environment. Copy `.env.example` to `.env` and set:
+The app reads its database dialect from the environment **at build time** via Bun macros (`src/macros/db.ts`). Copy `.env.example` to `.env` and set:
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite` or `postgres`               | `sqlite`                                             |
+| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `sqlite`                                             |
 | `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
 | `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
+
+> `DATABASE_TYPE` is baked in at bundle time by the macros, which only run locally or in CI — they never execute on the Cloudflare Worker. `d1` refers to the Worker's D1 binding (`env.DB`), which has no local driver; use `bun run worker:dev` for that path.
 
 For Postgres dialect testing:
 
@@ -163,9 +165,16 @@ A movie has:
 
 ```
 src/
-  main.ts            # unified entry (local bun:sqlite + Cloudflare Workers D1)
+  app.ts             # pure createApp(repo) Hono factory (no DB, no macros)
+  main.ts            # local Bun entry (bun run dev/start) — uses macros + sqlite
+  worker.ts          # Cloudflare Worker entry (D1 only, no macros)
+  macros/
+    db.ts            # build-time DATABASE_TYPE / DATABASE_URL macros
+    platform.ts      # build-time Bun/Worker detection macros
   db/
-    index.ts         # dialect factory (reads DATABASE_TYPE) + Drizzle clients
+    index.ts         # dialect factory (build-time via macros) + Drizzle clients
+    sqlite-client.ts # bun:sqlite Drizzle client (local)
+    postgres-client.ts # postgres Drizzle client (local)
     schema/
       index.ts       # re-exports the SQLite movie schema for app code
       sqlite.ts      # SQLite movies table & Zod schemas
@@ -181,7 +190,11 @@ scripts/
   db-migrate.ts          # apply SQLite migrations
   db-migrate-postgres.ts # apply Postgres migrations
   db-seed.ts             # seed data
-wrangler.jsonc       # Cloudflare Workers configuration
+wrangler.jsonc       # Cloudflare Workers configuration (main: src/worker.ts)
 worker-configuration.d.ts # generated Worker binding types
 docker-compose.yml   # local Postgres for dialect testing
 ```
+
+### Why the Worker entry is separate
+
+Bun macros only run under Bun's bundler/transpiler — Wrangler bundles Workers with esbuild and does **not** execute them (it rejects `with { type: "macro" }` imports). So the Worker uses a dedicated entry (`src/worker.ts`) that reads the `env.DB` D1 binding directly with no macros, while the local Bun entry (`src/main.ts`) uses macros to pick its dialect at build time. This replaced the old `src/stubs/bun-sqlite.ts` + Wrangler `alias` workaround, and the Worker bundle no longer drags in `bun:sqlite` or `postgres`.

@@ -1,12 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "movies-worker",
-  "main": "src/main.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-08-06",
-  "alias": {
-    // Keeps bun:sqlite out of the Worker bundle; the local bun entry stays isolated.
-    "bun:sqlite": "./src/stubs/bun-sqlite.ts"
-  },
   // "compatibility_flags": [
   //   "nodejs_compat"
   // ],
