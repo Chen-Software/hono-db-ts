@@ -32,3 +32,13 @@ export function createTursoClient(opts: TursoClientOptions): TursoDb {
 	});
 	return drizzle(client, { schema: sqliteSchema.schema });
 }
+
+/** Create the Turso client from env (used by the build-time repo factory). */
+export function createClientFromEnv(): TursoDb {
+	const url =
+		process.env["TURSO_URL"] ??
+		process.env["TURSO_DB_URL"] ??
+		"file://tursodb.db";
+	const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
+	return createTursoClient({ url, authToken });
+}

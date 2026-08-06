@@ -1,9 +1,21 @@
 import { eq } from "drizzle-orm";
-import { sqliteDb as db } from "../db";
+import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { movies } from "../db/schema";
+import { createSqliteClient } from "../db/sqlite-client";
+import type { SqliteDb } from "../db/sqlite-client";
 import type { Movie, MoviesRepo } from "./movies-repo";
 
-export function createSqliteMoviesRepo(): MoviesRepo {
+/**
+ * The Drizzle SQLite database shape this repo needs (sync, like `bun:sqlite`).
+ */
+export type SqliteRepoDb = BaseSQLiteDatabase<"sync", void, { movies: typeof movies }>;
+
+/**
+ * Build a SQLite movies repo. Accepts a client for build-time injection
+ * (see `src/repo/factory.ts`); defaults to a local `sqlite.db` client when
+ * called without one (e.g. tests).
+ */
+export function createSqliteMoviesRepo(db: SqliteDb = createSqliteClient("sqlite.db")): MoviesRepo {
 	return {
 		async list() {
 			return db.select().from(movies).all();
