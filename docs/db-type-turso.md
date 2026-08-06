@@ -49,7 +49,7 @@ Env example files:
 ```bash
 bun run dev                  # run against file:///…/tursodb.db
 bun run db:migrate --dev     # apply SQLite migrations to the local file
-bun run test:tursodb         # endpoint tests against local TursoDB
+bun run test                 # endpoint tests (uses .env.dev.turso)
 ```
 
 Local TursoDB needs no account and no token.
@@ -79,7 +79,7 @@ Then use it locally:
 ```bash
 bun run dev                  # run the app against Turso Cloud
 bun run db:migrate           # apply SQLite migrations (prod, reads .env)
-bun run test:turso           # endpoint tests against Turso Cloud
+bun run test                 # endpoint tests (uses .env.dev.turso)
 ```
 
 ---
@@ -165,7 +165,6 @@ else                      → D1 (env.DB)
 | `bun run dev` | Run the app against local TursoDB or Turso Cloud |
 | `bun run db:migrate --dev` | Migrate local TursoDB |
 | `bun run db:migrate` | Migrate Turso Cloud (prod) |
-| `bun run test:tursodb` | Endpoint tests against local TursoDB |
-| `bun run test:turso` | Endpoint tests against Turso Cloud |
+| `bun run test` | Endpoint tests (dialect-aware; `*.turso.integration.test.ts`, uses `.env.dev.turso`) |
 | `bun run deploy:turso` | Deploy `movies-worker-turso` |
 | `bun run deploy:dry-run:turso` | Validate the Turso bundle without deploying |
