@@ -136,7 +136,9 @@ to the code they cover and are discovered purely by filename suffix — no centr
 runs `*.unit.test.ts` (no DB), and runs only the integration tests whose db-type
 suffix matches the active `DATABASE_TYPE`, using the db-type dev env
 (`.env.dev.<type>`), overridable with `--env-file=<file>`.
-`bun run test --all` runs every db-type's integration tests.
+`bun run test --all` runs every db-type's integration tests. Filters let you
+narrow the run — `--unit`, `--integration`, or `--test <name>` (matches a test
+file whose path contains `<name>`). These are mutually exclusive with `--all`.
 
 ### Neon (serverless Postgres)
 
@@ -326,7 +328,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun test`             | All unit tests + current `DATABASE_TYPE` integration tests; `--all` for all integrations; `--env-file` to override |
+| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
