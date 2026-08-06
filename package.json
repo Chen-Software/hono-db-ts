@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "bun run scripts/dev.ts",
 		"dev:postgres": "bun run --env-file=.env.example.postgres --watch src/main.ts",
-		"dev:neon": "bun run --env-file=.env.neon --watch src/main.ts",
+		"dev:neon": "bun run --env-file=.env.dev.neon --watch src/main.ts",
 		"dev:tursodb": "bun run --env-file=.env.dev.turso --watch src/main.ts",
 		"dev:turso": "bun run --env-file=.env.turso --watch src/main.ts",
 		"dev:wrangler": "bun x wrangler dev",
