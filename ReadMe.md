@@ -37,7 +37,6 @@ file you want; the relevant scripts already point at them:
 | `.env.dev.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
 | `.env.neon` (gitignored) | `neon`         | `bun run dev:neon` (Neon serverless PG)   |
 | `.env.example.neon`     | `neon`          | Neon template (copy to `.env.dev.neon`)   |
-| `.env.dev.turso`        | `turso` (file://) | `bun run dev` (local TursoDB)           |
 | `.env.turso` (gitignored) | `turso` (libsql://) | `bun run dev:turso` (Turso Cloud)       |
 | `.env.example.turso-cloud` | `turso` (libsql://) | Turso Cloud template (copy to `.env.turso`) |
 | `.env.example`          | `d1`            | generic reference — D1 is the deployable default |
@@ -160,7 +159,7 @@ Turso is a SQLite-compatible edge database, so it reuses the SQLite schema and
 repo (with an **async** libSQL client). A single `DATABASE_TYPE=turso` covers both
 modes; `TURSO_URL` decides local vs cloud.
 
-- **Local TursoDB** (`.env.example.tursodb`, `TURSO_URL=file:///…`, no account):
+- **Local TursoDB** (`.env.dev.turso`, `TURSO_URL=file:///…`, no account):
   ```bash
   bun run dev:tursodb         # run against file:///…/tursodb.db
   bun run db:migrate:tursodb  # apply SQLite migrations to the local file
@@ -315,13 +314,13 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
 | `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.dev.postgres`) |
 | `bun run dev:neon`     | Start the Hono server against Neon (loads `.env.neon`) |
-| `bun run dev:tursodb`  | Start the Hono server against local TursoDB (loads `.env.example.tursodb`) |
+| `bun run dev:tursodb`  | Start the Hono server against local TursoDB (loads `.env.dev.turso`) |
 | `bun run dev:turso`    | Start the Hono server against Turso Cloud (loads `.env.turso`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
 | `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.dev.postgres`, needs a running Postgres) |
 | `bun run test:neon`    | Run the Postgres endpoint tests against Neon (loads `.env.neon`) |
-| `bun run test:tursodb` | Run the endpoint tests against local TursoDB (loads `.env.example.tursodb`) |
+| `bun run test:tursodb` | Run the endpoint tests against local TursoDB (loads `.env.dev.turso`) |
 | `bun run test:turso`   | Run the endpoint tests against Turso Cloud (loads `.env.turso`) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
@@ -331,7 +330,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:migrate:sqlite` | Alias forcing the SQLite migration        |
 | `bun run db:migrate:postgres` | Alias forcing the Postgres migration     |
 | `bun run db:migrate:neon` | Alias forcing the Neon migration (loads `.env.neon`) |
-| `bun run db:migrate:tursodb` | Alias forcing the local TursoDB migration (loads `.env.example.tursodb`) |
+| `bun run db:migrate:tursodb` | Alias forcing the local TursoDB migration (loads `.env.dev.turso`) |
 | `bun run db:migrate:turso` | Alias forcing the Turso Cloud migration (loads `.env.turso`) |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
@@ -405,7 +404,6 @@ A movie has:
 .env.dev.postgres  # Postgres local dev config (loaded by `bun run dev:postgres`)
 .env.neon              # Neon config (gitignored, loaded by `bun run dev:neon`)
 .env.example.neon      # Neon template (copy to `.env.dev.neon`)
-.env.example.tursodb   # local TursoDB template
 .env.turso             # Turso Cloud config (gitignored, loaded by `bun run dev:turso`)
 .env.example.turso-cloud # Turso Cloud template (copy to `.env.turso`)
 compose.yml            # local Postgres server for dialect testing

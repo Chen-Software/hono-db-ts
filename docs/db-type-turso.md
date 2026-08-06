@@ -38,7 +38,7 @@ same query surface.
 
 Env example files:
 
-- `.env.example.tursodb` — local TursoDB template
+- `.env.dev.turso` — local TursoDB dev config
 - `.env.example.turso-cloud` — Turso Cloud template (copy to `.env.turso`)
 - `.env.turso` — gitignored real config (contains the auth token)
 
