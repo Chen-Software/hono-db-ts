@@ -88,7 +88,7 @@ escape hatch and requires Hyperdrive.
 | `DATABASE_POOL_SIZE` | Postgres pool size (default `10`) | optional |
 | `NEON_BRANCH` | Linked Neon branch (from `neon env pull`) | optional |
 
-Env example file: `.env.example.neon` (copy to `.env.neon`, gitignored).
+Env example file: `.env.example.neon` (**copy to `.env`**, which is gitignored).
 
 ---
 
@@ -101,20 +101,20 @@ bunx neon@latest link        # pick org/project/branch
 bunx neon@latest checkout production
 bunx neon@latest env pull    # writes DATABASE_URL etc. into .env
 
-cp .env.example.neon .env.neon
+cp .env.example.neon .env
 
 # 2. Create a Hyperdrive config pointing at the Neon UNPOOLED connection string
 bun x wrangler hyperdrive create neon-hyperdrive \
   --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
 
-# 3. Copy the returned Hyperdrive id → HYPERDRIVE_ID in .env.neon
+# 3. Copy the returned Hyperdrive id → HYPERDRIVE_ID in .env
 bun x wrangler hyperdrive list
 ```
 
 Then use Neon locally:
 
 ```bash
-bun run dev:neon            # run the app against Neon
+bun run dev                 # run the app against Neon (local Postgres via .env.dev.neon)
 bun run db:migrate:neon     # apply Postgres migrations to Neon
 bun run test:neon           # endpoint tests against Neon
 ```
@@ -190,7 +190,7 @@ else                      → D1 (env.DB)
 
 | Script | Purpose |
 | ------ | ------- |
-| `bun run dev:neon` | Run the app against Neon |
+| `bun run dev` | Run the app against Neon (local Postgres) |
 | `bun run db:migrate:neon` | Apply Postgres migrations to Neon |
 | `bun run test:neon` | Endpoint tests against Neon |
 | `bun run deploy:neon` | Deploy `movies-worker-neon` (with Hyperdrive) |

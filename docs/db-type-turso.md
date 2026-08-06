@@ -39,15 +39,15 @@ same query surface.
 Env example files:
 
 - `.env.dev.turso` — local TursoDB dev config
-- `.env.example.turso-cloud` — Turso Cloud template (copy to `.env.turso`)
-- `.env.turso` — gitignored real config (contains the auth token)
+- `.env.example.turso-cloud` — Turso Cloud template (**copy to `.env`**)
+- `.env` — the real config (holds the auth token; gitignored)
 
 ---
 
 ## Local development (TursoDB)
 
 ```bash
-bun run dev:tursodb          # run against file:///…/tursodb.db
+bun run dev                  # run against file:///…/tursodb.db
 bun run db:migrate:tursodb   # apply SQLite migrations to the local file
 bun run test:tursodb         # endpoint tests against local TursoDB
 ```
@@ -70,14 +70,14 @@ turso db create movies-db
 turso db show movies-db --url            # → TURSO_URL (libsql://…)
 turso db tokens create movies-db         # → TURSO_AUTH_TOKEN
 
-# 4. Configure the app
-cp .env.example.turso-cloud .env.turso   # fill in TURSO_URL + TURSO_AUTH_TOKEN
+# 4. Configure the app (copy the Turso template to .env)
+cp .env.example.turso-cloud .env   # fill in TURSO_URL + TURSO_AUTH_TOKEN
 ```
 
 Then use it locally:
 
 ```bash
-bun run dev:turso            # run the app against Turso Cloud
+bun run dev                  # run the app against Turso Cloud
 bun run db:migrate:turso     # apply SQLite migrations to Turso Cloud
 bun run test:turso           # endpoint tests against Turso Cloud
 ```
@@ -162,8 +162,7 @@ else                      → D1 (env.DB)
 
 | Script | Purpose |
 | ------ | ------- |
-| `bun run dev:tursodb` | Run the app against local TursoDB |
-| `bun run dev:turso` | Run the app against Turso Cloud |
+| `bun run dev` | Run the app against local TursoDB or Turso Cloud |
 | `bun run db:migrate:tursodb` | Migrate local TursoDB |
 | `bun run db:migrate:turso` | Migrate Turso Cloud |
 | `bun run test:tursodb` | Endpoint tests against local TursoDB |

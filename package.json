@@ -5,11 +5,6 @@
 	"private": true,
 	"scripts": {
 		"dev": "bun run scripts/dev.ts",
-		"dev:postgres": "bun run --env-file=.env.dev.postgres --watch src/main.ts",
-		"dev:neon": "bun run --env-file=.env.dev.neon --watch src/main.ts",
-		"dev:tursodb": "bun run --env-file=.env.dev.turso --watch src/main.ts",
-		"dev:turso": "bun run --env-file=.env.turso --watch src/main.ts",
-		"dev:wrangler": "bun x wrangler dev",
 		"test": "bun --env-file=.env.dev test src/routes/movies.test.ts",
 		"test:postgres": "bun --env-file=.env.dev.postgres test src/routes/movies-postgres.test.ts",
 		"test:neon": "bun --env-file=.env.neon test src/routes/movies-postgres.test.ts",
