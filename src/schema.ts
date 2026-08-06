@@ -34,11 +34,13 @@ export const movieInsertSchema = createInsertSchema(movies, {
 
 // Validate data used to update a movie (PUT body) — all fields optional
 export const movieUpdateSchema = createUpdateSchema(movies, {
-	// reject whitespace-only titles, then trim the stored value
-	title: (schema) =>
-		schema
-			.refine((value) => value.trim().length > 0, "title must not be empty")
-			.transform((value) => value.trim()),
+	// override title with an optional, non-nullable string schema since the DB
+	// column is nullable — reject whitespace-only titles, then trim the value
+	title: z
+		.string("title must be a string")
+		.refine((value) => value.trim().length > 0, "title must not be empty")
+		.transform((value) => value.trim())
+		.optional(),
 	releaseYear: (schema) => schema.int("releaseYear must be an integer"),
 }).omit({ id: true });
 
