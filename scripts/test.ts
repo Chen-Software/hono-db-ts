@@ -4,16 +4,17 @@
  * Tests live next to the code they exercise (under src). No central tests/
  * folder is needed; only the filename suffix matters:
  *
- * - `<name>.unit.test.ts`                — decoupled from DATABASE_TYPE, always run.
- * - `<name>.<db-type>.integration.test.ts` — env-aware, only runs when the active
- *   DATABASE_TYPE matches `<db-type>`, unless --all is given.
+ * - `<name>.unit.test.ts`                — env-agnostic, run with NO --env-file, always run.
+ * - `<name>.<db-type>.integration.test.ts` — env-aware, runs with the db-type dev
+ *   env (`--env-file`), only when the active DATABASE_TYPE matches `<db-type>`,
+ *   unless --all is given.
  *
  * Recursive scan means adding or renaming test files needs no script change.
  *
  * Usage:
  *   bun run test                                  # all unit + current-dialect integration
  *   bun run test --all                            # all unit + all integration
- *   bun run test --unit                           # unit tests only
+ *   bun run test --unit                           # unit tests only (no env file)
  *   bun run test --integration                    # current-dialect integration only
  *   bun run test --test <name>                    # only tests whose path contains <name>
  *   bun run test <file>...                        # only the given test files (e.g. src/routes/movies.unit.test.ts)
@@ -177,15 +178,17 @@ if (files.length === 0) {
 	process.exit(1);
 }
 
-// Integration tests use the db-type dev env by default; `--env-file` overrides.
-// Only required when the selected set actually includes integration tests.
+// Only integration tests need an env file; unit tests are env-agnostic and run
+// with no --env-file. The db-type dev env is used by default; `--env-file`
+// overrides it. Unit-only runs skip the env file entirely.
+const hasIntegration = selectedIntegrationFiles.length > 0;
 const envFlagArg = argv.find((a) => a.startsWith("--env-file="));
 const envFile = envFlagArg
 	? envFlagArg.slice("--env-file=".length)
 	: devEnvFile();
 
 const envFileResolved = resolve(root, envFile);
-if (selectedIntegrationFiles.length > 0 && !existsSync(envFileResolved)) {
+if (hasIntegration && !existsSync(envFileResolved)) {
 	console.error(`Env file not found: ${envFile}`);
 	process.exit(1);
 }
@@ -226,14 +229,17 @@ const integrationSummary = isAll
 	: `${active}:${selectedIntegrationFiles.length}`;
 console.log(
 	`[test] dialect=${dialect} | mode=${filterLabel} | unit=${files.filter((f) => f.endsWith(".unit.test.ts")).length} ` +
-		`integration=[${integrationSummary}] env-file=${envFile} ` +
+		`integration=[${integrationSummary}] env-file=${hasIntegration ? envFile : "none"} ` +
 		`coverage=${withCoverage ? "on" : "off"}`,
 );
 
+// NOTE: `--env-file` MUST come AFTER `test`. If it precedes the `test`
+// subcommand, Bun treats `test` as a package script name (the `test` script in
+// package.json) and recurses into this script infinitely. Unit-only runs pass no
+// --env-file at all — unit tests are env-agnostic.
 const args = [
-	"--env-file",
-	envFile,
 	"test",
+	...(hasIntegration ? [`--env-file=${envFile}`] : []),
 	...coverageArgs,
 	...files,
 	...restArgs,
