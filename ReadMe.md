@@ -30,7 +30,7 @@ docker compose up -d # start local Postgres on :5432
 
 ## Deploy to Cloudflare Workers
 
-The app ships with a `wrangler.json` and a Workers entry point (`src/index.ts`) that stores movies in **D1**.
+The app ships with a `wrangler.jsonc` and a Workers entry point (`src/main.ts`) that stores movies in **D1**.
 
 ### 1. Create the D1 database
 
@@ -38,7 +38,7 @@ The app ships with a `wrangler.json` and a Workers entry point (`src/index.ts`) 
 bun x wrangler d1 create movies-db
 ```
 
-Copy the printed `database_id` into `wrangler.json` (replace the `REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder).
+Copy the printed `database_id` into `wrangler.jsonc` (replace the `REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder).
 
 ### 2. Apply the schema to D1
 
@@ -145,7 +145,7 @@ src/
 scripts/
   db-migrate.ts      # apply migrations
   db-seed.ts         # seed data
-wrangler.json        # Cloudflare Workers configuration
+wrangler.jsonc       # Cloudflare Workers configuration
 worker-configuration.d.ts # generated Worker binding types
 docker-compose.yml   # local Postgres for dialect testing
 ```
