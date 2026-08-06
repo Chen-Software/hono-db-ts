@@ -15,17 +15,46 @@ A starter project for a REST API built with **Hono** and **Drizzle ORM**, run on
 
 ```bash
 bun install          # install dependencies
-cp .env.example .env # configure DATABASE_TYPE / DATABASE_URL
+bun run dev          # start the Hono server in watch mode (SQLite, loads .env.dev)
 bun run db:generate  # (re)generate SQL migrations from the schema
 bun run db:migrate   # apply migrations to the SQLite database
-bun run dev          # start the Hono server in watch mode
 ```
 
 By default the app uses SQLite (`sqlite.db`).
 
-## Environment configuration (`.env`)
+## Environment configuration
 
-Copy `.env.example` to `.env` and set:
+The project ships **per-dialect** env files. Bun's `--env-file` flag loads the
+file you want; the relevant scripts already point at them:
+
+| File                    | `DATABASE_TYPE` | Used by                                   |
+| ----------------------- | --------------- | ----------------------------------------- |
+| `.env.dev`              | `sqlite`        | `bun run dev` (local dev)                 |
+| `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
+| `.env.example`          | —               | generic reference for copy/paste          |
+
+- **`bun:sqlite` is local-dev only** — it cannot run inside a Cloudflare Worker.
+  The Worker always uses the D1 binding (`env.DB`) via `src/worker.ts`, so the
+  SQLite path is never deployed.
+- **Postgres** is for local development / testing only; `DATABASE_TYPE=postgres`
+  never ships to the Worker either.
+
+To point the app at a given dialect, either rely on the default `dev` /
+`dev:postgres` scripts or load a file explicitly:
+
+```bash
+bun run dev                      # sqlite (.env.dev)
+bun run dev:postgres             # postgres (.env.example.postgres)
+bun run --env-file=.env.example postgres… # or any file, explicitly
+```
+
+Variables:
+
+| Variable          | Description                                   | Default                                              |
+| ----------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `sqlite`                                             |
+| `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
+| `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
@@ -40,7 +69,7 @@ Copy `.env.example` to `.env` and set:
 - **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
 - **Cloudflare Worker** — the Worker uses the `env.DB` D1 binding directly (`src/worker.ts`) and has no macros; `DATABASE_TYPE` is irrelevant there.
 
-> Because the value is baked in at build time, change `DATABASE_TYPE` in `.env` and **restart** `bun run dev` / re-run `bun run build` for it to take effect.
+> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`) and **restart** the dev server / re-run `bun run build` for it to take effect.
 
 ### Dialects
 
@@ -134,7 +163,8 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 
 | Script                 | Description                                     |
 | ---------------------- | ----------------------------------------------- |
-| `bun run dev`          | Start the Hono server in watch mode (Bun)       |
+| `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
+| `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.example.postgres`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the SQLite endpoint tests                   |
 | `bun run test:postgres` | Run the Postgres endpoint tests (needs a running Postgres) |
@@ -204,6 +234,10 @@ A movie has:
 ## Project layout
 
 ```
+.env.dev               # SQLite local dev config (loaded by `bun run dev`)
+.env.example           # generic env template
+.env.example.postgres  # Postgres env template (loaded by `bun run dev:postgres`)
+compose.yml            # local Postgres server for dialect testing
 src/
   app.ts             # pure createApp(repo) Hono factory (no DB, no macros)
   main.ts            # local Bun entry (bun run dev/start) — uses macros + sqlite
@@ -235,7 +269,6 @@ scripts/
   db-seed.ts             # seed data
 wrangler.jsonc       # Cloudflare Workers configuration (main: src/worker.ts)
 worker-configuration.d.ts # generated Worker binding types
-docker-compose.yml   # local Postgres for dialect testing
 ```
 
 ### Why the Worker entry is separate
