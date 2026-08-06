@@ -35,7 +35,13 @@ class FakeMoviesRepo implements MoviesRepo {
 	}
 
 	async create(input: CreateMovieInput): Promise<Movie> {
-		const movie: Movie = { id: this.nextId++, ...input };
+		// Mirror a real DB-backed insert: an omitted releaseYear reads back as
+		// null (the column is nullable), not undefined.
+		const movie: Movie = {
+			id: this.nextId++,
+			title: input.title,
+			releaseYear: input.releaseYear ?? null,
+		};
 		this.rows.set(movie.id, movie);
 		return movie;
 	}
