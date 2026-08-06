@@ -41,13 +41,13 @@ file you want; the relevant scripts already point at them:
 | `.env.example.turso-cloud` | `turso` (libsql://) | Turso Cloud template (copy to `.env.turso`) |
 | `.env.example`          | `d1`            | generic reference — D1 is the deployable default |
 
-> **`bun run dev` is dialect-aware and always local.** It reads `DATABASE_TYPE`
-> from `.env` and picks the env file by priority:
->   1. `.env.dev` — if it exists **and** defines the active `DATABASE_TYPE`
->   2. `.env.dev.<type>` — the type-specific local file (`.env.dev.neon`,
->      `.env.dev.turso`, etc.)
->   3. `.env.dev` — final fallback
-> All dev runs target a **local** database (never cloud/production).
+> **`bun run dev` is dialect-aware and runs a local dev server.** It reads
+> `DATABASE_TYPE` from `.env` (defaults to `d1` when missing):
+>   - `d1` → `bun x wrangler dev` (the Worker runs locally with D1)
+>   - `sqlite` / `postgres` / `neon` / `turso` → a local Bun server, picking the
+>     env file by priority: `.env.dev` (if it matches the dialect) →
+>     `.env.dev.<type>` → `.env.dev`. Turso uses the local `file://` SDK
+>     (`.env.dev.turso`), never Turso Cloud.
 
 **LOCAL-ONLY dialects (never available on Cloudflare Workers):**
 - **`sqlite`** — `bun:sqlite` cannot run inside a Worker (no such driver there).
