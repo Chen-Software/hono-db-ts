@@ -4,17 +4,13 @@
  * Bun auto-loads `.env` into `process.env`, so the active dialect comes from
  * `process.env.DATABASE_TYPE`. If it's missing, we default to `d1`.
  *
- * For each dialect we run the matching LOCAL dev server:
- *   - `d1`        -> `bun x wrangler dev` (the Worker runs locally with D1)
+ * Each dialect runs a LOCAL dev server with a local driver:
+ *   - `d1`        -> local `sqlite` driver (closest to D1), `.env.dev`
  *   - `sqlite`    -> Bun server with `.env.dev`
- *   - `postgres`  -> Bun server with `.env.example.postgres`
- *   - `neon`      -> Bun server with `.env.dev.neon`
+ *   - `postgres`  -> Bun server with `.env.example.postgres` (local Postgres)
+ *   - `neon`      -> Bun server with `.env.dev.neon` against a LOCAL Postgres
+ *                    (Neon Local via `docker compose up -d`)
  *   - `turso`     -> Bun server with `.env.dev.turso` (local `file://` libSQL)
- *
- * The type-specific dev files (`.env.dev.turso`, `.env.dev.neon`, …) are NOT
- * auto-loaded by Bun, so they're passed via `--env-file`. Turso has a `turso dev`
- * local server CLI, but the local file SDK (`.env.dev.turso`) is simpler and
- * recommended for most dev, so we use that.
  *
  * Usage:  bun run dev   (or `bun run dev.ts`)
  */
@@ -51,8 +47,8 @@ function envFileDialect(file: string): string {
 	return "";
 }
 
-// Local env file per dialect (type-specific files are loaded via --env-file).
-// `d1` has no local env file (handled separately via wrangler dev).
+// Local env file per dialect. `d1` uses sqlite (`.env.dev`); `neon` uses the
+// local dev file pointing at a LOCAL Postgres.
 const typeFile = {
 	sqlite: ".env.dev",
 	postgres: ".env.example.postgres",
@@ -69,17 +65,13 @@ function resolveEnvFile(): string {
 	return typeFile;
 }
 
-// D1 (and the missing-DATABASE_TYPE default) runs the Worker locally via wrangler.
-if (activeType === "d1") {
-	console.log("[dev] dialect=d1 → bun x wrangler dev");
-	const result = spawnSync("bun", ["x", "wrangler", "dev"], {
-		cwd: root,
-		stdio: "inherit",
-	});
-	process.exit(result.status ?? 1);
+// Neon uses a LOCAL Postgres (Neon Local). Ensure it's running first.
+if (activeType === "neon") {
+	console.log("[dev] neon → ensuring local Postgres is up (docker compose up -d)");
+	spawnSync("docker", ["compose", "up", "-d"], { cwd: root, stdio: "inherit" });
 }
 
-// Local Bun server for sqlite / postgres / neon / turso.
+// D1 uses the local sqlite driver (closest to D1) — a local Bun server.
 const envFile = resolveEnvFile();
 console.log(`[dev] dialect=${activeType} → env-file=${envFile}`);
 const args = ["run", `--env-file=${envFile}`, "--watch", "src/main.ts"];
