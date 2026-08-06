@@ -34,16 +34,26 @@ file you want; the relevant scripts already point at them:
 | `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
 | `.env.neon` (gitignored) | `neon`         | `bun run dev:neon` (Neon serverless PG)   |
 | `.env.example.neon`     | `neon`          | Neon template (copy to `.env.neon`)       |
-| `.env.example`          | `d1`            | generic reference — defaults to the production dialect (`d1`) |
+| `.env.example`          | `d1`            | generic reference — D1 is the deployable default |
 
-- **`bun:sqlite` is local-dev only** — it cannot run inside a Cloudflare Worker.
-  The Worker always uses the D1 binding (`env.DB`) via `src/worker.ts`, so the
-  SQLite path is never deployed.
-- **Postgres / Neon** are serverless-Postgres paths for local development,
-  testing, and production data outside the Worker. `DATABASE_TYPE=postgres` and
-  `DATABASE_TYPE=neon` both use the same `postgres-js` driver + schema; `neon`
-  simply points at a Neon-hosted connection string. Neither ships to the Worker
-  bundle.
+**LOCAL-ONLY dialects (never available on Cloudflare Workers):**
+- **`sqlite`** — `bun:sqlite` cannot run inside a Worker (no such driver there).
+- **`postgres`** — `postgres-js` uses Node.js TCP, which Workers don't support.
+
+Both only affect the **local Bun server** (`bun run dev*`). The Worker never
+imports them.
+
+**DEPLOYABLE dialects (what the Worker actually uses):**
+- **`d1`** — the Worker's `env.DB` D1 binding. `bun run deploy` targets the
+  top-level `wrangler.jsonc` environment, which has **no Hyperdrive**.
+- **`neon`** — serverless Postgres on the Worker via a **Hyperdrive** binding.
+  `bun run deploy:neon` targets the `neon` wrangler environment (`--env=neon`),
+  which **does include Hyperdrive**.
+
+The Worker selects its database at runtime from the bindings present (see
+`src/worker.ts`): if a `HYPERDRIVE` binding exists → Neon; otherwise → D1. So
+`DATABASE_TYPE` / `DATABASE_URL` in `.env` are irrelevant to the deployed
+Worker — they only configure the local Bun server.
 
 To point the app at a given dialect, either rely on the scripts or load a file
 explicitly:
@@ -68,7 +78,7 @@ Variables:
 `DATABASE_TYPE` / `DATABASE_URL` are **build-time** values. They are read **once, at bundle time** by the macros in `src/macros/db.ts` (which run under `bun run dev`, `bun run build`, and CI) and inlined into the emitted code as literals. They are **never** read at runtime and are **not** part of the Cloudflare Worker bundle:
 
 - **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
-- **Cloudflare Worker** — the Worker uses the `env.DB` D1 binding directly (`src/worker.ts`) and has no macros; `DATABASE_TYPE` is irrelevant there.
+- **Cloudflare Worker** — the Worker reads its database binding at runtime (`env.HYPERDRIVE` → Neon, else `env.DB` → D1) and has no macros; `DATABASE_TYPE` / `DATABASE_URL` are irrelevant there.
 
 > Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`, `.env.neon` for `bun run dev:neon`) and **restart** the dev server / re-run `bun run build` for it to take effect.
 
@@ -135,9 +145,20 @@ DATABASE_TYPE=postgres bun run build  # bake in the postgres dialect
 
 ## Deploy to Cloudflare Workers
 
-The app ships with a `wrangler.jsonc` and a dedicated Worker entry (`src/worker.ts`) that stores movies in **D1**. `bun run deploy` runs the build (macros) first, then deploys.
+The app ships with a `wrangler.jsonc` and a dedicated Worker entry (`src/worker.ts`) that picks its storage from the bindings available at runtime:
 
-### 1. Create the D1 database
+- if a **`HYPERDRIVE`** binding is present → **Neon** (serverless Postgres) via Hyperdrive, using `postgres-js` + `nodejs_compat`.
+- otherwise → **D1** (`env.DB`).
+
+`wrangler.jsonc` uses Wrangler **named environments** to toggle Hyperdrive:
+
+- **top-level (default, `bun run deploy`)** — D1 only, **no Hyperdrive** → deploys `movies-worker` using D1.
+- **`neon` environment (`bun run deploy:neon`)** — adds a **Hyperdrive** binding → deploys `movies-worker-neon` using Neon.
+
+This keeps `DATABASE_TYPE=d1` (`wrangler.jsonc` top-level) free of Hyperdrive, while
+`DATABASE_TYPE=neon` (`--env=neon`) carries it — automatically matching the dialect.
+
+### 1. Create the D1 database (fallback)
 
 ```bash
 bun x wrangler d1 create movies-db
@@ -145,20 +166,46 @@ bun x wrangler d1 create movies-db
 
 Copy the printed `database_id` into `wrangler.jsonc`. (This repo already has `movies-db` configured with a real `database_id`, so on a fresh clone you only need to do this if you use a different database name.)
 
-### 2. Apply the schema to D1
+### 2. (Optional) Wire Neon via Hyperdrive
 
-Generate the SQL migration, then run it against D1:
+To make the Worker use Neon instead of D1:
+
+```bash
+# 1. Create a Hyperdrive config pointing at your Neon (unpooled) connection string
+bun x wrangler hyperdrive create neon-hyperdrive \
+  --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
+
+# 2. Put the returned Hyperdrive `id` under "env" -> "neon" -> "hyperdrive" in
+#    wrangler.jsonc (see the repo's wrangler.jsonc for the shape). Keep the
+#    top-level free of Hyperdrive so the default D1 deploy stays clean.
+```
+
+> Neon's guidance: use Hyperdrive with a standard TCP Postgres driver (`postgres-js`),
+> **not** the Neon Serverless (WebSocket) driver. Hyperdrive provides its own pool,
+> so `max: 1` is used. Requires the `nodejs_compat` compatibility flag.
+
+### 4. Apply the schema
+
+For D1, generate and run the SQLite migration:
 
 ```bash
 bun run db:generate
 bun x wrangler d1 execute movies-db --remote --file ./drizzle/sqlite/0000_*.sql
 ```
 
-### 3. Deploy
+For Neon, apply the Postgres migrations to the Neon database:
 
 ```bash
-bun run deploy       # deploy the Worker to the edge
-bun run deploy:dry-run  # validate the bundle without deploying
+bun run db:migrate:neon   # requires .env.neon (the Neon connection string)
+```
+
+### 5. Deploy
+
+```bash
+bun run deploy            # deploy D1 worker `movies-worker` (no Hyperdrive)
+bun run deploy:neon       # deploy Neon worker `movies-worker-neon` (with Hyperdrive)
+bun run deploy:dry-run        # validate the D1 bundle without deploying
+bun run deploy:dry-run:neon   # validate the Neon bundle without deploying
 ```
 
 ### Local Workers development
@@ -205,8 +252,10 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |
-| `bun run deploy`       | Build (runs macros) then deploy to Cloudflare    |
-| `bun run deploy:dry-run` | Build (runs macros) then validate the bundle  |
+| `bun run deploy`       | Build (runs macros) then deploy D1 worker (no Hyperdrive) |
+| `bun run deploy:neon`  | Deploy the Neon worker via `--env=neon` (with Hyperdrive) |
+| `bun run deploy:dry-run` | Build then validate the D1 bundle without deploying |
+| `bun run deploy:dry-run:neon` | Validate the Neon bundle without deploying   |
 | `bun run worker:dev`   | Run the Worker locally with wrangler             |
 | `bun run worker:types` | Regenerate Worker binding types                  |
 | `bun run check`        | Lint & format check (Biome)                      |
@@ -279,6 +328,7 @@ src/
     index.ts         # dialect factory (build-time via macros) + Drizzle clients
     sqlite-client.ts # bun:sqlite Drizzle client (local)
     postgres-client.ts # postgres Drizzle client (local)
+    neon-client.ts   # Worker client: postgres-js via Hyperdrive (nodejs_compat)
     schema/
       index.ts       # re-exports the SQLite movie schema for app code
       sqlite.ts      # SQLite movies table & Zod schemas
@@ -286,7 +336,7 @@ src/
   repo/
     movies-repo.ts       # storage-agnostic MoviesRepo interface
     movies-repo-sqlite.ts# bun:sqlite implementation
-    movies-repo-postgres.ts # postgres implementation
+    movies-repo-postgres.ts # postgres/Neon implementation (used locally + Worker)
     movies-repo-d1.ts    # Cloudflare D1 implementation
   routes/
     movies.ts        # /movies REST handlers
@@ -302,4 +352,4 @@ worker-configuration.d.ts # generated Worker binding types
 
 ### Why the Worker entry is separate
 
-Bun macros only run under Bun's bundler/transpiler — Wrangler bundles Workers with esbuild and does **not** execute them (it rejects `with { type: "macro" }` imports). So the Worker uses a dedicated entry (`src/worker.ts`) that reads the `env.DB` D1 binding directly with no macros, while the local Bun entry (`src/main.ts`) uses macros to pick its dialect at build time. This replaced the old `src/stubs/bun-sqlite.ts` + Wrangler `alias` workaround, and the Worker bundle no longer drags in `bun:sqlite` or `postgres`.
+Bun macros only run under Bun's bundler/transpiler — Wrangler bundles Workers with esbuild and does **not** execute them (it rejects `with { type: "macro" }` imports). So the Worker uses a dedicated entry (`src/worker.ts`) that picks its database binding at runtime — `env.HYPERDRIVE` → Neon, else `env.DB` → D1 — with no macros, while the local Bun entry (`src/main.ts`) uses macros to pick its dialect at build time. This replaced the old `src/stubs/bun-sqlite.ts` + Wrangler `alias` workaround. The Worker only drags in `postgres` when the Hyperdrive path is bundled (which is why Wrangler handles that bundle with `nodejs_compat`).

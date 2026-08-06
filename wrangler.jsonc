@@ -3,35 +3,66 @@
   "name": "movies-worker",
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-06",
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
+  // Needed for the postgres-js driver when the Worker talks to Neon via
+  // Hyperdrive (`node:net` / `node:tls`). Harmless for the D1 path.
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DATABASE bindings
+  // ─────────────────────────────────────────────────────────────────────────
+  //
+  // 1) Run `bun x wrangler d1 create movies-db`, copy the printed `database_id`,
+  //    and paste it below in place of `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
+  //
+  // 2) Alternatively, drive values from environment variables / `.dev.vars`
+  //    using ${VAR} interpolation (handy for CI/CD or keeping IDs out of git):
+  //        "database_id": "${D1_DATABASE_ID}"
+  //    Wrangler resolves ${VAR} from the process environment at deploy time,
+  //    and from `.dev.vars` when running `wrangler dev`.
+  //
+  // NOTE: `database_id` must be a real UUID for `wrangler deploy`; a value of
+  // "REPLACE_WITH_..." will fail. `wrangler dev` can run without a real ID when
+  // a local database is configured via `wrangler d1 migrations apply --local`.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Default environment (deployed by `bun run deploy`): D1 only — NO Hyperdrive.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "movies-db",
       "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      // "database_id": "${D1_DATABASE_ID}"   // <-- env-var alternative
     }
   ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
-  "observability": {
-    "enabled": true
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Neon environment (deployed by `bun run deploy:neon` → `wrangler deploy
+  // --env=neon`). Adds a Hyperdrive binding so the Worker connects to Neon.
+  // It inherits `main`, `compatibility_*`, and `observability` above, and
+  // replaces the top-level bindings with only the ones defined here.
+  //
+  // To wire it up:
+  //   1. bun x wrangler hyperdrive create neon-hyperdrive \
+  //        --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
+  //   2. Put the returned Hyperdrive `id` below (or use ${HYPERDRIVE_ID}).
+  //
+  // Deploys as a separate worker: `movies-worker-neon`.
+  // ─────────────────────────────────────────────────────────────────────────
+  "env": {
+    "neon": {
+      "name": "movies-worker-neon",
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "REPLACE_WITH_YOUR_HYPERDRIVE_ID"
+          // "id": "${HYPERDRIVE_ID}"   // <-- env-var alternative
+        }
+      ]
+    }
   }
 }

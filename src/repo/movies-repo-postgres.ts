@@ -1,18 +1,24 @@
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as pgSchema from "../db/schema/postgres";
 import type { Movie, MoviesRepo } from "./movies-repo";
 
 /**
- * Build a movies repository backed by a Postgres client.
+ * The minimal Drizzle Postgres database shape needed by this repo. Both the
+ * local `postgres-js` client and the Worker's `neon-serverless` client satisfy
+ * it, so a single repo backs Postgres and Neon.
+ */
+type PgRepoDb = PgDatabase<PgQueryResultHKT, typeof pgSchema.schema>;
+
+/**
+ * Build a movies repository backed by a Postgres-compatible client (Postgres
+ * locally, or Neon via Hyperdrive in the Worker).
  *
  * Unlike the SQLite variant, `id` is a `GENERATED ALWAYS AS IDENTITY` primary
  * key, so inserts use `.returning()` (the D1 repo does the same) rather than
  * reading `lastInsertRowid`.
  */
-export function createPostgresMoviesRepo(
-	db: PostgresJsDatabase<typeof pgSchema.schema>,
-): MoviesRepo {
+export function createPostgresMoviesRepo(db: PgRepoDb): MoviesRepo {
 	return {
 		async list() {
 			return db.select().from(pgSchema.movies);

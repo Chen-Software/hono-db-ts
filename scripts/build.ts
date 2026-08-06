@@ -8,8 +8,10 @@
  *
  * Emits to `dist/`:
  *   - `dist/server.js` — local Bun server entry (`src/main.ts`, target `bun`).
- *   - `dist/worker.js` — Cloudflare Worker entry (`src/worker.ts`, target
- *     `browser`; Wrangler cannot run Bun macros, so this entry has none).
+ *
+ * The Cloudflare Worker is **not** bundled here: it has no Bun macros and needs
+ * Wrangler's `nodejs_compat` (for `postgres-js` via Hyperdrive), so it is
+ * bundled by `wrangler deploy` / `wrangler dev` from `src/worker.ts`.
  *
  * Usage:
  *   bun run build                      # build with current env
@@ -41,12 +43,6 @@ const jobs: Job[] = [
 		entry: resolve(root, "src/main.ts"),
 		target: "bun",
 		file: "server.js",
-	},
-	{
-		name: "worker (Cloudflare)",
-		entry: resolve(root, "src/worker.ts"),
-		target: "browser",
-		file: "worker.js",
 	},
 ];
 
