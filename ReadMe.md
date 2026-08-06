@@ -63,7 +63,20 @@ bun run worker:dev   # run the Worker locally (uses a local D1 simulation)
 bun run worker:types # regenerate worker-configuration.d.ts
 ```
 
-> **Note**: `src/main.ts` is the local Bun entry point (bun:sqlite); `src/index.ts` is the Cloudflare Workers entry point (D1). Both mount the same `/movies` routes via a shared repository interface.
+### Worker types
+
+[For generating/synchronising types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
+
+```txt
+bun run worker:types
+```
+
+Pass the `CloudflareBindings` as generics when instantiating `Hono`:
+
+```ts
+// src/main.ts
+const app = new Hono<{ Bindings: CloudflareBindings }>()
+```
 
 ## Scripts
 
