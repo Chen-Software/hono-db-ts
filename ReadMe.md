@@ -333,9 +333,8 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
 | `bun run db:generate:postgres` | Generate Postgres migrations            |
 | `bun run db:migrate`   | Migrate the active `DATABASE_TYPE` (`.env`); `--dev` uses `.env.dev.<type>` |
-| `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
-| `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
-| `bun run db:seed`      | Seed local SQLite and remote D1                  |
+| `bun run db:push`      | Push the schema for the active `DATABASE_TYPE`; `--dev` uses `.env.dev.<type>` |
+| `bun run db:seed`      | Seed the active `DATABASE_TYPE`; `--dev` uses `.env.dev.<type>` |
 | `bun run deploy`       | Build (runs macros) then deploy D1 worker (no Hyperdrive) |
 | `bun run deploy:neon`  | Deploy the Neon worker via `--env=neon` (with Hyperdrive) |
 | `bun run deploy:turso` | Deploy the Turso worker via `--env=turso` (TURSO_URL var + token secret) |
