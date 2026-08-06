@@ -18,6 +18,10 @@
  * existing tokens), so it MUST run before we mint the replacement token —
  * otherwise the fresh token would be invalidated too and the Worker would break.
  *
+ * When invoked with `--dry-run` (forwarded from `bun run deploy -- --dry-run`),
+ * it does NOT mutate anything — it only validates connectivity (checks the Turso
+ * auth and lists databases) so a dry-run deploy never rotates tokens.
+ *
  * Requires the Turso CLI on PATH, an authenticated account (`turso auth
  * login`), and a logged-in Cloudflare session (`bun x wrangler login`).
  *
@@ -100,7 +104,23 @@ const url = readTursoUrl();
 const { db, group } = resolveDb(url);
 const envName = "turso";
 
-console.log(`[hook:before-deploy-turso] rotating token for db \`${db}\` (group \`${group || "?"}\`)`);
+// Dry-run mode: the deploy CLI forwarded `--dry-run` — validate connectivity
+// only, do NOT rotate tokens or set secrets.
+const dryRun = process.argv.includes("--dry-run");
+
+console.log(
+	`[hook:before-deploy-turso] ${dryRun ? "validating" : "rotating token"} for db \`${db}\` (group \`${group || "?"}\`)`,
+);
+
+if (dryRun) {
+	// Just check the Turso account + DB are reachable and configured.
+	console.log(`[hook:before-deploy-turso] (dry-run) checking Turso auth…`);
+	runSync("turso auth whoami");
+	console.log(`[hook:before-deploy-turso] (dry-run) listing databases…`);
+	console.log(runSync("turso db list"));
+	console.log(`[hook:before-deploy-turso] (dry-run) OK — no tokens rotated.`);
+	process.exit(0);
+}
 
 // 1. Invalidate old tokens (rotates signing keys) BEFORE minting the new one.
 if (group) {
