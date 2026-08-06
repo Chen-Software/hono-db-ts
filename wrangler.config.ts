@@ -14,8 +14,9 @@
  *                            use their own environment with the DB binding(s).
  *   - `D1_DATABASE_ID`   -> top-level D1 binding `database_id`
  *   - `HYPERDRIVE_ID`    -> `neon` env Hyperdrive binding `id`
- *   - `TURSO_URL` + `TURSO_AUTH_TOKEN` -> `turso` env vars (Cloud Worker uses
- *     `@libsql/client/web`). Prefer `wrangler secret put TURSO_AUTH_TOKEN` in prod.
+ *   - `TURSO_URL` -> `turso` env var (Cloud Worker uses `@libsql/client/web`).
+ *     `TURSO_AUTH_TOKEN` is a Worker secret (`wrangler secret put`), so it is
+ *     never read from `.env` and never reported missing here.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -137,15 +138,21 @@ export function generateWranglerConfig(): string[] {
 		JSON.stringify(config, null, 2) + "\n",
 	);
 
+	// Only report missing keys that the ACTIVE dialect actually references.
+	// `TURSO_AUTH_TOKEN` is deliberately omitted even for turso: it's stored as a
+	// Cloudflare Worker secret (`wrangler secret put`), not in `.env`.
+	const dialect = (fileEnv["DATABASE_TYPE"] || process.env["DATABASE_TYPE"] || "d1")
+		.toLowerCase();
+	const isNeon = dialect === "neon";
+	const isTurso = dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
+
 	const missing: string[] = [];
-	if (!(fileEnv["D1_DATABASE_ID"] || process.env["D1_DATABASE_ID"]))
+	if (!isNeon && !isTurso && !(fileEnv["D1_DATABASE_ID"] || process.env["D1_DATABASE_ID"]))
 		missing.push("D1_DATABASE_ID");
-	if (!(fileEnv["HYPERDRIVE_ID"] || process.env["HYPERDRIVE_ID"]))
+	if (isNeon && !(fileEnv["HYPERDRIVE_ID"] || process.env["HYPERDRIVE_ID"]))
 		missing.push("HYPERDRIVE_ID");
-	if (!(fileEnv["TURSO_URL"] || process.env["TURSO_URL"]))
+	if (isTurso && !(fileEnv["TURSO_URL"] || process.env["TURSO_URL"]))
 		missing.push("TURSO_URL");
-	if (!(fileEnv["TURSO_AUTH_TOKEN"] || process.env["TURSO_AUTH_TOKEN"]))
-		missing.push("TURSO_AUTH_TOKEN");
 	return missing;
 }
 
