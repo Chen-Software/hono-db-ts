@@ -4,6 +4,8 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
+		"dev": "bun --watch src/main.ts",
+		"test": "bun test",
 		"db:generate": "bun x drizzle-kit generate --dialect sqlite --schema ./src/schema.ts",
 		"db:migrate": "bun run scripts/db-migrate.ts",
 		"db:seed": "bun run scripts/db-seed.ts",
@@ -22,6 +24,7 @@
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"drizzle-orm": "^0.45.2"
+		"drizzle-orm": "^0.45.2",
+		"hono": "^4"
 	}
 }

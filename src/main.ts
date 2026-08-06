@@ -1,5 +1,9 @@
-import * as schema from "./schema";
-import { db } from "./db";
+import { Hono } from "hono";
 
-const result = await db.select().from(schema.movies);
-console.log(result);
+const app = new Hono();
+
+app.get("/", (c) => {
+	return c.text("Hello Hono!");
+});
+
+export default app;
