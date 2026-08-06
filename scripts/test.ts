@@ -17,9 +17,14 @@
  *   bun run test --integration                    # current-dialect integration only
  *   bun run test --test <name>                    # only tests whose path contains <name>
  *   bun run test --env-file=.env.neon             # override the integration dev env
+ *   bun run test --coverage                       # also emit coverage (text + lcov)
+ *   bun run test --coverage --coverage-dir=coverage # coverage output dir (default coverage)
  *
  * --all cannot combine with --unit / --integration / --test;
  * --test cannot combine with --all / --unit / --integration.
+ *
+ * Per-file and total elapsed times are printed by bun's default reporter; this
+ * script keeps a single spawn and surfaces them as-is.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -36,6 +41,11 @@ const isUnit = argv.includes("--unit");
 const isIntegration = argv.includes("--integration");
 const testFlagIdx = argv.indexOf("--test");
 const testFilter = testFlagIdx !== -1 ? argv[testFlagIdx + 1] : undefined;
+const withCoverage = argv.includes("--coverage");
+const coverageDirArg = argv.find((a) => a.startsWith("--coverage-dir="));
+const coverageDir = coverageDirArg
+	? coverageDirArg.slice("--coverage-dir=".length)
+	: undefined;
 
 // Mutual exclusion: at most one of --all / --unit / --integration / --test.
 const exclusiveFlags = [isAll, isUnit, isIntegration, testFilter !== undefined]
@@ -128,7 +138,18 @@ const selectedIntegrationFiles = files.filter((f) =>
 );
 
 if (files.length === 0) {
-	console.error("No test files found.");
+	console.error(
+		`No test files found for mode=${filterLabel}. ` +
+			"Discovered files: " +
+			`unit=${unitFiles.length}, ` +
+			`integration=${JSON.stringify(
+				Object.fromEntries(
+					Object.entries(integration).map(([k, v]) => [k, v.length]),
+				),
+			)}. ` +
+			"Tests are found by filename suffix under src: " +
+			"`*.unit.test.ts` and `*.<db-type>.integration.test.ts`.",
+	);
 	process.exit(1);
 }
 
@@ -145,21 +166,33 @@ if (selectedIntegrationFiles.length > 0 && !existsSync(envFileResolved)) {
 	process.exit(1);
 }
 
-// Remaining args (minus --all/--unit/--integration/--test/--env-file) pass
-// through to `bun test`.
+// Remaining args (minus our flags) pass through to `bun test`.
 const skip = new Set([
 	"--all",
 	"--unit",
 	"--integration",
 	"--test",
 	"--env-file",
+	"--coverage",
+	"--coverage-dir",
 ]);
 const restArgs = argv.filter((a) => {
 	if (a.startsWith("--env-file=")) return false;
+	if (a.startsWith("--coverage-dir=")) return false;
 	if (skip.has(a)) return false;
 	if (testFlagIdx !== -1 && argv.indexOf(a) === testFlagIdx + 1) return false;
 	return true;
 });
+
+// Coverage is opt-in via --coverage (reports text + lcov). lcov is emitted to
+// the coverage dir so CI can pick it up.
+const coverageArgs = withCoverage
+	? [
+			"--coverage",
+			"--coverage-reporter=text,lcov",
+			...(coverageDir ? [`--coverage-dir=${coverageDir}`] : []),
+		]
+	: [];
 
 const integrationSummary = isAll
 	? Object.entries(integration)
@@ -168,9 +201,17 @@ const integrationSummary = isAll
 	: `${active}:${selectedIntegrationFiles.length}`;
 console.log(
 	`[test] dialect=${dialect} | mode=${filterLabel} | unit=${files.filter((f) => f.endsWith(".unit.test.ts")).length} ` +
-		`integration=[${integrationSummary}] env-file=${envFile}`,
+		`integration=[${integrationSummary}] env-file=${envFile} ` +
+		`coverage=${withCoverage ? "on" : "off"}`,
 );
 
-const args = ["--env-file", envFile, "test", ...files, ...restArgs];
+const args = [
+	"--env-file",
+	envFile,
+	"test",
+	...coverageArgs,
+	...files,
+	...restArgs,
+];
 const result = spawnSync("bun", args, { cwd: root, stdio: "inherit" });
 process.exit(result.status ?? 1);
