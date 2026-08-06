@@ -4,7 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "bun run --env-file=.env.dev --watch src/main.ts",
+		"dev": "bun run scripts/dev.ts",
 		"dev:postgres": "bun run --env-file=.env.example.postgres --watch src/main.ts",
 		"dev:neon": "bun run --env-file=.env.neon --watch src/main.ts",
 		"dev:tursodb": "bun run --env-file=.env.dev.turso --watch src/main.ts",
