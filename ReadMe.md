@@ -198,10 +198,10 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
 | `bun run db:generate:postgres` | Generate Postgres migrations            |
-| `bun run db:migrate`   | Apply migrations to SQLite **and** Postgres      |
-| `bun run db:migrate:sqlite` | Apply SQLite migrations                   |
-| `bun run db:migrate:postgres` | Apply Postgres migrations               |
-| `bun run db:migrate:neon` | Apply Postgres migrations to Neon (loads `.env.neon`) |
+| `bun run db:migrate`   | Apply migrations for the active `DATABASE_TYPE` (`sqlite`/`postgres`/`neon`; `d1` errors) |
+| `bun run db:migrate:sqlite` | Alias forcing the SQLite migration        |
+| `bun run db:migrate:postgres` | Alias forcing the Postgres migration     |
+| `bun run db:migrate:neon` | Alias forcing the Neon migration (loads `.env.neon`) |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |
@@ -294,8 +294,7 @@ src/
     movies-postgres.test.ts # Postgres /movies endpoint tests (opt-in)
 scripts/
   build.ts               # Bun.build: bundle server + Worker (runs macros)
-  db-migrate.ts          # apply SQLite migrations
-  db-migrate-postgres.ts # apply Postgres migrations
+  db-migrate.ts          # apply migrations for the active DATABASE_TYPE (sqlite/postgres/neon/d1)
   db-seed.ts             # seed data
 wrangler.jsonc       # Cloudflare Workers configuration (main: src/worker.ts)
 worker-configuration.d.ts # generated Worker binding types
