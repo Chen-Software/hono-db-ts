@@ -23,7 +23,9 @@
  *      revoke / scrub the temporary token from `.env`).
  *
  * A hook value is a shell command string, run in the project root with the
- * current environment. An empty value disables the hook.
+ * current environment. An empty value disables the hook. Any deploy CLI args
+ * (e.g. `--dry-run`) are appended to the hook command so hooks can adapt (a
+ * turso BEFORE hook skips token rotation on `--dry-run`).
  *
  * Usage:
  *   bun run scripts/deploy.ts               # build + deploy the active dialect
@@ -35,7 +37,11 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 
+// All CLI args after the script name (e.g. `--dry-run`) are forwarded to the
+// BEFORE/AFTER hooks, so a hook can adapt its behaviour (e.g. skip destructive
+// steps on a dry-run).
 const dryRun = process.argv.includes("--dry-run");
+const hookArgs = process.argv.slice(2).join(" ");
 
 /** Map the active dialect (from `.env`) to the Wrangler named environment. */
 function deployEnv(dialect: string | undefined): string {
@@ -61,14 +67,18 @@ function run(command: string, args: string[]): void {
 	}
 }
 
-/** Run a lifecycle hook (shell command string) in the project root, if set. */
+/**
+ * Run a lifecycle hook (shell command string) in the project root, if set.
+ * The deploy CLI args (e.g. `--dry-run`) are appended so the hook can adapt.
+ */
 function runHook(name: string, script: string | undefined): void {
 	if (!script || script.trim() === "") {
 		console.log(`[deploy] ${name}: none (skipped)`);
 		return;
 	}
-	console.log(`[deploy] ${name}: running \`${script}\``);
-	const result = spawnSync(script, { cwd: root, stdio: "inherit", shell: true });
+	const cmd = `${script} ${hookArgs}`.trim();
+	console.log(`[deploy] ${name}: running \`${cmd}\``);
+	const result = spawnSync(cmd, { cwd: root, stdio: "inherit", shell: true });
 	if (result.status !== 0) {
 		console.error(`[deploy] ${name} failed with exit code ${result.status ?? 1}`);
 		process.exit(result.status ?? 1);
