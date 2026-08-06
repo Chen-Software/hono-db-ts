@@ -1,11 +1,28 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
-import { createApp } from "../app";
-import { sqliteDb as db } from "../db";
-import { movies } from "../db/schema";
-import { createSqliteMoviesRepo } from "../repo/movies-repo-sqlite";
+import { createApp } from "../../../src/app";
+import type { PostgresDb } from "../../../src/db/postgres-client";
+import { createPostgresClient } from "../../../src/db/postgres-client";
+import * as pgSchema from "../../../src/db/schema/postgres";
+import { createPostgresMoviesRepo } from "../../../src/repo/movies-repo-postgres";
+
+/**
+ * Postgres endpoint tests.
+ *
+ * These exercise the same /movies API surface against a real Postgres
+ * database, proving the Postgres dialect + repo path works end-to-end.
+ *
+ * PREREQUISITES (run `bun run test:postgres`):
+ *   1. A running Postgres — `docker compose up -d`.
+ *   2. Migrations applied — `DATABASE_TYPE=postgres bun run db:migrate`.
+ *
+ * The test is opt-in (not part of `bun test`) because it needs a live DB.
+ */
+
+const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
 
 let app: Hono;
+let db: PostgresDb;
 
 // Minimal JSON response shape returned by the API
 interface JsonMovie {
@@ -15,12 +32,14 @@ interface JsonMovie {
 }
 
 beforeAll(() => {
-	app = createApp(createSqliteMoviesRepo());
+	const url = process.env["DATABASE_URL"] ?? DEFAULT_PG_URL;
+	db = createPostgresClient(url, 1);
+	app = createApp(createPostgresMoviesRepo(db));
 });
 
-// Reset the table between tests so runs are deterministic
-afterAll(() => {
-	db.delete(movies).run();
+// Reset the table between runs so tests are deterministic.
+afterAll(async () => {
+	await db.delete(pgSchema.movies);
 });
 
 // ——— GET /movies ———

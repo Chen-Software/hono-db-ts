@@ -129,11 +129,12 @@ bun run test               # run the endpoint tests for the active DATABASE_TYPE
 # then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
 ```
 
-The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the same
-`/movies` API surface against a live Postgres. `bun run test` is **dialect-aware**:
-it runs the test file matching the active `DATABASE_TYPE` with the db-type dev env
-(`.env.dev.<type>`), overridable with `--env-file=<file>`. Postgres tests require
-a running Postgres plus applied migrations.
+The Postgres integration tests (`tests/integration/postgres/*.integration.test.ts`)
+exercise the same `/movies` API surface against a live Postgres. `bun run test`
+splits **unit** vs **integration**: it always runs `tests/unit/**/*.unit.test.ts`
+(no DB), and runs only the current `DATABASE_TYPE`'s integration folder with the
+db-type dev env (`.env.dev.<type>`), overridable with `--env-file=<file>`.
+`bun run test --all` runs every integration folder.
 
 ### Neon (serverless Postgres)
 
@@ -323,7 +324,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun test`             | Run the endpoint tests for the active `DATABASE_TYPE` (dev env; `--env-file` to override) |
+| `bun test`             | All unit tests + current `DATABASE_TYPE` integration tests; `--all` for all integrations; `--env-file` to override |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
@@ -428,8 +429,12 @@ src/
     factory.ts       # pick the repo for the active DATABASE_TYPE
   routes/
     movies.ts        # /movies REST handlers
-    movies.test.ts   # SQLite /movies endpoint tests
-    movies-postgres.test.ts # Postgres /movies endpoint tests (opt-in)
+tests/
+  unit/                  # *.unit.test.ts — no DB, always run
+  integration/
+    sqlite/              # *.integration.test.ts — sqlite/d1
+    postgres/            # *.integration.test.ts — postgres/neon
+    turso/               # *.integration.test.ts — turso
 scripts/
   build.ts               # Bun.build: bundle server + Worker (runs macros)
   db-migrate.ts          # apply migrations for the active DATABASE_TYPE (sqlite/postgres/neon/d1)

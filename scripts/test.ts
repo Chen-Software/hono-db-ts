@@ -1,60 +1,97 @@
 /**
- * Dialect-aware test runner.
+ * Test runner — splits unit vs integration tests.
  *
- * Determines the active `DATABASE_TYPE` and runs the matching endpoint tests
- * with the db-type-specific dev env (`.env.dev.<type>`), which is overridable
- * with `--env-file=<file>`.
+ * - Unit tests live under tests/unit and are decoupled from DATABASE_TYPE;
+ *   they always run.
+ * - Integration tests live under tests/integration (grouped by db type) and are
+ *   env-aware, using the db-type dev env (.env.dev.T). Only the current
+ *   DATABASE_TYPE's integration folder runs, unless --all is given.
  *
- *   - `sqlite` / `d1`        -> `movies.test.ts`          + `.env.dev`
- *   - `postgres` / `neon`    -> `movies-postgres.test.ts` + `.env.dev.postgres`
- *   - `turso`                -> `movies-turso.test.ts`    + `.env.dev.turso`
+ * File discovery is a recursive scan for .unit.test.ts / .integration.test.ts,
+ * so adding or renaming test files needs no script change.
  *
  * Usage:
- *   bun run test                        # tests for the active DATABASE_TYPE
- *   bun run test --env-file=.env.neon   # override the env file
- *   bun run test -- --run <file>        # pass extra args to `bun test`
+ *   bun run test                        # all unit + current-dialect integration
+ *   bun run test --all                  # all unit + all integration
+ *   bun run test --env-file=.env.neon   # override the integration dev env
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
+import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 
 const root = resolve(import.meta.dir, "..");
+const isAll = process.argv.includes("--all");
 
-// Default `d1` is handled by the macro's sqlite normalization in the map below
-// (sqlite and d1 share the same test file). This keeps the macro reusable.
+// Active dialect + its integration tests folder (d1→sqlite, neon→postgres).
 const dialect = dbDialect();
-
-// Test file + default dev env per dialect.
-const testTargets: Record<string, { file: string; env: string }> = {
-	sqlite: { file: "src/routes/movies.test.ts", env: ".env.dev" },
-	d1: { file: "src/routes/movies.test.ts", env: ".env.dev.d1" },
-	postgres: { file: "src/routes/movies-postgres.test.ts", env: ".env.dev.postgres" },
-	neon: { file: "src/routes/movies-postgres.test.ts", env: ".env.dev.neon" },
-	turso: { file: "src/routes/movies-turso.test.ts", env: ".env.dev.turso" },
+const folderByDialect: Record<string, string> = {
+	sqlite: "integration/sqlite",
+	d1: "integration/sqlite",
+	postgres: "integration/postgres",
+	neon: "integration/postgres",
+	turso: "integration/turso",
 };
+const integrationFolder = folderByDialect[dialect] ?? "integration/sqlite";
 
-const target = testTargets[dialect] ?? testTargets["sqlite"]!;
+// Recursively find files matching `*.test.ts` under a directory, relative to root.
+function findTests(dirAbs: string): string[] {
+	const out: string[] = [];
+	function walk(dir: string): void {
+		if (!existsSync(dir)) return;
+		for (const entry of readdirSync(dir)) {
+			const full = join(dir, entry);
+			if (statSync(full).isDirectory()) {
+				walk(full);
+			} else if (entry.endsWith(".test.ts")) {
+				out.push(relative(root, full).split("\\").join("/"));
+			}
+		}
+	}
+	walk(dirAbs);
+	return out;
+}
 
-// `--env-file=<file>` override; otherwise default to the dialect's dev env.
+// Unit tests always run; integration tests run for the current dialect only
+// (or all dialects with --all).
+const unitFiles = findTests(resolve(root, "tests/unit"));
+const integrationDir = resolve(root, `tests/${integrationFolder}`);
+const integrationFiles = isAll
+	? findTests(resolve(root, "tests/integration"))
+	: findTests(integrationDir);
+
+const files = [...unitFiles, ...integrationFiles].sort();
+
+if (files.length === 0) {
+	console.error("No test files found.");
+	process.exit(1);
+}
+
+// Integration tests use the db-type dev env by default; `--env-file` overrides.
 const envFlagArg = process.argv.find((a) => a.startsWith("--env-file="));
 const envFile = envFlagArg
 	? envFlagArg.slice("--env-file=".length)
-	: target.env;
-
-// Remaining args (minus --env-file) pass through to `bun test`.
-const restArgs = process.argv
-	.slice(2)
-	.filter((a) => !a.startsWith("--env-file="));
+	: devEnvFile();
 
 const envFileResolved = resolve(root, envFile);
-if (!existsSync(envFileResolved)) {
+if (integrationFiles.length > 0 && !existsSync(envFileResolved)) {
 	console.error(`Env file not found: ${envFile}`);
 	process.exit(1);
 }
 
-console.log(`[test] dialect=${dialect} → test=${target.file} env-file=${envFile}`);
-const args = ["--env-file", envFile, "test", target.file, ...restArgs];
+// Remaining args (minus --all / --env-file) pass through to `bun test`.
+const restArgs = process.argv
+	.slice(2)
+	.filter((a) => a !== "--all" && !a.startsWith("--env-file="));
+
+console.log(
+	`[test] dialect=${dialect} | unit=${unitFiles.length} ` +
+		`integration=${integrationFiles.length} ${isAll ? "(--all)" : ""} ` +
+		`env-file=${envFile}`,
+);
+
+const args = ["--env-file", envFile, "test", ...files, ...restArgs];
 const result = spawnSync("bun", args, { cwd: root, stdio: "inherit" });
 process.exit(result.status ?? 1);

@@ -1,45 +1,35 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { resolve } from "node:path";
 import type { Hono } from "hono";
-import { createApp } from "../app";
-import type { PostgresDb } from "../db/postgres-client";
-import { createPostgresClient } from "../db/postgres-client";
-import * as pgSchema from "../db/schema/postgres";
-import { createPostgresMoviesRepo } from "../repo/movies-repo-postgres";
+import { createApp } from "../../../src/app";
+import { createTursoClient } from "../../../src/db/turso-client";
+import { movies } from "../../../src/db/schema";
+import { createTursoMoviesRepo } from "../../../src/repo/movies-repo-turso";
 
 /**
- * Postgres endpoint tests.
+ * Turso endpoint tests.
  *
- * These exercise the same /movies API surface against a real Postgres
- * database, proving the Postgres dialect + repo path works end-to-end.
- *
- * PREREQUISITES (run `bun run test:postgres`):
- *   1. A running Postgres — `docker compose up -d`.
- *   2. Migrations applied — `DATABASE_TYPE=postgres bun run db:migrate`.
- *
- * The test is opt-in (not part of `bun test`) because it needs a live DB.
+ * Exercise the same `/movies` API surface against a Turso database.
+ * `DATABASE_TYPE` is the unified `turso`; TURSO_URL decides local (`file://`)
+ * vs cloud (`libsql://`). Opt-in (not part of `bun test`).
  */
 
-const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
+const url =
+	process.env["TURSO_URL"] ??
+	process.env["TURSO_DB_URL"] ??
+	`file:///${resolve(process.cwd(), "tursodb.db")}`;
+const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
 
 let app: Hono;
-let db: PostgresDb;
-
-// Minimal JSON response shape returned by the API
-interface JsonMovie {
-	id: number;
-	title: string;
-	releaseYear: number | null;
-}
 
 beforeAll(() => {
-	const url = process.env["DATABASE_URL"] ?? DEFAULT_PG_URL;
-	db = createPostgresClient(url, 1);
-	app = createApp(createPostgresMoviesRepo(db));
+	const db = createTursoClient({ url, authToken });
+	app = createApp(createTursoMoviesRepo(db));
 });
 
-// Reset the table between runs so tests are deterministic.
 afterAll(async () => {
-	await db.delete(pgSchema.movies);
+	const db = createTursoClient({ url, authToken });
+	await db.delete(movies);
 });
 
 // ——— GET /movies ———
@@ -63,28 +53,14 @@ describe("POST /movies", () => {
 			body: JSON.stringify({ title: "Inception", releaseYear: 2010 }),
 		});
 		expect(res.status).toBe(201);
-		const data = (await res.json()) as JsonMovie;
+		const data = (await res.json()) as {
+			id: number;
+			title: string;
+			releaseYear: number | null;
+		};
 		expect(data.title).toBe("Inception");
 		expect(data.releaseYear).toBe(2010);
 		expect(typeof data.id).toBe("number");
-	});
-
-	it("returns 400 when title is missing", async () => {
-		const res = await app.request("/movies", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ releaseYear: 2020 }),
-		});
-		expect(res.status).toBe(400);
-	});
-
-	it("returns 400 when title is empty", async () => {
-		const res = await app.request("/movies", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ title: "   ", releaseYear: 2020 }),
-		});
-		expect(res.status).toBe(400);
 	});
 
 	it("creates a movie without releaseYear", async () => {
@@ -94,7 +70,11 @@ describe("POST /movies", () => {
 			body: JSON.stringify({ title: "Interstellar" }),
 		});
 		expect(res.status).toBe(201);
-		const data = (await res.json()) as JsonMovie;
+		const data = (await res.json()) as {
+			id: number;
+			title: string;
+			releaseYear: number | null;
+		};
 		expect(data.title).toBe("Interstellar");
 		expect(data.releaseYear).toBeNull();
 	});
@@ -111,21 +91,15 @@ describe("GET /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "The Matrix", releaseYear: 1999 }),
 		});
-		const data = (await res.json()) as JsonMovie;
-		movieId = data.id;
+		movieId = ((await res.json()) as { id: number }).id;
 	});
 
 	it("returns a movie by id", async () => {
 		const res = await app.request(`/movies/${movieId}`);
 		expect(res.status).toBe(200);
-		const data = (await res.json()) as JsonMovie;
+		const data = (await res.json()) as { id: number; title: string };
 		expect(data.id).toBe(movieId);
 		expect(data.title).toBe("The Matrix");
-	});
-
-	it("returns 400 for invalid id", async () => {
-		const res = await app.request("/movies/not-a-number");
-		expect(res.status).toBe(400);
 	});
 
 	it("returns 404 for a missing movie", async () => {
@@ -145,8 +119,7 @@ describe("PUT /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "Old Title", releaseYear: 2000 }),
 		});
-		const data = (await res.json()) as JsonMovie;
-		movieId = data.id;
+		movieId = ((await res.json()) as { id: number }).id;
 	});
 
 	it("updates a movie", async () => {
@@ -156,7 +129,7 @@ describe("PUT /movies/:id", () => {
 			body: JSON.stringify({ title: "New Title", releaseYear: 2001 }),
 		});
 		expect(res.status).toBe(200);
-		const data = (await res.json()) as JsonMovie;
+		const data = (await res.json()) as { title: string; releaseYear: number };
 		expect(data.title).toBe("New Title");
 		expect(data.releaseYear).toBe(2001);
 	});
@@ -168,15 +141,6 @@ describe("PUT /movies/:id", () => {
 			body: JSON.stringify({ title: "Nope" }),
 		});
 		expect(res.status).toBe(404);
-	});
-
-	it("returns 400 for an empty title", async () => {
-		const res = await app.request(`/movies/${movieId}`, {
-			method: "PUT",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ title: "   " }),
-		});
-		expect(res.status).toBe(400);
 	});
 });
 
@@ -191,8 +155,7 @@ describe("DELETE /movies/:id", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title: "To Be Deleted" }),
 		});
-		const data = (await res.json()) as JsonMovie;
-		movieId = data.id;
+		movieId = ((await res.json()) as { id: number }).id;
 	});
 
 	it("deletes a movie", async () => {
