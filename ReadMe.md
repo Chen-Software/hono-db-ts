@@ -140,6 +140,13 @@ suffix matches the active `DATABASE_TYPE`, using the db-type dev env
 narrow the run — `--unit`, `--integration`, or `--test <name>` (matches a test
 file whose path contains `<name>`). These are mutually exclusive with `--all`.
 
+The runner auto-starts dependencies before integration tests via the
+`INTEGRATION_TEST_SETUP_SCRIPT` var in the db-type env file: `.env.dev.postgres`
+and `.env.dev.neon` set it to `docker compose up -d`; d1/turso/sqlite leave it
+unset. Per-test timeouts default to 10s for `--unit` and 30s for integration /
+mixed runs, overridable with `--timeout=<ms>`; coverage is opt-in via
+`--coverage` (+ optional `--coverage-dir=<dir>`).
+
 ### Neon (serverless Postgres)
 
 Neon is a serverless Postgres. Because `neon` maps to the same `postgres-js`
@@ -328,7 +335,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override; `--coverage` (+ optional `--coverage-dir=<dir>`) to emit text + lcov coverage. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive. Bun's reporter prints per-file and total elapsed times |
+| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override; `--coverage` (+ optional `--coverage-dir=<dir>`) for text + lcov coverage; `--timeout=<ms>` / `--setup-timeout=<ms>` to override per-test / setup-script timeouts. Auto-runs `INTEGRATION_TEST_SETUP_SCRIPT` (e.g. `docker compose up -d`, 120s cap) before integration tests. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive. Bun's reporter prints per-file and total elapsed times |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |

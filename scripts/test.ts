@@ -21,21 +21,53 @@
  *   bun run test --env-file=.env.neon             # override the integration dev env
  *   bun run test --coverage                       # also emit coverage (text + lcov)
  *   bun run test --coverage --coverage-dir=coverage # coverage output dir (default coverage)
+ *   bun run test --timeout=30000                  # override the per-test timeout (ms)
  *
  * --all / --unit / --integration / --test are mutually exclusive with each
  * other and with explicit test-file paths.
+ *
+ * Timeouts (Bun `--timeout`): unit runs default to 10s, integration / mixed
+ * runs to 30s; `--timeout=<ms>` overrides either.
+ *
+ * The env file may set `INTEGRATION_TEST_SETUP_SCRIPT` to a command run once
+ * before integration tests (e.g. `docker compose up -d` for postgres/neon),
+ * plus `INTEGRATION_TEST_SETUP_TIMEOUT` (ms, default 120s) to cap how long it
+ * may run. d1 / turso / sqlite leave both unset.
  *
  * Per-file and total elapsed times are printed by bun's default reporter; this
  * script keeps a single spawn and surfaces them as-is.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
 import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 
 const root = resolve(import.meta.dir, "..");
 const argv = process.argv.slice(2);
+
+/** Read a single KEY=value from an env-style file (ignores comments/quotes). */
+function readEnvValue(file: string, key: string): string | undefined {
+	try {
+		for (const line of readFileSync(file, "utf8").split("\n")) {
+			const t = line.trim();
+			if (!t || t.startsWith("#") || !t.includes("=")) continue;
+			const eq = t.indexOf("=");
+			if (t.slice(0, eq).trim() !== key) continue;
+			let value = t.slice(eq + 1).trim();
+			if (
+				(value.startsWith('"') && value.endsWith('"')) ||
+				(value.startsWith("'") && value.endsWith("'"))
+			) {
+				value = value.slice(1, -1);
+			}
+			return value;
+		}
+	} catch {
+		// file may not exist
+	}
+	return undefined;
+}
 
 // Flag parsing.
 const isAll = argv.includes("--all");
@@ -48,6 +80,8 @@ const coverageDirArg = argv.find((a) => a.startsWith("--coverage-dir="));
 const coverageDir = coverageDirArg
 	? coverageDirArg.slice("--coverage-dir=".length)
 	: undefined;
+const timeoutArg = argv.find((a) => a.startsWith("--timeout="));
+const timeoutOverride = timeoutArg
 	? timeoutArg.slice("--timeout=".length)
 	: undefined;
 
@@ -201,6 +235,20 @@ if (hasIntegration && !existsSync(envFileResolved)) {
 const defaultTimeout = isUnit ? 10_000 : 30_000;
 const timeoutMs = timeoutOverride ?? String(defaultTimeout);
 
+// Optional integration-test setup command + its timeout, read from the loaded
+// env file. For postgres/neon, INTEGRATION_TEST_SETUP_SCRIPT is
+// `docker compose up -d` and INTEGRATION_TEST_SETUP_TIMEOUT (ms) caps how long
+// it may run; d1/turso/sqlite leave both unset.
+const setupScript = hasIntegration
+	? readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_SCRIPT")
+	: undefined;
+const setupTimeoutRaw = hasIntegration
+	? readEnvValue(envFileResolved, "INTEGRATION_TEST_SETUP_TIMEOUT")
+	: undefined;
+const setupTimeoutMs = Number(setupTimeoutRaw ?? "120000");
+const setupTimeout =
+	Number.isFinite(setupTimeoutMs) && setupTimeoutMs > 0 ? setupTimeoutMs : 120_000;
+
 // Remaining args (minus our flags) pass through to `bun test`.
 const skip = new Set([
 	"--all",
@@ -243,6 +291,36 @@ console.log(
 		`coverage=${withCoverage ? "on" : "off"} timeout=${timeoutMs}ms` +
 		(setupScript ? ` setup="${setupScript}"` : ""),
 );
+
+// Run the optional integration setup (e.g. `docker compose up -d`) before tests,
+// with a bounded timeout so a stuck setup can't hang the whole run.
+if (setupScript) {
+	console.log(`[test] running setup (${setupTimeout}ms timeout): ${setupScript}`);
+	const setup = spawnSync(setupScript, {
+		cwd: root,
+		stdio: "inherit",
+		shell: true,
+		timeout: setupTimeout,
+	});
+	if (setup.error || setup.signal || setup.status !== 0) {
+		console.error("\n[test] integration setup failed:");
+		if (setup.error) console.error(`  error: ${setup.error.message}`);
+		if (setup.signal === "SIGTERM") {
+			console.error(
+				`  timed out after ${setupTimeout}ms — the command did not finish.\n` +
+					"  Likely causes & fixes:\n" +
+					"    - Docker daemon not running -> start Docker Desktop / colima, then retry.\n" +
+					"    - First image pull is slow  -> run `docker compose pull` once, then retry.\n" +
+					"    - Port 5432 already in use   -> `lsof -i :5432` to find the process.\n" +
+					"  Raise the budget via INTEGRATION_TEST_SETUP_TIMEOUT in the env file, or\n" +
+					"  skip setup by removing INTEGRATION_TEST_SETUP_SCRIPT.",
+			);
+		} else if (setup.status !== 0) {
+			console.error(`  exited with status ${setup.status}`);
+		}
+		process.exit(setup.status ?? 1);
+	}
+}
 
 // NOTE: `--env-file` MUST come AFTER `test`. If it precedes the `test`
 // subcommand, Bun treats `test` as a package script name (the `test` script in
