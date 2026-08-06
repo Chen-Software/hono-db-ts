@@ -13,9 +13,9 @@
  *
  * Build-time env vars
  * -------------------
- * - `DATABASE_TYPE` — `sqlite` | `postgres` | `d1` (default `sqlite`).
- * - `DATABASE_URL`  — connection URL for `sqlite`/`postgres`.
- * - `DATABASE_POOL_SIZE` — postgres pool size (default `10`).
+ * - `DATABASE_TYPE` — `sqlite` | `postgres` | `neon` | `d1` (default `sqlite`).
+ * - `DATABASE_URL`  — connection URL for `sqlite`/`postgres`/`neon`.
+ * - `DATABASE_POOL_SIZE` — postgres/neon pool size (default `10`).
  *
  * The macros run locally or in CI — never on the Cloudflare Worker. The Worker
  * entry (`src/worker.ts`) is a separate file with no macros at all; Wrangler
@@ -26,19 +26,20 @@
 const DEFAULT_SQLITE_URL = "sqlite.db";
 const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
 
-type DbDialect = "sqlite" | "postgres" | "d1";
+type DbDialect = "sqlite" | "postgres" | "neon" | "d1";
 
 function normalizeDialect(raw: string | undefined): DbDialect {
 	const type = (raw ?? "sqlite").toLowerCase();
 	if (type === "postgres" || type === "postgresql" || type === "pg")
 		return "postgres";
+	if (type === "neon") return "neon";
 	if (type === "d1") return "d1";
 	if (type === "sqlite") return "sqlite";
 	// Unknown values fall back to SQLite rather than throwing at bundle time.
 	return "sqlite";
 }
 
-/** Resolved dialect ("sqlite" | "postgres" | "d1") — inlined at build time. */
+/** Resolved dialect ("sqlite" | "postgres" | "neon" | "d1") — inlined at build time. */
 export function dialect(): DbDialect {
 	return normalizeDialect(process.env["DATABASE_TYPE"]);
 }
@@ -47,13 +48,18 @@ export function dialect(): DbDialect {
 export function databaseUrl(): string {
 	const url = process.env["DATABASE_URL"];
 	if (url) return url;
-	if (dialect() === "postgres") return DEFAULT_PG_URL;
+	if (dialect() === "postgres" || dialect() === "neon") return DEFAULT_PG_URL;
 	return DEFAULT_SQLITE_URL;
 }
 
 /** Whether the build targets the local Postgres dialect. */
 export function isPostgres(): boolean {
 	return dialect() === "postgres";
+}
+
+/** Whether the build targets the Neon (serverless Postgres) dialect. */
+export function isNeon(): boolean {
+	return dialect() === "neon";
 }
 
 /** Whether the build targets the Cloudflare D1 dialect. */

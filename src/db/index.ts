@@ -40,22 +40,26 @@ function resolveDialect(): DbDialect {
 function resolveUrl(): string {
 	const url = process.env["DATABASE_URL"];
 	if (url) return url;
-	return macroDialect() === "postgres" ? DEFAULT_PG_URL : DEFAULT_SQLITE_URL;
+	const d = macroDialect();
+	return d === "postgres" || d === "neon" ? DEFAULT_PG_URL : DEFAULT_SQLITE_URL;
 }
 
+// The SQLite client is always the local `sqlite.db` file — it must NOT read the
+// shared `DATABASE_URL`, which points at a Postgres/Neon server for other dialects.
 function resolveSqliteUrl(): string {
-	return process.env["DATABASE_URL"] ?? DEFAULT_SQLITE_URL;
+	return DEFAULT_SQLITE_URL;
 }
 
 function createDb(dialect: DbDialect, url: string): Db {
-	if (dialect === "postgres") return createPostgresClient(url, poolSize());
+	if (dialect === "postgres" || dialect === "neon")
+		return createPostgresClient(url, poolSize());
 	if (dialect === "d1") {
 		// D1 is a Cloudflare Worker runtime binding (`env.DB`), so there is no
 		// local driver to construct. Use `src/worker.ts` + `wrangler dev` instead.
 		throw new Error(
 			"`DATABASE_TYPE=d1` is a Worker-runtime binding and has no local " +
 				"driver. Use `bun run worker:dev` (which reads env.DB) or set " +
-				"`DATABASE_TYPE` to `sqlite` / `postgres` locally.",
+				"`DATABASE_TYPE` to `sqlite` / `postgres` / `neon` locally.",
 		);
 	}
 	return createSqliteClient(url);
@@ -99,7 +103,8 @@ export const db = getDb();
 
 /**
  * A concrete SQLite client for SQLite-specific consumers (the local repo,
- * seed, and tests). Reads `DATABASE_URL` for the file path.
+ * seed, and tests). Always targets the local `sqlite.db` file regardless of the
+ * active dialect's `DATABASE_URL`.
  */
 export const sqliteDb = createSqliteClient(resolveSqliteUrl());
 

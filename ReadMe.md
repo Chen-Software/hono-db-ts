@@ -32,20 +32,26 @@ file you want; the relevant scripts already point at them:
 | ----------------------- | --------------- | ----------------------------------------- |
 | `.env.dev`              | `sqlite`        | `bun run dev` (local dev)                 |
 | `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
+| `.env.neon` (gitignored) | `neon`         | `bun run dev:neon` (Neon serverless PG)   |
+| `.env.example.neon`     | `neon`          | Neon template (copy to `.env.neon`)       |
 | `.env.example`          | `d1`            | generic reference — defaults to the production dialect (`d1`) |
 
 - **`bun:sqlite` is local-dev only** — it cannot run inside a Cloudflare Worker.
   The Worker always uses the D1 binding (`env.DB`) via `src/worker.ts`, so the
   SQLite path is never deployed.
-- **Postgres** is for local development / testing only; `DATABASE_TYPE=postgres`
-  never ships to the Worker either.
+- **Postgres / Neon** are serverless-Postgres paths for local development,
+  testing, and production data outside the Worker. `DATABASE_TYPE=postgres` and
+  `DATABASE_TYPE=neon` both use the same `postgres-js` driver + schema; `neon`
+  simply points at a Neon-hosted connection string. Neither ships to the Worker
+  bundle.
 
-To point the app at a given dialect, either rely on the default `dev` /
-`dev:postgres` scripts or load a file explicitly:
+To point the app at a given dialect, either rely on the scripts or load a file
+explicitly:
 
 ```bash
 bun run dev                      # sqlite (.env.dev)
 bun run dev:postgres             # postgres (.env.example.postgres)
+bun run dev:neon                 # neon (.env.neon — needs a Neon project linked)
 bun run --env-file=.env.example postgres… # or any file, explicitly
 ```
 
@@ -53,9 +59,9 @@ Variables:
 
 | Variable          | Description                                   | Default                                              |
 | ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, or `d1`        | `d1` (in `.env.example`) / `sqlite` (in `.env.dev`)  |
+| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, `neon`, or `d1`| `d1` (in `.env.example`) / `sqlite` (in `.env.dev`)  |
 | `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
-| `DATABASE_POOL_SIZE` | Postgres connection pool size (optional)    | `10`                                                 |
+| `DATABASE_POOL_SIZE` | Postgres/Neon connection pool size (optional) | `10`                                                 |
 
 ### When is `DATABASE_TYPE` read?
 
@@ -64,13 +70,14 @@ Variables:
 - **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
 - **Cloudflare Worker** — the Worker uses the `env.DB` D1 binding directly (`src/worker.ts`) and has no macros; `DATABASE_TYPE` is irrelevant there.
 
-> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`) and **restart** the dev server / re-run `bun run build` for it to take effect.
+> Because the value is baked in at build time, change `DATABASE_TYPE` in the relevant env file (`.env.dev` for `bun run dev`, `.env.example.postgres` for `bun run dev:postgres`, `.env.neon` for `bun run dev:neon`) and **restart** the dev server / re-run `bun run build` for it to take effect.
 
 ### Dialects
 
 - `d1` (production default) — the Cloudflare Worker's D1 binding (`env.DB`). There is **no local driver** for it; locally this throws a clear error. Use `bun run worker:dev` (or deploy) for the D1 path.
 - `sqlite` (local dev default) — local `bun:sqlite` driver, used via `bun run dev`.
 - `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres), used via `bun run dev:postgres`.
+- `neon` — serverless Postgres hosted on Neon. Uses the same `postgres-js` driver + schema as `postgres`, but reads a Neon connection string. Used via `bun run dev:neon`.
 
 For Postgres dialect testing:
 
@@ -86,6 +93,27 @@ The Postgres endpoint tests (`src/routes/movies-postgres.test.ts`) exercise the 
 `bun test` only runs the SQLite tests (loading `.env.dev`) — and require a running
 Postgres plus applied migrations. `bun run test:postgres` loads
 `.env.example.postgres`.
+
+### Neon (serverless Postgres)
+
+Neon is a serverless Postgres. Because `neon` maps to the same `postgres-js`
+driver + schema as `postgres`, it works with the same repo and test suite.
+
+```bash
+# one-time setup — link a Neon project and pull its connection string
+bunx neon link               # picks your Neon org/project/branch
+bunx neon checkout main      # pin a branch
+bunx neon env pull           # writes DATABASE_URL etc. into .env
+cp .env.example.neon .env.neon
+
+# then use the neon dialect
+bun run dev:neon             # run the app against Neon
+bun run db:migrate:neon      # apply migrations to Neon
+bun run test:neon            # run the endpoint tests against Neon
+```
+
+`.env.neon` is gitignored because it holds real credentials; commit the
+`.env.example.neon` template instead.
 
 ## Build process
 
@@ -161,9 +189,11 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the Hono server in watch mode (SQLite, loads `.env.dev`) |
 | `bun run dev:postgres` | Start the Hono server against Postgres (loads `.env.example.postgres`) |
+| `bun run dev:neon`     | Start the Hono server against Neon (loads `.env.neon`) |
 | `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the SQLite endpoint tests (loads `.env.dev`) |
 | `bun run test:postgres` | Run the Postgres endpoint tests (loads `.env.example.postgres`, needs a running Postgres) |
+| `bun run test:neon`    | Run the Postgres endpoint tests against Neon (loads `.env.neon`) |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
 | `bun run db:generate:sqlite` | Generate SQLite migrations               |
@@ -171,7 +201,9 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:migrate`   | Apply migrations to SQLite **and** Postgres      |
 | `bun run db:migrate:sqlite` | Apply SQLite migrations                   |
 | `bun run db:migrate:postgres` | Apply Postgres migrations               |
+| `bun run db:migrate:neon` | Apply Postgres migrations to Neon (loads `.env.neon`) |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
+| `bun run db:push:neon` | Push the schema to Neon (loads `.env.neon`)      |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |
 | `bun run deploy`       | Build (runs macros) then deploy to Cloudflare    |
 | `bun run deploy:dry-run` | Build (runs macros) then validate the bundle  |
@@ -233,6 +265,8 @@ A movie has:
 .env.dev               # SQLite local dev config (loaded by `bun run dev`)
 .env.example           # generic env template
 .env.example.postgres  # Postgres env template (loaded by `bun run dev:postgres`)
+.env.neon              # Neon config (gitignored, loaded by `bun run dev:neon`)
+.env.example.neon      # Neon template (copy to `.env.neon`)
 compose.yml            # local Postgres server for dialect testing
 src/
   app.ts             # pure createApp(repo) Hono factory (no DB, no macros)
