@@ -10,12 +10,15 @@
  *   bun run wrangler.config.ts          # standalone generator
  *   bun run generate:wrangler           # npm alias for the above
  *
+ *   - `DATABASE_TYPE`    -> `d1` keeps the top-level D1 binding; `neon` omits
+ *                            it so the generated config has no D1 settings.
  *   - `D1_DATABASE_ID`   -> top-level D1 binding `database_id`
  *   - `HYPERDRIVE_ID`    -> `neon` env Hyperdrive binding `id`
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { Unstable_RawConfig as Config } from "wrangler";
 
 const root = resolve(import.meta.dir, ".");
 
@@ -42,44 +45,60 @@ export function loadEnv(path: string): Record<string, string> {
 	return env;
 }
 
-/** Build the wrangler config object from env values (no filesystem writes). */
+/**
+ * Build the wrangler config object from env values (no filesystem writes).
+ *
+ * Dialect-pure:
+ *   - `DATABASE_TYPE=neon` -> Neon-only: `env.neon` with a Hyperdrive binding,
+ *     and NO top-level D1 settings.
+ *   - otherwise (`d1`)     -> D1-only: top-level D1 binding and NO Hyperdrive.
+ *
+ * Strongly typed via the `Config` type from `wrangler`.
+ */
 export function buildWranglerConfig(
 	env: Record<string, string>,
 	overrides: Partial<Record<string, string>> = {},
-): Record<string, unknown> {
+): Config {
 	const val = (key: string) => overrides[key] || env[key] || process.env[key] || "";
+	const dialect = (val("DATABASE_TYPE") || "d1").toLowerCase();
+	const isNeon = dialect === "neon";
 	const d1Id = val("D1_DATABASE_ID");
 	const hdId = val("HYPERDRIVE_ID");
 
-	return {
-		$schema: "./node_modules/wrangler/config-schema.json",
-		name: "movies-worker",
-		main: "src/worker.ts",
-		compatibility_date: "2026-08-06",
-		compatibility_flags: ["nodejs_compat"],
-		observability: { enabled: true },
-		d1_databases: [
-			{
-				binding: "DB",
-				database_name: "movies-db",
-				database_id: d1Id || "REPLACE_WITH_YOUR_D1_DATABASE_ID",
-			},
-		],
-		env: {
-			neon: {
-				name: "movies-worker-neon",
-				// Clear the inherited top-level D1 binding so the neon worker only
-				// carries the Hyperdrive binding.
-				d1_databases: [],
-				hyperdrive: [
+	const config: Config = isNeon
+		? {
+				name: "movies-worker",
+				main: "src/worker.ts",
+				compatibility_date: "2026-08-06",
+				compatibility_flags: ["nodejs_compat"],
+				observability: { enabled: true },
+				env: {
+					neon: {
+						name: "movies-worker-neon",
+						hyperdrive: [
+							{
+								binding: "HYPERDRIVE",
+								id: hdId || "REPLACE_WITH_YOUR_HYPERDRIVE_ID",
+							},
+						],
+					},
+				},
+			}
+		: {
+				name: "movies-worker",
+				main: "src/worker.ts",
+				compatibility_date: "2026-08-06",
+				compatibility_flags: ["nodejs_compat"],
+				observability: { enabled: true },
+				d1_databases: [
 					{
-						binding: "HYPERDRIVE",
-						id: hdId || "REPLACE_WITH_YOUR_HYPERDRIVE_ID",
+						binding: "DB",
+						database_name: "movies-db",
+						database_id: d1Id || "REPLACE_WITH_YOUR_D1_DATABASE_ID",
 					},
 				],
-			},
-		},
-	};
+			};
+	return config;
 }
 
 /**
