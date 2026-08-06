@@ -6,7 +6,7 @@
  * is the connection:
  *
  * The unified `DATABASE_TYPE=turso` covers both; `TURSO_URL` decides:
- *   - local:   `TURSO_URL=file:///abs/path.db` (embedded file mode)
+ *   - local:   `TURSO_URL=file:tursodb.db` (relative, single-colon file mode)
  *   - cloud:   `TURSO_URL=libsql://...` + `TURSO_AUTH_TOKEN=...`
  *
  * Uses `@libsql/client` via `drizzle-orm/libsql`.
@@ -38,7 +38,7 @@ export function createClientFromEnv(): TursoDb {
 	const url =
 		process.env["TURSO_URL"] ??
 		process.env["TURSO_DB_URL"] ??
-		"file://tursodb.db";
+		"file:tursodb.db"; // single-colon relative form; `file://tursodb.db` is an invalid host
 	const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
 	return createTursoClient({ url, authToken });
 }
