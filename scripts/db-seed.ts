@@ -24,7 +24,7 @@ import { resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
-import { createClient } from "../src/db/client";
+import { client, type DbClient } from "../src/db/client";
 import type { TursoDb } from "../src/db/turso-client";
 import type { PostgresDb } from "../src/db/postgres-client";
 import type { SqliteDb } from "../src/db/sqlite-client";
@@ -131,7 +131,7 @@ const dialect = dbDialect();
 switch (dialect) {
 	case "sqlite": {
 		// Local SQLite (sqlite, or d1 in --dev via .env.dev.d1 -> sqlite).
-		const { db, close } = await createClient<SqliteDb>();
+		const { db, close } = client as DbClient<SqliteDb>;
 		try {
 			await db.insert(moviesSqlite).values(seedRows);
 		} finally {
@@ -148,7 +148,7 @@ switch (dialect) {
 			break;
 		}
 		// d1 + --dev → local sqlite via .env.dev.d1 (sets DATABASE_TYPE=sqlite).
-		const { db, close } = await createClient<SqliteDb>();
+		const { db, close } = client as DbClient<SqliteDb>;
 		try {
 			await db.insert(moviesSqlite).values(seedRows);
 		} finally {
@@ -160,7 +160,7 @@ switch (dialect) {
 
 	case "turso": {
 		ensureTursoToken();
-		const { db, close } = await createClient<TursoDb>();
+		const { db, close } = client as DbClient<TursoDb>;
 		try {
 			await db.insert(moviesSqlite).values(seedRows);
 		} finally {
@@ -173,7 +173,7 @@ switch (dialect) {
 
 	case "postgres":
 	case "neon": {
-		const { db, close } = await createClient<PostgresDb>();
+		const { db, close } = client as DbClient<PostgresDb>;
 		try {
 			await db.insert(moviesPostgres).values(seedRows);
 		} finally {
