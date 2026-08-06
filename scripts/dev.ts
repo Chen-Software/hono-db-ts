@@ -47,14 +47,15 @@ function envFileDialect(file: string): string {
 	return "";
 }
 
-// Local env file per dialect. `d1` uses sqlite (`.env.dev`); `neon` uses the
-// local dev file pointing at a LOCAL Postgres.
+// Local env file per dialect. `d1` uses `.env.dev.d1` (which sets
+// DATABASE_TYPE=sqlite — the closest local driver to D1); `neon` uses a local
+// dev file pointing at a LOCAL Postgres.
 const typeFile = {
 	sqlite: ".env.dev",
 	postgres: ".env.example.postgres",
 	neon: ".env.dev.neon",
 	turso: ".env.dev.turso",
-	d1: ".env.dev",
+	d1: ".env.dev.d1",
 }[activeType] as string;
 
 // Priority: `.env.dev` (if it matches the active dialect) → `.env.dev.<type>` → `.env.dev`.

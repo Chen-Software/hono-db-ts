@@ -31,6 +31,7 @@ file you want; the relevant scripts already point at them:
 | File                    | `DATABASE_TYPE` | Used by                                   |
 | ----------------------- | --------------- | ----------------------------------------- |
 | `.env.dev`              | `sqlite`        | `bun run dev` (sqlite local dev)          |
+| `.env.dev.d1`           | `sqlite`        | `bun run dev` (local D1 → sqlite driver)  |
 | `.env.dev.turso`        | `turso` (file://) | `bun run dev` (local TursoDB)           |
 | `.env.dev.neon`         | `neon`          | `bun run dev` (local Neon)                |
 | `.env.example.postgres` | `postgres`      | `bun run dev:postgres` (local Postgres)   |
@@ -43,11 +44,14 @@ file you want; the relevant scripts already point at them:
 
 > **`bun run dev` is dialect-aware and runs a local dev server.** It reads
 > `DATABASE_TYPE` from `.env` (defaults to `d1` when missing):
->   - `d1` → `bun x wrangler dev` (the Worker runs locally with D1)
->   - `sqlite` / `postgres` / `neon` / `turso` → a local Bun server, picking the
->     env file by priority: `.env.dev` (if it matches the dialect) →
->     `.env.dev.<type>` → `.env.dev`. Turso uses the local `file://` SDK
->     (`.env.dev.turso`), never Turso Cloud.
+>   - `d1` → local **`sqlite`** driver (closest to D1), `.env.dev.d1`
+>   - `sqlite` → Bun server, `.env.dev`
+>   - `postgres` → Bun server, `.env.example.postgres`
+>   - `neon` → local **Postgres** (Neon Local, via `docker compose up -d`),
+>     Bun server, `.env.dev.neon`
+>   - `turso` → local `file://` libSQL SDK, `.env.dev.turso` (never Turso Cloud)
+> The env file is picked by priority: `.env.dev` (if it matches the dialect) →
+> `.env.dev.<type>` → `.env.dev`.
 
 **LOCAL-ONLY dialects (never available on Cloudflare Workers):**
 - **`sqlite`** — `bun:sqlite` cannot run inside a Worker (no such driver there).
@@ -394,6 +398,7 @@ A movie has:
 
 ```
 .env.dev               # SQLite local dev config (loaded by `bun run dev`)
+.env.dev.d1            # local D1 dev config → sqlite driver (loaded by `bun run dev`)
 .env.dev.turso         # local TursoDB dev config (loaded by `bun run dev`)
 .env.dev.neon          # local Neon dev config (loaded by `bun run dev`)
 .env.example           # generic env template
