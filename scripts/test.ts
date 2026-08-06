@@ -1,21 +1,20 @@
 /**
- * Test runner — splits unit vs integration tests.
+ * Test runner — splits unit vs integration tests, discovered by filename suffix.
  *
- * - Unit tests live under tests/unit and are decoupled from DATABASE_TYPE;
- *   they always run.
- * - Integration tests live under tests/integration (grouped by db type) and are
- *   env-aware, using the db-type dev env (.env.dev.T). Only the current
- *   DATABASE_TYPE's integration folder runs, unless --all is given.
+ * Tests live next to the code they exercise (under src). No central tests/
+ * folder is needed; only the filename suffix matters:
  *
- * File discovery is a recursive scan for .unit.test.ts / .integration.test.ts,
- * so adding or renaming test files needs no script change.
+ * - `<name>.unit.test.ts`                — decoupled from DATABASE_TYPE, always run.
+ * - `<name>.<db-type>.integration.test.ts` — env-aware, only runs when the active
+ *   DATABASE_TYPE matches `<db-type>`, unless --all is given.
+ *
+ * Recursive scan means adding or renaming test files needs no script change.
  *
  * Usage:
  *   bun run test                        # all unit + current-dialect integration
  *   bun run test --all                  # all unit + all integration
  *   bun run test --env-file=.env.neon   # override the integration dev env
  */
-
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -25,42 +24,60 @@ import { devEnvFile } from "../src/macros/dev-env" with { type: "macro" };
 const root = resolve(import.meta.dir, "..");
 const isAll = process.argv.includes("--all");
 
-// Active dialect + its integration tests folder (d1→sqlite, neon→postgres).
+// Active dialect. Unit tests always run; integration tests only for this dialect
+// (or all dialects with --all). d1/neon map to their physical db type.
 const dialect = dbDialect();
-const folderByDialect: Record<string, string> = {
-	sqlite: "integration/sqlite",
-	d1: "integration/sqlite",
-	postgres: "integration/postgres",
-	neon: "integration/postgres",
-	turso: "integration/turso",
+const canonical: Record<string, string> = {
+	sqlite: "sqlite",
+	d1: "sqlite",
+	postgres: "postgres",
+	neon: "postgres",
+	turso: "turso",
 };
-const integrationFolder = folderByDialect[dialect] ?? "integration/sqlite";
+const active = canonical[dialect] ?? "sqlite";
 
-// Recursively find files matching `*.test.ts` under a directory, relative to root.
-function findTests(dirAbs: string): string[] {
-	const out: string[] = [];
+// Recursively find test files under src, relative to root.
+// A file is classified by its suffix:
+//   *.unit.test.ts                          -> unit
+//   *.<db-type>.integration.test.ts         -> integration for that db-type
+function findTests(dirAbs: string): {
+	unit: string[];
+	integration: Record<string, string[]>;
+} {
+	const unit: string[] = [];
+	const integration: Record<string, string[]> = {};
 	function walk(dir: string): void {
 		if (!existsSync(dir)) return;
 		for (const entry of readdirSync(dir)) {
 			const full = join(dir, entry);
 			if (statSync(full).isDirectory()) {
 				walk(full);
-			} else if (entry.endsWith(".test.ts")) {
-				out.push(relative(root, full).split("\\").join("/"));
+				continue;
+			}
+			if (!entry.endsWith(".test.ts")) continue;
+			const rel = relative(root, full).split("\\").join("/");
+			if (entry.endsWith(".unit.test.ts")) {
+				unit.push(rel);
+			} else if (entry.endsWith(".integration.test.ts")) {
+				// Extract the db-type token right before ".integration.test.ts".
+				const base = entry.slice(0, -".integration.test.ts".length);
+				const dot = base.lastIndexOf(".");
+				const dbType = dot === -1 ? "" : base.slice(dot + 1);
+				if (dbType) {
+					(integration[dbType] ??= []).push(rel);
+				}
 			}
 		}
 	}
 	walk(dirAbs);
-	return out;
+	return { unit, integration };
 }
 
-// Unit tests always run; integration tests run for the current dialect only
-// (or all dialects with --all).
-const unitFiles = findTests(resolve(root, "tests/unit"));
-const integrationDir = resolve(root, `tests/${integrationFolder}`);
+const { unit: unitFiles, integration } = findTests(resolve(root, "src"));
+
 const integrationFiles = isAll
-	? findTests(resolve(root, "tests/integration"))
-	: findTests(integrationDir);
+	? Object.values(integration).flat()
+	: (integration[active] ?? []);
 
 const files = [...unitFiles, ...integrationFiles].sort();
 
@@ -86,9 +103,14 @@ const restArgs = process.argv
 	.slice(2)
 	.filter((a) => a !== "--all" && !a.startsWith("--env-file="));
 
+const integrationSummary = isAll
+	? Object.entries(integration)
+			.map(([k, v]) => `${k}:${v.length}`)
+			.join(" ")
+	: `${active}:${integrationFiles.length}`;
 console.log(
 	`[test] dialect=${dialect} | unit=${unitFiles.length} ` +
-		`integration=${integrationFiles.length} ${isAll ? "(--all)" : ""} ` +
+		`integration=[${integrationSummary}] ${isAll ? "(--all)" : ""} ` +
 		`env-file=${envFile}`,
 );
 

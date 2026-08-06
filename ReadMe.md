@@ -129,12 +129,14 @@ bun run test               # run the endpoint tests for the active DATABASE_TYPE
 # then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
 ```
 
-The Postgres integration tests (`tests/integration/postgres/*.integration.test.ts`)
-exercise the same `/movies` API surface against a live Postgres. `bun run test`
-splits **unit** vs **integration**: it always runs `tests/unit/**/*.unit.test.ts`
-(no DB), and runs only the current `DATABASE_TYPE`'s integration folder with the
-db-type dev env (`.env.dev.<type>`), overridable with `--env-file=<file>`.
-`bun run test --all` runs every integration folder.
+The Postgres integration tests (`src/routes/*.postgres.integration.test.ts`)
+exercise the same `/movies` API surface against a live Postgres. Tests live next
+to the code they cover and are discovered purely by filename suffix — no central
+`tests/` folder. `bun run test` splits **unit** vs **integration**: it always
+runs `*.unit.test.ts` (no DB), and runs only the integration tests whose db-type
+suffix matches the active `DATABASE_TYPE`, using the db-type dev env
+(`.env.dev.<type>`), overridable with `--env-file=<file>`.
+`bun run test --all` runs every db-type's integration tests.
 
 ### Neon (serverless Postgres)
 
@@ -429,12 +431,11 @@ src/
     factory.ts       # pick the repo for the active DATABASE_TYPE
   routes/
     movies.ts        # /movies REST handlers
-tests/
-  unit/                  # *.unit.test.ts — no DB, always run
-  integration/
-    sqlite/              # *.integration.test.ts — sqlite/d1
-    postgres/            # *.integration.test.ts — postgres/neon
-    turso/               # *.integration.test.ts — turso
+    movies.sqlite.integration.test.ts   # sqlite/d1 integration tests (colocated)
+    movies.postgres.integration.test.ts # postgres/neon integration tests (colocated)
+    movies.turso.integration.test.ts    # turso integration tests (colocated)
+  # tests are discovered by filename suffix:
+  #   *.unit.test.ts (always run) and *.<db-type>.integration.test.ts (env-aware)
 scripts/
   build.ts               # Bun.build: bundle server + Worker (runs macros)
   db-migrate.ts          # apply migrations for the active DATABASE_TYPE (sqlite/postgres/neon/d1)

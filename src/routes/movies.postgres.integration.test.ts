@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
-import { createApp } from "../../../src/app";
-import type { PostgresDb } from "../../../src/db/postgres-client";
-import { createPostgresClient } from "../../../src/db/postgres-client";
-import * as pgSchema from "../../../src/db/schema/postgres";
-import { createPostgresMoviesRepo } from "../../../src/repo/movies-repo-postgres";
+import { createApp } from "../app";
+import type { PostgresDb } from "../db/postgres-client";
+import { createPostgresClient } from "../db/postgres-client";
+import * as pgSchema from "../db/schema/postgres";
+import { createPostgresMoviesRepo } from "../repo/movies-repo-postgres";
 
 /**
  * Postgres endpoint tests.
@@ -12,11 +12,12 @@ import { createPostgresMoviesRepo } from "../../../src/repo/movies-repo-postgres
  * These exercise the same /movies API surface against a real Postgres
  * database, proving the Postgres dialect + repo path works end-to-end.
  *
- * PREREQUISITES (run `bun run test:postgres`):
+ * PREREQUISITES (run `DATABASE_TYPE=postgres bun run test`):
  *   1. A running Postgres — `docker compose up -d`.
  *   2. Migrations applied — `DATABASE_TYPE=postgres bun run db:migrate`.
  *
- * The test is opt-in (not part of `bun test`) because it needs a live DB.
+ * The test is opt-in (not part of plain `bun test` discovery) because it needs
+ * a live DB; `bun run test` runs it only when the active dialect is postgres/neon.
  */
 
 const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
