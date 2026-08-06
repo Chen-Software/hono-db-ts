@@ -16,12 +16,13 @@
  *   bun run test --unit                           # unit tests only
  *   bun run test --integration                    # current-dialect integration only
  *   bun run test --test <name>                    # only tests whose path contains <name>
+ *   bun run test <file>...                        # only the given test files (e.g. src/routes/movies.unit.test.ts)
  *   bun run test --env-file=.env.neon             # override the integration dev env
  *   bun run test --coverage                       # also emit coverage (text + lcov)
  *   bun run test --coverage --coverage-dir=coverage # coverage output dir (default coverage)
  *
- * --all cannot combine with --unit / --integration / --test;
- * --test cannot combine with --all / --unit / --integration.
+ * --all / --unit / --integration / --test are mutually exclusive with each
+ * other and with explicit test-file paths.
  *
  * Per-file and total elapsed times are printed by bun's default reporter; this
  * script keeps a single spawn and surfaces them as-is.
@@ -47,12 +48,23 @@ const coverageDir = coverageDirArg
 	? coverageDirArg.slice("--coverage-dir=".length)
 	: undefined;
 
+// Any bare positional arg that names a `.test.ts` file is an explicit file
+// filter (highest priority): only those files run, matching `bun test <file>`.
+const explicitFiles = argv.filter((a) => a.endsWith(".test.ts"));
+
 // Mutual exclusion: at most one of --all / --unit / --integration / --test.
-const exclusiveFlags = [isAll, isUnit, isIntegration, testFilter !== undefined]
+const modeFlags = [isAll, isUnit, isIntegration, testFilter !== undefined]
 	.filter(Boolean).length;
-if (exclusiveFlags > 1) {
+if (modeFlags > 1) {
 	console.error(
 		"--all, --unit, --integration and --test are mutually exclusive.",
+	);
+	process.exit(1);
+}
+if (explicitFiles.length > 0 && modeFlags > 0) {
+	console.error(
+		"Explicit test-file paths cannot be combined with " +
+			"--all / --unit / --integration / --test.",
 	);
 	process.exit(1);
 }
@@ -113,7 +125,19 @@ const currentIntegrationFiles = integration[active] ?? [];
 // Build the selected file list from the active filter.
 let files: string[];
 let filterLabel: string;
-if (testFilter !== undefined) {
+if (explicitFiles.length > 0) {
+	// Resolve explicit paths against the discovered set (accept either the
+	// full `src/...` path or a bare `routes/movies.unit.test.ts`).
+	const allFiles = [...unitFiles, ...allIntegrationFiles];
+	files = explicitFiles.map((p) => {
+		const normalized = p.split("\\").join("/").replace(/^\.\//, "");
+		const match = allFiles.find(
+			(f) => f === normalized || f.endsWith(`/${normalized}`),
+		);
+		return match ?? normalized;
+	});
+	filterLabel = "files";
+} else if (testFilter !== undefined) {
 	files = [...unitFiles, ...allIntegrationFiles].filter((f) =>
 		f.includes(testFilter),
 	);
@@ -180,6 +204,7 @@ const restArgs = argv.filter((a) => {
 	if (a.startsWith("--env-file=")) return false;
 	if (a.startsWith("--coverage-dir=")) return false;
 	if (skip.has(a)) return false;
+	if (a.endsWith(".test.ts")) return false; // consumed as explicit file filter
 	if (testFlagIdx !== -1 && argv.indexOf(a) === testFlagIdx + 1) return false;
 	return true;
 });
