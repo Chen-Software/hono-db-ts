@@ -97,6 +97,7 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | Script                 | Description                                     |
 | ---------------------- | ----------------------------------------------- |
 | `bun run dev`          | Start the Hono server in watch mode (Bun)       |
+| `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
 | `bun test`             | Run the test suite                              |
 | `bun run typecheck`    | Run `tsc --noEmit`                              |
 | `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
@@ -107,8 +108,8 @@ const app = new Hono<{ Bindings: CloudflareBindings }>()
 | `bun run db:migrate:postgres` | Apply Postgres migrations               |
 | `bun run db:push`      | Push the schema to SQLite **and** Postgres       |
 | `bun run db:seed`      | Seed local SQLite and remote D1                  |
-| `bun run deploy`       | Deploy the Worker to Cloudflare                  |
-| `bun run deploy:dry-run` | Validate the Worker bundle without deploying  |
+| `bun run deploy`       | Build (runs macros) then deploy to Cloudflare    |
+| `bun run deploy:dry-run` | Build (runs macros) then validate the bundle  |
 | `bun run worker:dev`   | Run the Worker locally with wrangler             |
 | `bun run worker:types` | Regenerate Worker binding types                  |
 | `bun run check`        | Lint & format check (Biome)                      |
@@ -187,6 +188,7 @@ src/
     movies.ts        # /movies REST handlers
     movies.test.ts   # /movies endpoint tests
 scripts/
+  build.ts               # Bun.build: bundle server + Worker (runs macros)
   db-migrate.ts          # apply SQLite migrations
   db-migrate-postgres.ts # apply Postgres migrations
   db-seed.ts             # seed data
