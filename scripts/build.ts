@@ -9,6 +9,9 @@
  * Emits to `dist/`:
  *   - `dist/server.js` — local Bun server entry (`src/main.ts`, target `bun`).
  *
+ * Also (re)generates `wrangler.jsonc` from `.env` via `wrangler.config.ts`, so
+ * a single `bun run build` produces everything the deploy step needs.
+ *
  * The Cloudflare Worker is **not** bundled here: it has no Bun macros and needs
  * Wrangler's `nodejs_compat` (for `postgres-js` via Hyperdrive), so it is
  * bundled by `wrangler deploy` / `wrangler dev` from `src/worker.ts`.
@@ -21,6 +24,7 @@
 import { build, type BuildConfig } from "bun";
 import { mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { generateWranglerConfig } from "../wrangler.config";
 
 const root = resolve(import.meta.dir, "..");
 const outdir = resolve(root, "dist");
@@ -80,6 +84,17 @@ for (const job of jobs) {
 if (failed) {
 	console.error("\nBuild failed.");
 	process.exit(1);
+}
+
+// Regenerate the wrangler config from .env so deployment always uses fresh IDs.
+const missing = generateWranglerConfig();
+if (missing.length) {
+	console.warn(
+		`⚠️  Missing env var(s): ${missing.join(", ")} — wrangler.jsonc uses placeholders. ` +
+			`Set them in .env to deploy a real database.`,
+	);
+} else {
+	console.log("✓ Generated wrangler.jsonc from .env");
 }
 
 console.log(`\nBuild complete → ${outdir}`);
