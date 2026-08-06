@@ -164,7 +164,10 @@ This keeps `DATABASE_TYPE=d1` (`wrangler.jsonc` top-level) free of Hyperdrive, w
 bun x wrangler d1 create movies-db
 ```
 
-Copy the printed `database_id` into `wrangler.jsonc`. (This repo already has `movies-db` configured with a real `database_id`, so on a fresh clone you only need to do this if you use a different database name.)
+Copy the printed `database_id` into `wrangler.jsonc`, replacing
+`REPLACE_WITH_YOUR_D1_DATABASE_ID`. Alternatively, use `${D1_DATABASE_ID}` and
+set that env var / `.dev.vars` entry for CI-friendly interpolation. A value of
+`REPLACE_WITH_YOUR_D1_DATABASE_ID` will fail a real deploy (dry-run is fine).
 
 ### 2. (Optional) Wire Neon via Hyperdrive
 
@@ -176,8 +179,9 @@ bun x wrangler hyperdrive create neon-hyperdrive \
   --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
 
 # 2. Put the returned Hyperdrive `id` under "env" -> "neon" -> "hyperdrive" in
-#    wrangler.jsonc (see the repo's wrangler.jsonc for the shape). Keep the
-#    top-level free of Hyperdrive so the default D1 deploy stays clean.
+#    wrangler.jsonc, replacing REPLACE_WITH_YOUR_HYPERDRIVE_ID (or use
+#    ${HYPERDRIVE_ID}). Keep the top-level free of Hyperdrive so the default
+#    D1 deploy stays clean.
 ```
 
 > Neon's guidance: use Hyperdrive with a standard TCP Postgres driver (`postgres-js`),
