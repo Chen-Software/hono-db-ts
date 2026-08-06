@@ -8,6 +8,7 @@
         "drizzle-orm": "^0.45.2",
         "drizzle-zod": "^0.8.3",
         "hono": "^4",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.4.5",
