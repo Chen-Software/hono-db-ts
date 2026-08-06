@@ -1,36 +1,32 @@
 /**
  * Cloudflare Worker entry point.
  *
- * Bundled by Wrangler (esbuild) for `wrangler dev` / `wrangler deploy`. It
- * selects the repository based on the bindings present:
+ * Bundled by Bun (`bun run build` -> `scripts/build.ts`) as `dist/worker.js`,
+ * which executes the Bun macros below **at build time**. `src/macros/db-worker.ts`
+ * inlines the module specifier of the active dialect's Worker factory, so this
+ * file statically imports **only the active backend** — a `turso` build ships
+ * just the Turso factory + driver, never `postgres`/Neon or D1, and vice versa.
  *
- *   - `TURSO_URL` (var binding)       -> Turso Cloud (via `@libsql/client/web`)
- *   - `HYPERDRIVE` (Hyperdrive)       -> Neon (serverless Postgres via Hyperdrive)
- *   - otherwise (`env.DB`)            -> D1
+ * There is no runtime branch over backends: the single `await import(workerModule())`
+ * resolves to the one factory selected at build time, and each factory reads the
+ * bindings for its dialect (`env.TURSO_URL`, `env.HYPERDRIVE`, or `env.DB`).
  *
- * It never imports `bun:sqlite`, the local dialect factory (`src/db/index.ts`),
- * or any Bun macro. This is what lets the Worker build without a stub.
+ *   - `DATABASE_TYPE=turso` -> Turso Cloud via `@libsql/client/http`
+ *   - `DATABASE_TYPE=neon`  -> serverless Postgres via Hyperdrive
+ *   - `DATABASE_TYPE=d1`    -> D1 (`env.DB`)
  */
 
 import { createApp } from "./app";
-import { createNeonHyperdriveClient } from "./db/neon-client";
-import { createTursoWorkerClient } from "./db/turso-worker-client";
 import type { MoviesRepo } from "./repo/movies-repo";
-import { createD1MoviesRepo } from "./repo/movies-repo-d1";
-import { createPostgresMoviesRepo } from "./repo/movies-repo-postgres";
-import { createTursoMoviesRepo } from "./repo/movies-repo-turso";
+import { workerModule } from "./macros/db-worker" with { type: "macro" };
 
-function createRepo(env: CloudflareBindings): MoviesRepo {
-	if (env.TURSO_URL) {
-		const db = createTursoWorkerClient(env.TURSO_URL, env.TURSO_AUTH_TOKEN);
-		return createTursoMoviesRepo(db);
-	}
-	if (env.HYPERDRIVE) {
-		const db = createNeonHyperdriveClient(env.HYPERDRIVE.connectionString);
-		return createPostgresMoviesRepo(db);
-	}
-	return createD1MoviesRepo(env.DB);
-}
+type WorkerFactory = {
+	createRepoFromEnv: (env: CloudflareBindings) => MoviesRepo;
+};
+
+// The macro inlines the module path, so this resolves to the single selected
+// backend at build time (tree-shaking the rest).
+const factory = (await import(workerModule())) as WorkerFactory;
 
 export default {
 	async fetch(
@@ -38,7 +34,7 @@ export default {
 		env: CloudflareBindings,
 		ctx: ExecutionContext,
 	) {
-		const repo: MoviesRepo = createRepo(env);
+		const repo: MoviesRepo = factory.createRepoFromEnv(env);
 		return createApp(repo).fetch(request, env, ctx);
 	},
 };

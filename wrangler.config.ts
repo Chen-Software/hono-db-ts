@@ -70,16 +70,24 @@ export function buildWranglerConfig(
 	const hdId = val("HYPERDRIVE_ID");
 	const tursoUrl = val("TURSO_URL");
 
+	const dialectVar = val("DATABASE_TYPE") || "d1";
+
 	const config: Config = isNeon
 		? {
 				name: "movies-worker",
-				main: "src/worker.ts",
+				// Pre-bundled by Bun (scripts/build.ts) so the Worker can use Bun
+				// macros; Wrangler uploads this bundle without re-bundling.
+				main: "dist/worker.js",
 				compatibility_date: "2026-08-06",
 				compatibility_flags: ["nodejs_compat"],
 				observability: { enabled: true },
 				env: {
 					neon: {
 						name: "movies-worker-neon",
+						// The Worker selects its backend from env.DATABASE_TYPE.
+						vars: {
+							DATABASE_TYPE: dialectVar,
+						},
 						hyperdrive: [
 							{
 								binding: "HYPERDRIVE",
@@ -92,17 +100,21 @@ export function buildWranglerConfig(
 		: isTurso
 			? {
 					name: "movies-worker",
-					main: "src/worker.ts",
+					// Pre-bundled by Bun (scripts/build.ts) so the Worker can use Bun
+					// macros; Wrangler uploads this bundle without re-bundling.
+					main: "dist/worker.js",
 					compatibility_date: "2026-08-06",
 					compatibility_flags: ["nodejs_compat"],
 					observability: { enabled: true },
 					env: {
 						turso: {
 							name: "movies-worker-turso",
+							// The Worker selects its backend from env.DATABASE_TYPE.
 							// TURSO_AUTH_TOKEN is set as a Worker SECRET
 							// (`wrangler secret put TURSO_AUTH_TOKEN --env=turso`),
 							// so only the non-sensitive URL lives in vars.
 							vars: {
+								DATABASE_TYPE: dialectVar,
 								TURSO_URL:
 									tursoUrl || "REPLACE_WITH_YOUR_TURSO_URL",
 							},
@@ -111,10 +123,16 @@ export function buildWranglerConfig(
 				}
 			: {
 					name: "movies-worker",
-					main: "src/worker.ts",
+					// Pre-bundled by Bun (scripts/build.ts) so the Worker can use Bun
+					// macros; Wrangler uploads this bundle without re-bundling.
+					main: "dist/worker.js",
 					compatibility_date: "2026-08-06",
 					compatibility_flags: ["nodejs_compat"],
 					observability: { enabled: true },
+					// The Worker selects its backend from env.DATABASE_TYPE.
+					vars: {
+						DATABASE_TYPE: dialectVar,
+					},
 					d1_databases: [
 						{
 							binding: "DB",

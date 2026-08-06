@@ -7,14 +7,21 @@
  * literals into the emitted bundles — no runtime env parsing ships in the output.
  *
  * Emits to `dist/`:
- *   - `dist/server.js` — local Bun server entry (`src/main.ts`, target `bun`).
+ *   - `dist/main.js` — local Bun server entry (`src/main.ts`, target `bun`).
+ *   - `dist/worker.js` — Cloudflare Worker entry (`src/worker.ts`, target
+ *     `browser`). Bundling it here under Bun lets the Worker use Bun macros
+ *     (e.g. `src/macros/db-worker.ts`) so **only the active backend** is
+ *     bundled — `wrangler.jsonc` points `main` at this prebuilt bundle.
+ *
+ * Entry points are discovered from the top level of `src/`:
+ *   - include: every `src/*.ts`
+ *   - exclude: `*.test.ts`, and library modules that are imported by entries
+ *     rather than standalone bundles (e.g. `app.ts`, the shared Hono factory).
+ * `main.ts` bundles for the local Bun runtime; `worker.ts` for the Worker
+ * (browser) target. Any other discovered entry defaults to `bun`.
  *
  * Also (re)generates `wrangler.jsonc` from `.env` via `wrangler.config.ts`, so
  * a single `bun run build` produces everything the deploy step needs.
- *
- * The Cloudflare Worker is **not** bundled here: it has no Bun macros and needs
- * Wrangler's `nodejs_compat` (for `postgres-js` via Hyperdrive), so it is
- * bundled by `wrangler deploy` / `wrangler dev` from `src/worker.ts`.
  *
  * Usage:
  *   bun run build                      # build with current env
@@ -22,16 +29,37 @@
  */
 
 import { build, type BuildConfig } from "bun";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { generateWranglerConfig } from "../wrangler.config";
 
 const root = resolve(import.meta.dir, "..");
 const outdir = resolve(root, "dist");
 
-/** Nuke the previous output so stale artifacts never linger. */
-rmSync(outdir, { recursive: true, force: true });
-mkdirSync(outdir, { recursive: true });
+/** Library modules under `src/` that are imported by entries, not bundled alone. */
+const EXCLUDED_ENTRIES = new Set(["app.ts"]);
+
+/** Map an entry file name to its build target (unknown -> local Bun). */
+function entryTarget(file: string): BuildConfig["target"] {
+	return file === "worker.ts" ? "browser" : "bun";
+}
+
+/** Map an entry file name to its stable output name. */
+function outputName(file: string): string {
+	return file.replace(/\.ts$/, ".js");
+}
+
+/** Discover top-level entry points in `src/` (include non-test, exclude libs). */
+function discoverEntries(): string[] {
+	return readdirSync(resolve(root, "src"))
+		.filter(
+			(f) =>
+				f.endsWith(".ts") &&
+				!f.endsWith(".test.ts") &&
+				!EXCLUDED_ENTRIES.has(f),
+		)
+		.sort();
+}
 
 interface Job {
 	name: string;
@@ -41,18 +69,8 @@ interface Job {
 	file: string;
 }
 
-const jobs: Job[] = [
-	{
-		name: "server (local Bun)",
-		entry: resolve(root, "src/main.ts"),
-		target: "bun",
-		file: "server.js",
-	},
-];
-
-let failed = false;
-
-for (const job of jobs) {
+/** Build a single entry; returns true on success. */
+async function buildJob(job: Job): Promise<boolean> {
 	const result = await build({
 		entrypoints: [job.entry],
 		outdir,
@@ -61,24 +79,40 @@ for (const job of jobs) {
 		minify: true,
 		sourcemap: "external",
 		naming: {
-			// Keep the two entry bundles' names stable & predictable.
 			entry: job.file,
 		},
 	});
 
 	if (!result.success) {
-		failed = true;
 		console.error(`✗ ${job.name}`);
 		for (const log of result.logs) {
 			console.error(log);
 		}
-		continue;
+		return false;
 	}
 
 	console.log(`✓ ${job.name}`);
 	for (const output of result.outputs) {
 		console.log(`  ${output.path} (${output.size} bytes)`);
 	}
+	return true;
+}
+
+/** Nuke the previous output so stale artifacts never linger. */
+rmSync(outdir, { recursive: true, force: true });
+mkdirSync(outdir, { recursive: true });
+
+const entryFiles = discoverEntries();
+const jobs: Job[] = entryFiles.map((file) => ({
+	name: file.replace(/\.ts$/, "") + (file === "worker.ts" ? " (Cloudflare Worker)" : " (local Bun)"),
+	entry: resolve(root, "src", file),
+	target: entryTarget(file),
+	file: outputName(file),
+}));
+
+let failed = false;
+for (const job of jobs) {
+	if (!(await buildJob(job))) failed = true;
 }
 
 if (failed) {

@@ -6,6 +6,9 @@
 interface __BaseEnv_CloudflareBindings {
 	HYPERDRIVE: Hyperdrive;
 	DB: D1Database;
+	// The active DB dialect — set as a var binding on every worker env. The
+	// Worker uses it (not binding-detection) to select its backend.
+	DATABASE_TYPE: string;
 	// Turso env (var bindings) — present only on the `turso` worker env.
 	TURSO_URL: string;
 	TURSO_AUTH_TOKEN: string;
