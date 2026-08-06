@@ -1,3 +1,3 @@
-# Drizzle ORM Starter
+# Hono + Drizzle ORM Starter
 
-This is a starter project for Drizzle ORM.
+This is a starter project for Hono + Drizzle ORM.
