@@ -7,9 +7,13 @@
  *
  * This module is a **runtime** module: a Bun macro cannot return a client object
  * (macros only inline literals). `dbDialect()` is a build-time macro that inlines
- * the dialect literal; the `switch` below then resolves, and the matching
- * `import(<literal>)` is statically analyzed by the bundler, so only the selected
- * driver ships.
+ * the dialect literal.
+ *
+ * Tree-shaking: every driver (`bun:sqlite`, `postgres`, `@libsql/client`,
+ * `@libsql/client/http`, `drizzle-orm/d1`) is loaded via **dynamic `import()`**
+ * inside the factory / `createClient()` switch. The bundler then resolves only
+ * the literal specifier on the active dialect's branch and drops the rest, so a
+ * neon Worker ships only the `postgres` driver, a turso Worker only libsql, etc.
  *
  * Dialect handling (factories, all exported):
  *   - `turso`            -> `createTursoClient` (`@libsql/client`, local or cloud)
@@ -28,35 +32,32 @@
  *     falls back to the local `bun:sqlite` client for local/CLI use.
  */
 
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { drizzle as d1Drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
-import { drizzle as libDrizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
-import {
-	drizzle as pgDrizzle,
-	type PostgresJsDatabase,
-} from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import { Database } from "bun:sqlite";
-import { createClient as createLibsqlClient } from "@libsql/client";
-import { createClient as createLibsqlHttpClient } from "@libsql/client/http";
 import { dbDialect } from "../macros/db-dialect" with { type: "macro" };
 import {
 	devEnvFile,
 	loadEnvFile,
 } from "../macros/dev-env" with { type: "macro" };
-import * as pgSchema from "./schema/postgres";
-import * as sqliteSchema from "./schema/sqlite";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+// Type-only imports (erased at runtime) — they do NOT pull the drivers in.
+import type {
+	BunSQLiteDatabase,
+} from "drizzle-orm/bun-sqlite";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+import type { LibSQLDatabase } from "drizzle-orm/libsql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as pgSchema from "./schema/postgres";
+import * as sqliteSchema from "./schema/sqlite";
+
 /** SQLite-family Drizzle client. */
-export type SqliteDb = BunSQLiteDatabase<typeof sqliteSchema.schema>;
+export type SqliteDb = BunSQLiteDatabase<typeof sqliteSchema>;
 /** Postgres / Neon Drizzle client. */
-export type PostgresDb = PostgresJsDatabase<typeof pgSchema.schema>;
+export type PostgresDb = PostgresJsDatabase<typeof pgSchema>;
 /** Turso (libSQL) Drizzle client. */
-export type TursoDb = LibSQLDatabase<typeof sqliteSchema.schema>;
+export type TursoDb = LibSQLDatabase<typeof sqliteSchema>;
 /** Turso HTTP (Worker) Drizzle client. */
-export type TursoWorkerDb = LibSQLDatabase<typeof sqliteSchema.schema>;
+export type TursoWorkerDb = LibSQLDatabase<typeof sqliteSchema>;
 /** Cloudflare D1 Drizzle client. */
 export type D1Db = DrizzleD1Database<typeof sqliteSchema>;
 
@@ -73,55 +74,76 @@ export interface DbClient<TDb extends DialectDb = DialectDb> {
 
 // ─── Factory functions (used by Worker, tests, CLI) ──────────────────────────
 
-/** Build a SQLite client (local `bun:sqlite`). */
-export function createSqliteClient(url: string): SqliteDb {
+/**
+ * Build a SQLite client (local `bun:sqlite`).
+ * Async because the `bun:sqlite` driver is loaded lazily for tree-shaking.
+ */
+export async function createSqliteClient(url: string): Promise<SqliteDb> {
+	const [{ Database }, { drizzle }] = await Promise.all([
+		import("bun:sqlite"),
+		import("drizzle-orm/bun-sqlite"),
+	]);
 	const c = new Database(url);
 	c.exec("PRAGMA journal_mode = WAL;");
 	c.exec("PRAGMA foreign_keys = ON;");
 	c.exec("PRAGMA busy_timeout = 5000;");
-	return drizzle(c, { schema: sqliteSchema.schema });
+	return drizzle(c, { schema: sqliteSchema }) as SqliteDb;
 }
 
-/** Build a Postgres client (`postgres-js`). */
-export function createPostgresClient(url: string, poolSize: number): PostgresDb {
+/** Build a Postgres client (`postgres-js`). Async for tree-shaking. */
+export async function createPostgresClient(
+	url: string,
+	poolSize: number,
+): Promise<PostgresDb> {
+	const [{ default: postgres }, { drizzle }] = await Promise.all([
+		import("postgres"),
+		import("drizzle-orm/postgres-js"),
+	]);
 	const c = postgres(url, { max: poolSize, prepare: false });
-	return pgDrizzle(c, { schema: pgSchema.schema });
+	return drizzle(c, { schema: pgSchema }) as PostgresDb;
 }
 
-/** Build a Turso client (`@libsql/client`, local or cloud). */
-export function createTursoClient(opts: {
+/**
+ * Build a Turso client (`@libsql/client`, local or cloud).
+ * Async for tree-shaking.
+ */
+export async function createTursoClient(opts: {
 	url: string;
 	authToken?: string;
-}): TursoDb {
-	const c = createLibsqlClient({
+}): Promise<TursoDb> {
+	const [{ createClient }, { drizzle }] = await Promise.all([
+		import("@libsql/client"),
+		import("drizzle-orm/libsql"),
+	]);
+	const c = createClient({
 		url: opts.url,
 		...(opts.authToken ? { authToken: opts.authToken } : {}),
 	});
-	return libDrizzle(c, { schema: sqliteSchema.schema });
+	return drizzle(c, { schema: sqliteSchema }) as TursoDb;
 }
 
 /**
- * Build a Neon client for the Worker, from Hyperdrive's runtime connection
- * string. Hyperdrive already pools connections, so `max: 1` avoids over-connecting.
+ * Build a Turso client for the Worker. Uses the HTTP build
+ * (`@libsql/client/http`) pointed at Turso's HTTPS endpoint; `libsql://` URLs
+ * are rewritten to `https://`. Async for tree-shaking.
  */
-export function createNeonHyperdriveClient(connectionString: string): PostgresDb {
-	const c = postgres(connectionString, { max: 1 });
-	return pgDrizzle(c, { schema: pgSchema.schema });
-}
-
-/**
- * Build a Turso client for the Worker. Uses the HTTP build (`@libsql/client/http`)
- * pointed at Turso's HTTPS endpoint; `libsql://` URLs are rewritten to `https://`.
- */
-export function createTursoWorkerClient(url: string, authToken: string): TursoWorkerDb {
+export async function createTursoWorkerClient(
+	url: string,
+	authToken: string,
+): Promise<TursoWorkerDb> {
+	const [{ createClient }, { drizzle }] = await Promise.all([
+		import("@libsql/client/http"),
+		import("drizzle-orm/libsql"),
+	]);
 	const httpUrl = url.replace(/^libsql:\/\//, "https://");
-	const c = createLibsqlHttpClient({ url: httpUrl, authToken });
-	return libDrizzle(c, { schema: sqliteSchema.schema });
+	const c = createClient({ url: httpUrl, authToken });
+	return drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
 }
 
 /** Build a Cloudflare D1 client from the Worker's `D1Database` binding. */
-export function createD1Client(d1: D1Database): D1Db {
-	return d1Drizzle(d1, { schema: sqliteSchema });
+export async function createD1Client(d1: D1Database): Promise<D1Db> {
+	const { drizzle } = await import("drizzle-orm/d1");
+	return drizzle(d1, { schema: sqliteSchema }) as D1Db;
 }
 
 // ─── Unified client (local / CLI, from .env) ─────────────────────────────────
@@ -140,9 +162,9 @@ function loadDevEnvIntoProcess(): void {
  * (dev) or the remote client (production) from the environment. Only the active
  * dialect's driver is loaded (dynamic `import()` → tree-shaken).
  */
-async function createClient(): Promise<DbClient> {
+export async function createClient(env = process.env): Promise<DbClient> {
 	// Development auto-loads the matching local dev env; production uses `.env`.
-	if (process.env["NODE_ENV"] === "development") {
+	if (env["NODE_ENV"] === "development") {
 		loadDevEnvIntoProcess();
 	}
 
@@ -151,12 +173,12 @@ async function createClient(): Promise<DbClient> {
 	switch (dialect) {
 		case "turso": {
 			const url =
-				process.env["TURSO_URL"] ??
-				process.env["TURSO_DB_URL"] ??
+				env["TURSO_URL"] ??
+				env["TURSO_DB_URL"] ??
 				`file:///${process.cwd()}/tursodb.db`;
 			const authToken =
-				process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
-			const db = createTursoClient({ url, authToken });
+				env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
+			const db = await createTursoClient({ url, authToken });
 			const handle = (db as { $client?: { close?: () => void | Promise<void> } })
 				.$client;
 			return {
@@ -167,6 +189,20 @@ async function createClient(): Promise<DbClient> {
 			};
 		}
 		case "neon":
+			{
+				const [{ default: postgres }, { drizzle }] = await Promise.all([
+				import("postgres"),
+				import("drizzle-orm/postgres-js"),
+			]);
+			const c = postgres(env["HYPERDRIVE"]?.connectionString, { max: 1 });
+			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
+			return {
+				db,
+				close: async () => {
+					if (handle?.end) await handle.end();
+				},
+			};
+		}
 		case "postgres": {
 			const url =
 				process.env["DATABASE_URL"] ??
@@ -174,7 +210,7 @@ async function createClient(): Promise<DbClient> {
 				"postgres://postgres:postgres@localhost:5432/mydb";
 			const rawPool = Number(process.env["DATABASE_POOL_SIZE"] ?? 10);
 			const poolSize = Number.isFinite(rawPool) && rawPool > 0 ? rawPool : 10;
-			const db = createPostgresClient(url, poolSize);
+			const db = await createPostgresClient(url, poolSize);
 			const handle = (db as { $client?: { end?: () => Promise<void> } })
 				.$client;
 			return {
@@ -188,7 +224,9 @@ async function createClient(): Promise<DbClient> {
 		case "d1":
 		default: {
 			// sqlite (and d1 without a binding — local dev) use the local sqlite client.
-			const db = createSqliteClient(process.env["DATABASE_URL"] ?? "sqlite.db");
+			const db = await createSqliteClient(
+				process.env["DATABASE_URL"] ?? "sqlite.db",
+			);
 			return { db, close: async () => {} };
 		}
 	}
@@ -202,4 +240,4 @@ export const client = await createClient();
  * and tests). Always targets the local `sqlite.db` file regardless of the active
  * dialect's `DATABASE_URL`.
  */
-export const sqliteDb = createSqliteClient("sqlite.db");
+export const sqliteDb = await createSqliteClient("sqlite.db");
