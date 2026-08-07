@@ -26,7 +26,7 @@ import { createApp } from "../app";
  * Wrangler uploads the pre-built `dist/worker.js` (`wrangler.jsonc` -> `main`).
  */
 
-import { dialect } from "./macros/db";
+import { dialect } from "../macros/db";
 import * as d1Worker from "./d1";
 import * as neonWorker from "./neon";
 import * as postgresWorker from "./postgres";
