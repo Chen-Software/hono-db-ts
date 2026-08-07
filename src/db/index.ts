@@ -14,30 +14,19 @@
  */
 
 import { resolve } from "node:path";
-import { dialect as macroDialect } from "../macros/db" with { type: "macro" };
+import { isPg, dialect } from "../macros/db" with { type: "macro" };
 import type { DbDialect } from "../macros/db";
-import type { PostgresDb } from "./postgres-client";
-import { createPostgresClient } from "./postgres-client";
-import type { SqliteDb } from "./sqlite-client";
-import { createSqliteClient } from "./sqlite-client";
-import type { TursoDb } from "./turso-client";
-import { createTursoClient } from "./turso-client";
+import { client, createClient, type DbClient, type DialectDb } from "./client";
 
 const DEFAULT_SQLITE_URL = "sqlite.db";
 const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
 // libSQL `file:` URLs need an absolute path for the `file:///` form (two `//`
 // plus the path). Compute it from the project root so it works anywhere.
-const DEFAULT_TURSO_LOCAL_URL = `file:///${resolve(process.cwd(), "tursodb.db")}`;
+const DEFAULT_SQLITE_LOCAL_URL = `file:///${resolve(process.cwd(), "sqlite.db")}`;
 
 let instance: Db | undefined;
-
-/**
- * The active dialect, resolved at build time by the macro.
- * Unknown `DATABASE_TYPE` values fall back to SQLite.
- */
-function resolveDialect(): DbDialect {
-	return macroDialect();
-}
+const d: DbDialect = dialect();
+const isPostgres = isPg();
 
 /**
  * The connection URL, resolved at build time by the macro.
@@ -49,9 +38,8 @@ function resolveUrl(): string {
 		process.env["TURSO_URL"] ??
 		process.env["TURSO_DB_URL"];
 	if (url) return url;
-	const d = macroDialect();
 	if (d === "postgres" || d === "neon") return DEFAULT_PG_URL;
-	if (d === "turso") return DEFAULT_TURSO_LOCAL_URL;
+	if (d === "turso" || d === "sqlite") return DEFAULT_SQLITE_LOCAL_URL;
 	return DEFAULT_SQLITE_URL;
 }
 
@@ -59,30 +47,6 @@ function resolveUrl(): string {
 // shared `DATABASE_URL`, which points at a Postgres/Neon server for other dialects.
 function resolveSqliteUrl(): string {
 	return DEFAULT_SQLITE_URL;
-}
-
-function createDb(dialect: DbDialect, url: string): Db {
-	if (dialect === "postgres" || dialect === "neon")
-		return createPostgresClient(url, poolSize());
-	if (dialect === "turso") {
-		// Turso reuses the SQLite-compatible schema; only the connection differs.
-		// TURSO_URL decides local (`file://`) vs cloud (`libsql://`); cloud needs
-		// TURSO_AUTH_TOKEN, local does not.
-		return createTursoClient({
-			url,
-			authToken: process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"],
-		});
-	}
-	if (dialect === "d1") {
-		// D1 is a Cloudflare Worker runtime binding (`env.DB`), so there is no
-		// local driver to construct. Use `src/worker.ts` + `wrangler dev` instead.
-		throw new Error(
-			"`DATABASE_TYPE=d1` is a Worker-runtime binding and has no local " +
-				"driver. Use `bun run worker:dev` (which reads env.DB) or set " +
-				"`DATABASE_TYPE` to `sqlite` / `postgres` / `neon` / `turso` locally.",
-		);
-	}
-	return createSqliteClient(url);
 }
 
 function poolSize(): number {
@@ -93,25 +57,22 @@ function poolSize(): number {
 }
 
 function getDb(): Db {
-	if (instance) return instance;
-	instance = createDb(resolveDialect(), resolveUrl());
-	return instance;
+	return db;
 }
 
-function resetDb(): void {
-	instance = undefined;
+async function resetDb(): Promise<void> {
+	db = await createClient();
 }
 
-function isSqliteDb(db: Db): db is SqliteDb {
-	const client = (db as { $client?: unknown }).$client;
-	return client !== undefined;
+function isSqliteDb(): boolean {
+	return !isPostgres;
 }
 
-function isPostgresDb(db: Db): db is PostgresDb {
-	return !isSqliteDb(db);
+function isPostgresDb(): boolean {
+	return isPostgres;
 }
 
-export type Db = SqliteDb | PostgresDb | TursoDb;
+export type Db = DbClient<DialectDb>;
 
 export type { DbDialect };
 
@@ -119,13 +80,6 @@ export type { DbDialect };
  * The shared Drizzle client for the active dialect.
  * The dialect is chosen at build time by `src/macros/db.ts`.
  */
-export const db = getDb();
+export let db = client;
 
-/**
- * A concrete SQLite client for SQLite-specific consumers (the local repo,
- * seed, and tests). Always targets the local `sqlite.db` file regardless of the
- * active dialect's `DATABASE_URL`.
- */
-export const sqliteDb = createSqliteClient(resolveSqliteUrl());
-
-export { getDb, createDb, resetDb, resolveDialect, isSqliteDb, isPostgresDb };
+export { getDb, resetDb, dialect, isSqliteDb, isPostgresDb };
