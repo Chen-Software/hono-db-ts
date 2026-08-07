@@ -12,6 +12,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
+		"@ttsc/unplugin": "^0.25.0",
 		"@types/bun": "latest",
 		"ttsc": "^0.25.0"
 	},
