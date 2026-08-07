@@ -45,22 +45,24 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { schemas } from "./schema";
-import type { ProcessEnv } from "bun";
+
+/** Minimal `process.env` shape (string keys) — `@types/bun` has no ProcessEnv export. */
+type ProcessEnv = Record<string, string | undefined>;
 
 const schema = schemas.schema;
 
 /** SQLite-family Drizzle client. */
-export type SqliteDb = BunSQLiteDatabase<typeof sqliteSchema>;
+export type SqliteDb = BunSQLiteDatabase<typeof schema>;
 /** Postgres / Neon Drizzle client. */
-export type PostgresDb = PostgresJsDatabase<typeof pgSchema>;
+export type PostgresDb = PostgresJsDatabase<typeof schema>;
 /** Turso (libSQL) Drizzle client. */
-export type TursoDb = LibSQLDatabase<typeof sqliteSchema>;
+export type TursoDb = LibSQLDatabase<typeof schema>;
 /** Turso HTTP (Worker) Drizzle client. */
-export type TursoWorkerDb = LibSQLDatabase<typeof sqliteSchema>;
+export type TursoWorkerDb = LibSQLDatabase<typeof schema>;
 /** Cloudflare D1 Drizzle client. */
-export type D1Db = DrizzleD1Database<typeof sqliteSchema>;
+export type D1Db = DrizzleD1Database<typeof schema>;
 /** Neon Hyperdrive Drizzle client. */
-export type NeonDb = PostgresJsDatabase<typeof pgSchema>;
+export type NeonDb = PostgresJsDatabase<typeof schema>;
 /** The union of all dialect Drizzle clients `createClient()` can return. */
 export type DialectDb = SqliteDb | D1Db | TursoDb | PostgresDb | NeonDb;
 
@@ -96,9 +98,11 @@ function loadDevEnvIntoProcess(): void {
  */
 /**
  * A Bun/Node `process.env`-style object (string keys) — e.g. `process.env`, a
- * `.env` object, or the string bindings on a Worker env.
+ * `.env` object, or the string bindings on a Worker env. Intersected with the
+ * Worker bindings so both free-form env keys (`env["DATABASE_URL"]`, …) and
+ * typed bindings (`env.DB`, `env.HYPERDRIVE`) are accessible.
  */
-type ClientEnv = ProcessEnv | CloudflareBindings;
+type ClientEnv = Record<string, string | undefined> & Partial<CloudflareBindings>;
 
 export async function createClient(
 	env: ClientEnv = process.env,
@@ -191,9 +195,23 @@ export async function createClient(
 			};
 		}
 		case "d1": {
-			const { drizzle } = await import("drizzle-orm/d1");
-			const db = drizzle(env.DB, { schema }) as D1Db;
-			return { db, close: async () => {} };
+			if (isDev || !env["DB"]) {
+				const [{ Database }, { drizzle }] = await Promise.all([
+					import("bun:sqlite"),
+					import("drizzle-orm/bun-sqlite"),
+				]);
+				const url = (env as ProcessEnv)["DATABASE_URL"] ?? "sqlite.db";
+				const c = new Database(url);
+				c.exec("PRAGMA journal_mode = WAL;");
+				c.exec("PRAGMA foreign_keys = ON;");
+				c.exec("PRAGMA busy_timeout = 5000;");
+				const db = drizzle(c, { schema }) as SqliteDb;
+				return { db, close: async () => {} };
+			} else {
+				const { drizzle } = await import("drizzle-orm/d1");
+				const db = drizzle(env["DB"] as D1Database, { schema }) as D1Db;
+				return { db, close: async () => {} };
+			}
 		}
 		case "sqlite":
 		default: {
@@ -201,7 +219,7 @@ export async function createClient(
 				import("bun:sqlite"),
 				import("drizzle-orm/bun-sqlite"),
 			]);
-			const url = env["DATABASE_URL"] ?? "sqlite.db";
+			const url = (env as ProcessEnv)["DATABASE_URL"] ?? "sqlite.db";
 			const c = new Database(url);
 			c.exec("PRAGMA journal_mode = WAL;");
 			c.exec("PRAGMA foreign_keys = ON;");
