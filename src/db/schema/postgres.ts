@@ -8,7 +8,7 @@
  * - a `CHECK` constraint on `release_year` (the first feature film was 1888)
  *
  * The exposed column set and Zod schemas mirror the SQLite variant so the
- * storage-agnostic `MoviesRepo` / routes keep a single API surface.
+ * storage-agnostic `TableRepo` / routes keep a single API surface.
  */
 
 import { sql } from "drizzle-orm";

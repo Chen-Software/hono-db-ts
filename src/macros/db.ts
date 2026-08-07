@@ -64,6 +64,16 @@ export function isPostgres(): boolean {
 	return dialect() === "postgres";
 }
 
+/**
+ * Whether the build targets a Postgres-family dialect (Postgres locally or
+ * Neon in the Worker). Inlined at build time so `createRepos` can pick the
+ * right repo family with no runtime branch.
+ */
+export function isPg(): boolean {
+	const d = dialect();
+	return d === "postgres" || d === "neon";
+}
+
 /** Whether the build targets the Neon (serverless Postgres) dialect. */
 export function isNeon(): boolean {
 	return dialect() === "neon";
