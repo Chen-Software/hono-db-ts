@@ -24,12 +24,14 @@ import { resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { dbDialect } from "../src/macros/db-dialect" with { type: "macro" };
-import { client, type DbClient } from "../src/db/client";
-import type { TursoDb } from "../src/db/turso-client";
-import type { PostgresDb } from "../src/db/postgres-client";
-import type { SqliteDb } from "../src/db/sqlite-client";
-import { movies as moviesSqlite } from "../src/db/schema/sqlite";
-import { movies as moviesPostgres } from "../src/db/schema/postgres";
+import {
+	client,
+	type DbClient,
+	type PostgresDb,
+	type SqliteDb,
+	type TursoDb,
+} from "../src/db/client";
+import { schemas } from "../src/db/schema";
 
 const isDev = process.argv.includes("--dev");
 
@@ -92,7 +94,7 @@ function seedRemoteD1(rows: { title: string; releaseYear: number }[]): void {
 	// Generate the INSERT statement for the D1 schema via Drizzle's `toSQL()`,
 	// then inline the bound parameters into a single executable SQL string.
 	const db = drizzle(new Database(":memory:"));
-	const { sql, params } = db.insert(moviesSqlite).values(rows).toSQL();
+	const { sql, params } = db.insert(schemas.movies).values(rows).toSQL();
 
 	let i = 0;
 	const sqlWithValues = sql.replace(/\?/g, () =>
@@ -133,7 +135,7 @@ switch (dialect) {
 		// Local SQLite (sqlite, or d1 in --dev via .env.dev.d1 -> sqlite).
 		const { db, close } = client as DbClient<SqliteDb>;
 		try {
-			await db.insert(moviesSqlite).values(seedRows);
+			await db.insert(schemas.movies).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -150,7 +152,7 @@ switch (dialect) {
 		// d1 + --dev → local sqlite via .env.dev.d1 (sets DATABASE_TYPE=sqlite).
 		const { db, close } = client as DbClient<SqliteDb>;
 		try {
-			await db.insert(moviesSqlite).values(seedRows);
+			await db.insert(schemas.movies).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -162,7 +164,7 @@ switch (dialect) {
 		ensureTursoToken();
 		const { db, close } = client as DbClient<TursoDb>;
 		try {
-			await db.insert(moviesSqlite).values(seedRows);
+			await db.insert(schemas.movies).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -175,7 +177,7 @@ switch (dialect) {
 	case "neon": {
 		const { db, close } = client as DbClient<PostgresDb>;
 		try {
-			await db.insert(moviesPostgres).values(seedRows);
+			await db.insert(schemas.movies).values(seedRows);
 		} finally {
 			await close();
 		}
