@@ -111,7 +111,7 @@ export async function createClient(
 		case "turso": {
 			const [{ createClient: createLibsqlClient }, { drizzle }] =
 				await Promise.all([
-					import("@libsql/client/http"),
+					import("@libsql/client"),
 					import("drizzle-orm/libsql"),
 				]);
 
@@ -120,8 +120,7 @@ export async function createClient(
 				env["TURSO_DB_URL"] ??
 				`file:///${process.cwd()}/tursodb.db`;
 			const authToken = env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
-			const httpUrl = url.replace(/^libsql:\/\//, "https://");
-			const c = createLibsqlClient({ url: httpUrl, authToken });
+			const c = createLibsqlClient({ url, authToken });
 			const db = drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
 			const handle = (
 				db as { $client?: { close?: () => void | Promise<void> } }
