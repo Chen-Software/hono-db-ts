@@ -14,7 +14,8 @@
 		"@biomejs/biome": "latest",
 		"@ttsc/unplugin": "^0.25.0",
 		"@types/bun": "latest",
-		"ttsc": "^0.25.0"
+		"ttsc": "^0.25.0",
+		"uuid": "^14.0.1"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.2"
