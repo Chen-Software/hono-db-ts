@@ -32,7 +32,7 @@ import * as neonWorker from "./neon";
 import * as postgresWorker from "./postgres";
 import * as sqliteWorker from "./sqlite";
 import * as tursoWorker from "./turso";
-import { type TableRepo } from "@/repo/repos";
+import { type Repos } from "@/repo/repos";
 
 function getWorker() {
 	switch (dialect()) {
@@ -56,16 +56,18 @@ export default worker;
 
 /**
  * Build the Cloudflare Worker module (`{ fetch }`) from a repo factory.
-
  */
-export function createWorker() {
+export function createWorker(
+	createReposFromEnv: (env: CloudflareBindings) => Repos | Promise<Repos>,
+) {
 	return {
 		async fetch(
 			request: Request,
 			env: CloudflareBindings,
 			ctx: ExecutionContext,
 		) {
-			return createApp().fetch(request, env, ctx);
+			const repos = await createReposFromEnv(env);
+			return createApp(repos).fetch(request, env, ctx);
 		},
 	};
 }
