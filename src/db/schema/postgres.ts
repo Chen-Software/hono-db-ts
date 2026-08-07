@@ -76,3 +76,10 @@ export const movieIdSchema = z.coerce
 
 /** Named-schema object for `drizzle(..., { schema })`. */
 export const schema = { movies };
+
+export const validators = {
+	movieIdSchema,
+	movieSelectSchema,
+	movieInsertSchema,
+	movieUpdateSchema,
+};
