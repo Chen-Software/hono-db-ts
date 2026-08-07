@@ -8,12 +8,11 @@
  *
  * Emits to `dist/`:
  *   - `dist/main.js` — local Bun server entry (`src/main.ts`, target `bun`).
- *   - `dist/worker-entry.js` — a generated Worker entry that statically imports
- *     **only the active backend** factory (resolved at build time via the
- *     `src/macros/db-worker.ts` macro). `wrangler.jsonc` points `main` at this
- *     file; Wrangler bundles it with esbuild so the result is Workers-runtime
- *     compatible (Bun's own `browser`/`node` targets are not), while still
- *     shipping just one backend.
+ *   - `dist/worker.js` — the Cloudflare Worker bundle (`src/worker.ts`,
+ *     target `node`). `src/worker/index.ts` resolves the active backend at
+ *     build time via the `dialect` macro; `wrangler.jsonc` points `main` at
+ *     this file. Wrangler uploads the prebuilt bundle — it must NOT re-bundle
+ *     it with esbuild, which can't run Bun macros.
  *
  * The Worker is therefore **not** bundled by Bun here — Bun runs the macro to
  * pick the backend, and Wrangler does the actual Workers-compatible bundle.
