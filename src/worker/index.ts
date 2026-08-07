@@ -32,6 +32,7 @@ import * as neonWorker from "./neon";
 import * as postgresWorker from "./postgres";
 import * as sqliteWorker from "./sqlite";
 import * as tursoWorker from "./turso";
+import type { TableRepo } from "@/repo/repos";
 
 function getWorker() {
 	switch (dialect()) {
@@ -57,9 +58,10 @@ export default worker;
 /**
  * Build the Cloudflare Worker module (`{ fetch }`) from a repo factory.
  * @param buildRepo builds the movies repo from the Worker bindings.
+ * @param buildRepo builds the repo from the Worker bindings.
  */
 export function createWorker(
-	buildRepo: (env: CloudflareBindings) => MoviesRepo,
+	buildRepo: (env: CloudflareBindings) => TableRepo,
 ) {
 	return {
 		async fetch(
