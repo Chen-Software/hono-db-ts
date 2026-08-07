@@ -2,8 +2,10 @@ import { eq } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { movies as moviesSqlite } from "../db/schema";
+import { schemas } from "../db/schema";
 import * as pgSchema from "../db/schema/postgres";
+
+const {movies} = schemas;
 
 export type Movie = InferSelectModel<typeof moviesSqlite>;
 

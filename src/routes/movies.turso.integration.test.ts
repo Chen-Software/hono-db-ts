@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
 import { createTursoClient } from "../db/turso-client";
-import { movies } from "../db/schema";
+import { schemas } from "../db/schema";
 import { createSqliteMoviesRepo } from "../repo/movies-repo";
+
+const { movies } = schemas;
 
 /**
  * Turso endpoint tests.
