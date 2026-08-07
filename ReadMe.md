@@ -1,3 +1,3 @@
-# CLI Project
+# Data Modelling Starter
 
-A Bun-based CLI starter template.
+This is a TypeScript-first validation and data modelling starter.
