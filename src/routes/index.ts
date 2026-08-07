@@ -1,7 +1,11 @@
-import type { Hono } from "hono";
+import type { Hono as HonoApp } from "hono";
 import * as movies from "./movies";
-import { repos, type Repos } from "@/repo/repos";
+import { repos } from "@/repo/repos";
 
-export function createAllRoutes(app: Hono) {
-	repos["movies"] && movies.createRoutes(app, repos["movies"]);
+export function createAllRoutes(app: HonoApp) {
+	if (repos["movies"]) {
+		// Mount the movies CRUD routes under /movies, matching the documented
+		// API surface (src/routes/movies.ts registers "/" and "/:id" on a sub-app).
+		app.route("/movies", movies.createRoutes(app, repos["movies"]));
+	}
 }
