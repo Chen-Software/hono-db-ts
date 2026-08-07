@@ -61,7 +61,7 @@ export type D1Db = DrizzleD1Database<typeof sqliteSchema>;
 /** Neon Hyperdrive Drizzle client. */
 export type NeonDb = PostgresJsDatabase<typeof pgSchema>;
 /** The union of all dialect Drizzle clients `createClient()` can return. */
-export type DialectDb = SqliteDb| D1Db | TursoDb | PostgresDb | NeonDb;
+export type DialectDb = SqliteDb | D1Db | TursoDb | PostgresDb | NeonDb;
 
 /** A connected Drizzle client with a generic cleanup helper. */
 export interface DbClient<TDb extends DialectDb = DialectDb> {
@@ -69,24 +69,6 @@ export interface DbClient<TDb extends DialectDb = DialectDb> {
 	db: TDb;
 	/** Close the underlying driver connection (async-safe; no-op for sqlite). */
 	close: () => Promise<void>;
-}
-
-// ─── Factory functions (used by Worker, tests, CLI) ──────────────────────────
-
-/**
- * Build a SQLite client (local `bun:sqlite`).
- * Async because the `bun:sqlite` driver is loaded lazily for tree-shaking.
- */
-export async function createSqliteClient(url: string): Promise<SqliteDb> {
-	const [{ Database }, { drizzle }] = await Promise.all([
-		import("bun:sqlite"),
-		import("drizzle-orm/bun-sqlite"),
-	]);
-	const c = new Database(url);
-	c.exec("PRAGMA journal_mode = WAL;");
-	c.exec("PRAGMA foreign_keys = ON;");
-	c.exec("PRAGMA busy_timeout = 5000;");
-	return drizzle(c, { schema: sqliteSchema }) as SqliteDb;
 }
 
 /** Build a Postgres client (`postgres-js`). Async for tree-shaking. */
@@ -102,13 +84,6 @@ export async function createPostgresClient(
 	return drizzle(c, { schema: pgSchema }) as PostgresDb;
 }
 
-
-
-/** Build a Cloudflare D1 client from the Worker's `D1Database` binding. */
-export async function createD1Client(d1: D1Database): Promise<D1Db> {
-	const { drizzle } = await import("drizzle-orm/d1");
-	return drizzle(d1, { schema: sqliteSchema }) as D1Db;
-}
 
 // ─── Unified client (local / CLI, from .env) ─────────────────────────────────
 
@@ -146,11 +121,9 @@ export async function createClient(
 		loadDevEnvIntoProcess();
 	}
 
-	const dialect = dbDialect();
-
-	switch (dialect) {
+	switch (dialect()) {
 		case "turso": {
-			const [{ createClient }, { drizzle }] = await Promise.all([
+			const [{ createClient: createLibsqlClient }, { drizzle }] = await Promise.all([
 				import("@libsql/client/http"),
 				import("drizzle-orm/libsql"),
 			]);
@@ -161,7 +134,7 @@ export async function createClient(
 				`file:///${process.cwd()}/tursodb.db`;
 			const authToken = env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
 			const httpUrl = url.replace(/^libsql:\/\//, "https://");
-			const c = createClient({ url: httpUrl, authToken });
+			const c = createLibsqlClient({ url: httpUrl, authToken });
 			const db = drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
 			const handle = (
 				db as { $client?: { close?: () => void | Promise<void> } }
@@ -211,13 +184,23 @@ export async function createClient(
 				},
 			};
 		}
+		case "d1": {
+			const { drizzle } = await import("drizzle-orm/d1");
+			const db = drizzle(env.DB, { schema: sqliteSchema }) as D1Db;
+			return { db, close: async () => {} };
+		}
 		case "sqlite":
-		case "d1":
 		default: {
-			// sqlite (and d1 without a binding — local dev) use the local sqlite client.
-			const db = await createSqliteClient(
-				process.env["DATABASE_URL"] ?? "sqlite.db",
-			);
+			const [{ Database }, { drizzle }] = await Promise.all([
+				import("bun:sqlite"),
+				import("drizzle-orm/bun-sqlite"),
+			]);
+			const url = env["DATABASE_URL"] ?? "sqlite.db";
+			const c = new Database(url);
+			c.exec("PRAGMA journal_mode = WAL;");
+			c.exec("PRAGMA foreign_keys = ON;");
+			c.exec("PRAGMA busy_timeout = 5000;");
+			const db = drizzle(c, { schema: sqliteSchema }) as SqliteDb;
 			return { db, close: async () => {} };
 		}
 	}
@@ -226,9 +209,3 @@ export async function createClient(
 /** The pre-built client for the active dialect (use directly; no factory). */
 export const client = await createClient();
 
-/**
- * A concrete SQLite client for SQLite-specific consumers (the local repo, seed,
- * and tests). Always targets the local `sqlite.db` file regardless of the active
- * dialect's `DATABASE_URL`.
- */
-export const sqliteDb = await createSqliteClient("sqlite.db");

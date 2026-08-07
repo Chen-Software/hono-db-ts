@@ -8,15 +8,15 @@
  * It does NOT use `src/db/client.ts` — that module targets the Bun/local
  * runtime (`bun:sqlite`, Bun macros) which Wrangler/esbuild cannot bundle.
  */
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "../db/schema";
-import { createSqliteMoviesRepo } from "../repo/movies-repo";
+import { schemas } from "../db/schema";
+import { createRepos, type Repos, type SqliteRepoDb } from "../repo/repos";
 import { createWorker } from "./index";
+import { createClient } from "@/db";
 
-export default createWorker(createRepoFromEnv);
+export default createWorker(createReposFromEnv);
 
-/** Build the D1 repo from the Worker's D1 binding. */
-export function createRepoFromEnv(env: CloudflareBindings) {
-	const db = drizzle(env.DB, { schema });
-	return createSqliteMoviesRepo(db);
+/** Build all repos (movies, directors, …) from the Worker's D1 binding. */
+export function createReposFromEnv(env: CloudflareBindings): Repos {
+	const db = createClient(env);
+	return createRepos(db as unknown as SqliteRepoDb, schemas.schema);
 }
