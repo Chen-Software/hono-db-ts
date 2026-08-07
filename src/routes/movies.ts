@@ -1,15 +1,18 @@
-import type { Context, Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { schemas } from "../db/schema";
 import type { TableRepo } from "../repo/repos";
 
 const { movieIdSchema, movieInsertSchema, movieUpdateSchema } = schemas;
 
 /**
- * Create the /movies REST routes bound to a movies repository.
+ * Create the /movies REST routes bound to a movies repository, returned as a
+ * standalone sub-app ready to be mounted (e.g. under `/movies`).
  * Storage-agnostic — works with both the local bun:sqlite driver and Cloudflare D1.
  * Request/response payloads are validated with zod schemas derived from the Drizzle table.
  */
-export function createRoutes(app: Hono, repo: TableRepo) {
+export function createRoutes(repo: TableRepo) {
+	const app = new Hono();
+
 	// GET /movies — list all movies
 	app.get("/", async (c: Context) => {
 		const result = await repo.list();

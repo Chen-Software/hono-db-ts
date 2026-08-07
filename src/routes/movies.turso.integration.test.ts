@@ -3,7 +3,6 @@ import type { Hono } from "hono";
 import { createApp } from "../app";
 import { schemas } from "../db/schema";
 
-
 const { movies } = schemas;
 
 /**
@@ -24,8 +23,7 @@ beforeAll(() => {
 	app = createApp();
 });
 
-afterAll(async () => {
-});
+afterAll(async () => {});
 
 // ——— GET /movies ———
 
