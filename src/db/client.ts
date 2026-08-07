@@ -142,25 +142,31 @@ export async function createClient(
 				| undefined;
 			const url =
 				hyperdrive?.connectionString ?? process.env["DATABASE_URL"] ?? "";
-			const [{ default: postgres },{neon}, { drizzle }] = await Promise.all([
-				import("postgres"), import("@neondatabase/serverless"),
-				import("drizzle-orm/postgres-js"),
-			]);
+			const [{ default: postgres }, { neon }, { drizzle }] =
+				await Promise.all([
+					import("postgres"),
+					import("@neondatabase/serverless"),
+					import("drizzle-orm/postgres-js"),
+				]);
 			if (isDev) {
-
-			const c = postgres(url, { max: 1 });
-			const db = drizzle(c, { schema }) as PostgresDb;
-			const handle = (db as { $client?: { end?: () => Promise<void> } })
-				.$client;
-			return {
-				db,
-				close: async () => {
-					if (handle?.end) await handle.end();
-				},
-			};
-		} else {
-			const sql = neon(env["DATABASE_URL"]!);
- 			const db = drizzle(sql, { schema });
+				const c = postgres(url, { max: 1 });
+				const db = drizzle(c, { schema }) as PostgresDb;
+				const handle = (
+					db as { $client?: { end?: () => Promise<void> } }
+				).$client;
+				return {
+					db,
+					close: async () => {
+						if (handle?.end) await handle.end();
+					},
+				};
+			}
+			// Worker / prod: Neon's HTTP driver works inside Cloudflare Workers
+			// (postgres-js's TCP connection does not). Prefer the Hyperdrive
+			// connection string when the binding is present.
+			const { drizzle: neonDrizzle } = await import("drizzle-orm/neon-http");
+			const sql = neon(hyperdrive?.connectionString ?? env["DATABASE_URL"]!);
+			const db = neonDrizzle(sql, { schema }) as unknown as NeonDb;
 			return { db, close: async () => {} };
 		}
 		case "postgres": {
