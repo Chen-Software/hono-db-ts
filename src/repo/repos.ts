@@ -116,7 +116,10 @@ function sqliteTableRepo(db: SqliteRepoDb, table: AnyTableWithId): TableRepo {
 				.where(eq(idColumn as never, id))
 				.get();
 			if (!existing) return false;
-			await db.delete(t).where(eq(idColumn as never, id)).run();
+			await db
+				.delete(t)
+				.where(eq(idColumn as never, id))
+				.run();
 			return true;
 		},
 	};
@@ -131,7 +134,10 @@ function pgTableRepo(db: PgRepoDb, table: AnyTableWithId): TableRepo {
 			return db.select().from(t) as Promise<Row[]>;
 		},
 		async get(id) {
-			const [row] = await db.select().from(t).where(eq(idColumn as never, id));
+			const [row] = await db
+				.select()
+				.from(t)
+				.where(eq(idColumn as never, id));
 			return (row as Row | undefined) ?? null;
 		},
 		async create(input) {
