@@ -32,23 +32,21 @@
  *     falls back to the local `bun:sqlite` client for local/CLI use.
  */
 
-import { dbDialect } from "../macros/db-dialect" with { type: "macro" };
-import {
-	devEnvFile,
-	loadEnvFile,
-} from "../macros/dev-env" with { type: "macro" };
+import { dialect } from "../macros/db" with { type: "macro" };
+import { devEnvFile, loadEnvFile } from "../macros/dev-env" with {
+	type: "macro",
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 // Type-only imports (erased at runtime) — they do NOT pull the drivers in.
-import type {
-	BunSQLiteDatabase,
-} from "drizzle-orm/bun-sqlite";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as pgSchema from "./schema/postgres";
 import * as sqliteSchema from "./schema/sqlite";
+import type { ProcessEnv } from "bun";
 
 /** SQLite-family Drizzle client. */
 export type SqliteDb = BunSQLiteDatabase<typeof sqliteSchema>;
@@ -60,9 +58,10 @@ export type TursoDb = LibSQLDatabase<typeof sqliteSchema>;
 export type TursoWorkerDb = LibSQLDatabase<typeof sqliteSchema>;
 /** Cloudflare D1 Drizzle client. */
 export type D1Db = DrizzleD1Database<typeof sqliteSchema>;
-
+/** Neon Hyperdrive Drizzle client. */
+export type NeonDb = PostgresJsDatabase<typeof pgSchema>;
 /** The union of all dialect Drizzle clients `createClient()` can return. */
-export type DialectDb = TursoDb | PostgresDb | SqliteDb;
+export type DialectDb = SqliteDb| D1Db | TursoDb | PostgresDb | NeonDb;
 
 /** A connected Drizzle client with a generic cleanup helper. */
 export interface DbClient<TDb extends DialectDb = DialectDb> {
@@ -103,42 +102,7 @@ export async function createPostgresClient(
 	return drizzle(c, { schema: pgSchema }) as PostgresDb;
 }
 
-/**
- * Build a Turso client (`@libsql/client`, local or cloud).
- * Async for tree-shaking.
- */
-export async function createTursoClient(opts: {
-	url: string;
-	authToken?: string;
-}): Promise<TursoDb> {
-	const [{ createClient }, { drizzle }] = await Promise.all([
-		import("@libsql/client"),
-		import("drizzle-orm/libsql"),
-	]);
-	const c = createClient({
-		url: opts.url,
-		...(opts.authToken ? { authToken: opts.authToken } : {}),
-	});
-	return drizzle(c, { schema: sqliteSchema }) as TursoDb;
-}
 
-/**
- * Build a Turso client for the Worker. Uses the HTTP build
- * (`@libsql/client/http`) pointed at Turso's HTTPS endpoint; `libsql://` URLs
- * are rewritten to `https://`. Async for tree-shaking.
- */
-export async function createTursoWorkerClient(
-	url: string,
-	authToken: string,
-): Promise<TursoWorkerDb> {
-	const [{ createClient }, { drizzle }] = await Promise.all([
-		import("@libsql/client/http"),
-		import("drizzle-orm/libsql"),
-	]);
-	const httpUrl = url.replace(/^libsql:\/\//, "https://");
-	const c = createClient({ url: httpUrl, authToken });
-	return drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
-}
 
 /** Build a Cloudflare D1 client from the Worker's `D1Database` binding. */
 export async function createD1Client(d1: D1Database): Promise<D1Db> {
@@ -147,6 +111,12 @@ export async function createD1Client(d1: D1Database): Promise<D1Db> {
 }
 
 // ─── Unified client (local / CLI, from .env) ─────────────────────────────────
+
+/** Resolve the Postgres pool size from `DATABASE_POOL_SIZE` (default 10). */
+function poolSize(): number {
+	const raw = Number(process.env["DATABASE_POOL_SIZE"] ?? 10);
+	return Number.isFinite(raw) && raw > 0 ? raw : 10;
+}
 
 /** Load the local dev env (`.env.dev.<type>`) into `process.env`. */
 function loadDevEnvIntoProcess(): void {
@@ -162,7 +132,15 @@ function loadDevEnvIntoProcess(): void {
  * (dev) or the remote client (production) from the environment. Only the active
  * dialect's driver is loaded (dynamic `import()` → tree-shaken).
  */
-export async function createClient(env = process.env): Promise<DbClient> {
+/**
+ * A Bun/Node `process.env`-style object (string keys) — e.g. `process.env`, a
+ * `.env` object, or the string bindings on a Worker env.
+ */
+type ClientEnv = ProcessEnv | CloudflareBindings;
+
+export async function createClient(
+	env: ClientEnv = process.env,
+): Promise<DbClient> {
 	// Development auto-loads the matching local dev env; production uses `.env`.
 	if (env["NODE_ENV"] === "development") {
 		loadDevEnvIntoProcess();
@@ -172,15 +150,22 @@ export async function createClient(env = process.env): Promise<DbClient> {
 
 	switch (dialect) {
 		case "turso": {
+			const [{ createClient }, { drizzle }] = await Promise.all([
+				import("@libsql/client/http"),
+				import("drizzle-orm/libsql"),
+			]);
+
 			const url =
 				env["TURSO_URL"] ??
 				env["TURSO_DB_URL"] ??
 				`file:///${process.cwd()}/tursodb.db`;
-			const authToken =
-				env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
-			const db = await createTursoClient({ url, authToken });
-			const handle = (db as { $client?: { close?: () => void | Promise<void> } })
-				.$client;
+			const authToken = env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
+			const httpUrl = url.replace(/^libsql:\/\//, "https://");
+			const c = createClient({ url: httpUrl, authToken });
+			const db = drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
+			const handle = (
+				db as { $client?: { close?: () => void | Promise<void> } }
+			).$client;
 			return {
 				db,
 				close: async () => {
@@ -191,17 +176,19 @@ export async function createClient(env = process.env): Promise<DbClient> {
 		case "neon": {
 			// Neon uses Hyperdrive (the Worker binding) when available, falling
 			// back to a plain `DATABASE_URL` for local/CLI runs.
-			const hyperdrive = env["HYPERDRIVE"] as
+			const hyperdrive = env["HYPERDRIVE"] as unknown as
 				| { connectionString?: string }
 				| undefined;
-			const url = hyperdrive?.connectionString ?? process.env["DATABASE_URL"] ?? "";
+			const url =
+				hyperdrive?.connectionString ?? process.env["DATABASE_URL"] ?? "";
 			const [{ default: postgres }, { drizzle }] = await Promise.all([
 				import("postgres"),
 				import("drizzle-orm/postgres-js"),
 			]);
 			const c = postgres(url, { max: 1 });
 			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
-			const handle = (db as { $client?: { end?: () => Promise<void> } }).$client;
+			const handle = (db as { $client?: { end?: () => Promise<void> } })
+				.$client;
 			return {
 				db,
 				close: async () => {
@@ -214,9 +201,7 @@ export async function createClient(env = process.env): Promise<DbClient> {
 				process.env["DATABASE_URL"] ??
 				process.env["DATABASE_URL_UNPOOLED"] ??
 				"postgres://postgres:postgres@localhost:5432/mydb";
-			const rawPool = Number(process.env["DATABASE_POOL_SIZE"] ?? 10);
-			const poolSize = Number.isFinite(rawPool) && rawPool > 0 ? rawPool : 10;
-			const db = await createPostgresClient(url, poolSize);
+			const db = await createPostgresClient(url, poolSize());
 			const handle = (db as { $client?: { end?: () => Promise<void> } })
 				.$client;
 			return {
