@@ -15,7 +15,44 @@
  */
 
 import { createApp } from "../app";
-import type { MoviesRepo } from "../repo/movies-repo";
+
+/**
+ * Cloudflare Worker entry point.
+ *
+ * Bundled by Bun (`scripts/build.ts`) — not by Wrangler. The `db-worker` macro
+ * runs at build time and inlines the dialect-specific module specifier (e.g.
+ * `"./worker/neon"`), so only one backend ships in the final bundle.
+ *
+ * Wrangler uploads the pre-built `dist/worker.js` (`wrangler.jsonc` -> `main`).
+ */
+
+import { dialect } from "./macros/db";
+import * as d1Worker from "./d1";
+import * as neonWorker from "./neon";
+import * as postgresWorker from "./postgres";
+import * as sqliteWorker from "./sqlite";
+import * as tursoWorker from "./turso";
+
+function getWorker() {
+	switch (dialect()) {
+		case "neon":
+			return neonWorker;
+		case "postgres":
+			return postgresWorker;
+		case "turso":
+			return tursoWorker;
+		case "d1":
+			return d1Worker;
+		case "sqlite":
+		default:
+			return sqliteWorker;
+	}
+}
+
+const worker = getWorker();
+
+export default worker;
+
 
 /**
  * Build the Cloudflare Worker module (`{ fetch }`) from a repo factory.
