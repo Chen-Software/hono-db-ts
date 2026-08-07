@@ -12,9 +12,13 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
-		"@types/bun": "latest"
+		"@types/bun": "latest",
+		"ttsc": "^0.25.0"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"typia": "^13.2.0"
 	}
 }
