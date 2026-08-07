@@ -44,9 +44,10 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import * as pgSchema from "./schema/postgres";
-import * as sqliteSchema from "./schema/sqlite";
+import { schemas } from "./schema";
 import type { ProcessEnv } from "bun";
+
+const schema = schemas.schema;
 
 /** SQLite-family Drizzle client. */
 export type SqliteDb = BunSQLiteDatabase<typeof sqliteSchema>;
@@ -103,7 +104,8 @@ export async function createClient(
 	env: ClientEnv = process.env,
 ): Promise<DbClient> {
 	// Development auto-loads the matching local dev env; production uses `.env`.
-	if (env["NODE_ENV"] === "development") {
+	const isDev = env["NODE_ENV"] === "development";
+	if (isDev) {
 		loadDevEnvIntoProcess();
 	}
 
@@ -121,7 +123,7 @@ export async function createClient(
 				`file:///${process.cwd()}/tursodb.db`;
 			const authToken = env["TURSO_AUTH_TOKEN"] ?? env["TURSO_TOKEN"];
 			const c = createLibsqlClient({ url, authToken });
-			const db = drizzle(c, { schema: sqliteSchema }) as TursoWorkerDb;
+			const db = drizzle(c, { schema }) as TursoWorkerDb;
 			const handle = (
 				db as { $client?: { close?: () => void | Promise<void> } }
 			).$client;
@@ -140,12 +142,14 @@ export async function createClient(
 				| undefined;
 			const url =
 				hyperdrive?.connectionString ?? process.env["DATABASE_URL"] ?? "";
-			const [{ default: postgres }, { drizzle }] = await Promise.all([
-				import("postgres"),
+			const [{ default: postgres },{neon}, { drizzle }] = await Promise.all([
+				import("postgres"), import("@neondatabase/serverless"),
 				import("drizzle-orm/postgres-js"),
 			]);
+			if (isDev) {
+
 			const c = postgres(url, { max: 1 });
-			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
+			const db = drizzle(c, { schema }) as PostgresDb;
 			const handle = (db as { $client?: { end?: () => Promise<void> } })
 				.$client;
 			return {
@@ -154,6 +158,10 @@ export async function createClient(
 					if (handle?.end) await handle.end();
 				},
 			};
+		} else {
+			const sql = neon(env["DATABASE_URL"]!);
+ 			const db = drizzle(sql, { schema });
+			return { db, close: async () => {} };
 		}
 		case "postgres": {
 			const [{ default: postgres }, { drizzle }] = await Promise.all([
@@ -165,7 +173,7 @@ export async function createClient(
 				process.env["DATABASE_URL_UNPOOLED"] ??
 				"postgres://postgres:postgres@localhost:5432/mydb";
 			const c = postgres(url, { max: poolSize(), prepare: false });
-			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
+			const db = drizzle(c, { schema }) as PostgresDb;
 
 			const handle = (db as { $client?: { end?: () => Promise<void> } })
 				.$client;
@@ -178,7 +186,7 @@ export async function createClient(
 		}
 		case "d1": {
 			const { drizzle } = await import("drizzle-orm/d1");
-			const db = drizzle(env.DB, { schema: sqliteSchema }) as D1Db;
+			const db = drizzle(env.DB, { schema }) as D1Db;
 			return { db, close: async () => {} };
 		}
 		case "sqlite":
@@ -192,7 +200,7 @@ export async function createClient(
 			c.exec("PRAGMA journal_mode = WAL;");
 			c.exec("PRAGMA foreign_keys = ON;");
 			c.exec("PRAGMA busy_timeout = 5000;");
-			const db = drizzle(c, { schema: sqliteSchema }) as SqliteDb;
+			const db = drizzle(c, { schema }) as SqliteDb;
 			return { db, close: async () => {} };
 		}
 	}
