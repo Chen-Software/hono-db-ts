@@ -71,20 +71,6 @@ export interface DbClient<TDb extends DialectDb = DialectDb> {
 	close: () => Promise<void>;
 }
 
-/** Build a Postgres client (`postgres-js`). Async for tree-shaking. */
-export async function createPostgresClient(
-	url: string,
-	poolSize: number,
-): Promise<PostgresDb> {
-	const [{ default: postgres }, { drizzle }] = await Promise.all([
-		import("postgres"),
-		import("drizzle-orm/postgres-js"),
-	]);
-	const c = postgres(url, { max: poolSize, prepare: false });
-	return drizzle(c, { schema: pgSchema }) as PostgresDb;
-}
-
-
 // ─── Unified client (local / CLI, from .env) ─────────────────────────────────
 
 /** Resolve the Postgres pool size from `DATABASE_POOL_SIZE` (default 10). */
@@ -123,10 +109,11 @@ export async function createClient(
 
 	switch (dialect()) {
 		case "turso": {
-			const [{ createClient: createLibsqlClient }, { drizzle }] = await Promise.all([
-				import("@libsql/client/http"),
-				import("drizzle-orm/libsql"),
-			]);
+			const [{ createClient: createLibsqlClient }, { drizzle }] =
+				await Promise.all([
+					import("@libsql/client/http"),
+					import("drizzle-orm/libsql"),
+				]);
 
 			const url =
 				env["TURSO_URL"] ??
@@ -170,11 +157,17 @@ export async function createClient(
 			};
 		}
 		case "postgres": {
+			const [{ default: postgres }, { drizzle }] = await Promise.all([
+				import("postgres"),
+				import("drizzle-orm/postgres-js"),
+			]);
 			const url =
 				process.env["DATABASE_URL"] ??
 				process.env["DATABASE_URL_UNPOOLED"] ??
 				"postgres://postgres:postgres@localhost:5432/mydb";
-			const db = await createPostgresClient(url, poolSize());
+			const c = postgres(url, { max: poolSize(), prepare: false });
+			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
+
 			const handle = (db as { $client?: { end?: () => Promise<void> } })
 				.$client;
 			return {
@@ -208,4 +201,3 @@ export async function createClient(
 
 /** The pre-built client for the active dialect (use directly; no factory). */
 export const client = await createClient();
-

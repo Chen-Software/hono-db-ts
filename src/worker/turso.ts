@@ -3,14 +3,17 @@
  * when `DATABASE_TYPE=turso` (via the `src/macros/db-worker.ts` macro), so the
  * Worker ships just this backend.
  */
-import { createTursoWorkerClient } from "../db/turso-worker-client";
-import { createSqliteMoviesRepo } from "../repo/movies-repo";
+import { createClient } from "../db/client";
+import { schemas } from "../db/schema";
+import { createRepos, type Repos, type SqliteRepoDb } from "../repo/repos";
 import { createWorker } from "./index";
 
-export default createWorker(createRepoFromEnv);
+export default createWorker(createReposFromEnv);
 
-/** Build the Turso repo from the Worker's Turso bindings. */
-export function createRepoFromEnv(env: CloudflareBindings) {
-	const db = createTursoWorkerClient(env.TURSO_URL, env.TURSO_AUTH_TOKEN);
-	return createSqliteMoviesRepo(db);
+/** Build all repos (movies, directors, …) from the Worker's Turso bindings. */
+export async function createReposFromEnv(
+	env: CloudflareBindings,
+): Promise<Repos> {
+	const db = (await createClient(env)) as unknown as SqliteRepoDb;
+	return createRepos(db, schemas.schema);
 }

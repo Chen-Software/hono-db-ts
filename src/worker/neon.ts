@@ -8,14 +8,15 @@
  */
 import { createClient } from "../db/client";
 import { schemas } from "../db/schema";
-import { createRepos, type Repos } from "../repo/repos";
+import { createRepos, type PgRepoDb, type Repos } from "../repo/repos";
 import { createWorker } from "./index";
 
 export default createWorker(createReposFromEnv);
 
 /** Build all repos (movies, directors, …) from the Worker's Hyperdrive binding. */
-export async function createReposFromEnv(env: CloudflareBindings): Promise<Repos> {
-	const db = await createClient(env);
-	// Neon is a Postgres client.
-	return createRepos(db, schemas.schema, true);
+export async function createReposFromEnv(
+	env: CloudflareBindings,
+): Promise<Repos> {
+	const db = (await createClient(env)) as unknown as PgRepoDb;
+	return createRepos(db, schemas.schema);
 }
