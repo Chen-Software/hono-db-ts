@@ -16,9 +16,7 @@ const { movies } = schemas;
  */
 
 const url =
-	process.env["TURSO_URL"] ??
-	process.env["TURSO_DB_URL"] ??
-	"file:tursodb.db"; // relative, single-colon form (relative to process CWD)
+	process.env["TURSO_URL"] ?? process.env["TURSO_DB_URL"] ?? "file:tursodb.db"; // relative, single-colon form (relative to process CWD)
 const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
 
 let app: Hono;

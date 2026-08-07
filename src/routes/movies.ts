@@ -10,7 +10,6 @@ const { movieIdSchema, movieInsertSchema, movieUpdateSchema } = schemas;
  * Request/response payloads are validated with zod schemas derived from the Drizzle table.
  */
 export function createRoutes(app: Hono, repo: TableRepo) {
-
 	// GET /movies — list all movies
 	app.get("/", async (c: Context) => {
 		const result = await repo.list();

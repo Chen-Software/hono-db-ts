@@ -62,10 +62,12 @@ export function buildWranglerConfig(
 	env: Record<string, string>,
 	overrides: Partial<Record<string, string>> = {},
 ): Config {
-	const val = (key: string) => overrides[key] || env[key] || process.env[key] || "";
+	const val = (key: string) =>
+		overrides[key] || env[key] || process.env[key] || "";
 	const dialect = (val("DATABASE_TYPE") || "d1").toLowerCase();
 	const isNeon = dialect === "neon";
-	const isTurso = dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
+	const isTurso =
+		dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
 	const d1Id = val("D1_DATABASE_ID");
 	const hdId = val("HYPERDRIVE_ID");
 	const tursoUrl = val("TURSO_URL");
@@ -115,8 +117,7 @@ export function buildWranglerConfig(
 							// so only the non-sensitive URL lives in vars.
 							vars: {
 								DATABASE_TYPE: dialectVar,
-								TURSO_URL:
-									tursoUrl || "REPLACE_WITH_YOUR_TURSO_URL",
+								TURSO_URL: tursoUrl || "REPLACE_WITH_YOUR_TURSO_URL",
 							},
 						},
 					},
@@ -159,13 +160,21 @@ export function generateWranglerConfig(): string[] {
 	// Only report missing keys that the ACTIVE dialect actually references.
 	// `TURSO_AUTH_TOKEN` is deliberately omitted even for turso: it's stored as a
 	// Cloudflare Worker secret (`wrangler secret put`), not in `.env`.
-	const dialect = (fileEnv["DATABASE_TYPE"] || process.env["DATABASE_TYPE"] || "d1")
-		.toLowerCase();
+	const dialect = (
+		fileEnv["DATABASE_TYPE"] ||
+		process.env["DATABASE_TYPE"] ||
+		"d1"
+	).toLowerCase();
 	const isNeon = dialect === "neon";
-	const isTurso = dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
+	const isTurso =
+		dialect === "turso" || dialect === "turso-cloud" || dialect === "tursodb";
 
 	const missing: string[] = [];
-	if (!isNeon && !isTurso && !(fileEnv["D1_DATABASE_ID"] || process.env["D1_DATABASE_ID"]))
+	if (
+		!isNeon &&
+		!isTurso &&
+		!(fileEnv["D1_DATABASE_ID"] || process.env["D1_DATABASE_ID"])
+	)
 		missing.push("D1_DATABASE_ID");
 	if (isNeon && !(fileEnv["HYPERDRIVE_ID"] || process.env["HYPERDRIVE_ID"]))
 		missing.push("HYPERDRIVE_ID");

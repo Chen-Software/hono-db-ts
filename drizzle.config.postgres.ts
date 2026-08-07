@@ -6,6 +6,7 @@ export default defineConfig({
 	out: "./drizzle/postgres",
 	// Connection URL comes from `DATABASE_URL` (prod `.env`) or the dev env.
 	dbCredentials: {
-		url: process.env["DATABASE_URL"] ?? process.env["DATABASE_URL_UNPOOLED"] ?? "",
+		url:
+			process.env["DATABASE_URL"] ?? process.env["DATABASE_URL_UNPOOLED"] ?? "",
 	},
 });

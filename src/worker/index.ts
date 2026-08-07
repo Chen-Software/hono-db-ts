@@ -54,7 +54,6 @@ const worker = getWorker();
 
 export default worker;
 
-
 /**
  * Build the Cloudflare Worker module (`{ fetch }`) from a repo factory.
 
@@ -66,7 +65,6 @@ export function createWorker() {
 			env: CloudflareBindings,
 			ctx: ExecutionContext,
 		) {
-
 			return createApp().fetch(request, env, ctx);
 		},
 	};
