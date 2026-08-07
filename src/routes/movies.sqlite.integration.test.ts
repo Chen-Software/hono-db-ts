@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
-import { sqliteDb as db } from "../db";
-import { movies } from "../db/schema";
-import { createSqliteMoviesRepo } from "../repo/movies-repo";
+import { client } from "../db";
+import { schemas } from "../db/schema";
+import { createRepos } from "../repo/repos";
 
 let app: Hono;
+const db = client.db as any;
+const { movies } = schemas;
 
 // Minimal JSON response shape returned by the API
 interface JsonMovie {
@@ -15,7 +17,8 @@ interface JsonMovie {
 }
 
 beforeAll(() => {
-	app = createApp(createSqliteMoviesRepo(db));
+	const repos = createRepos(db, schemas.schema);
+	app = createApp(repos);
 });
 
 // Reset the table between tests so runs are deterministic

@@ -9,14 +9,14 @@
  * runtime (`bun:sqlite`, Bun macros) which Wrangler/esbuild cannot bundle.
  */
 import { schemas } from "../db/schema";
-import { createRepos, type Repos, type SqliteRepoDb } from "../repo/repos";
+import { createRepos, type Repos } from "../repo/repos";
 import { createWorker } from "./index";
 import { createClient } from "@/db";
 
 export default createWorker(createReposFromEnv);
 
 /** Build all repos (movies, directors, …) from the Worker's D1 binding. */
-export function createReposFromEnv(env: CloudflareBindings): Repos {
-	const db = createClient(env);
-	return createRepos(db as unknown as SqliteRepoDb, schemas.schema);
+export async function createReposFromEnv(env: CloudflareBindings): Promise<Repos> {
+	const { db } = await createClient(env as any);
+	return createRepos(db, schemas.schema);
 }

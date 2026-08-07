@@ -8,7 +8,7 @@
  */
 import { createClient } from "../db/client";
 import { schemas } from "../db/schema";
-import { createRepos, type PgRepoDb, type Repos } from "../repo/repos";
+import { createRepos, type Repos } from "../repo/repos";
 import { createWorker } from "./index";
 
 export default createWorker(createReposFromEnv);
@@ -17,6 +17,6 @@ export default createWorker(createReposFromEnv);
 export async function createReposFromEnv(
 	env: CloudflareBindings,
 ): Promise<Repos> {
-	const db = (await createClient(env)) as unknown as PgRepoDb;
+	const { db } = await createClient(env as any);
 	return createRepos(db, schemas.schema);
 }

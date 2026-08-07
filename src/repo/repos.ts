@@ -27,7 +27,7 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { isPg } from "../macros/db" with { type: "macro" };
-import { client, type DialectDb } from "@/db";
+import { client } from "@/db";
 import { schemas } from "@/db/schema";
 
 /** A table with an `id` column (all our tables follow this convention). */
@@ -181,14 +181,14 @@ function pgTableRepo(db: PgRepoDb, table: AnyTableWithId): TableRepo {
  * @param schema The dialect schema object (table name -> table definition).
  */
 export function createRepos(
-	db: DialectDb,
+	db: any,
 	schema: Record<string, unknown>,
 ): Repos {
 	const repos: Repos = {};
 	for (const [name, table] of Object.entries(schema)) {
 		repos[name] = isPg()
-			? pgTableRepo(db as unknown as PgRepoDb, table as AnyTableWithId)
-			: sqliteTableRepo(db as unknown as SqliteRepoDb, table as AnyTableWithId);
+			? pgTableRepo(db, table as AnyTableWithId)
+			: sqliteTableRepo(db, table as AnyTableWithId);
 	}
 	return repos;
 }

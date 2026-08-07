@@ -1,19 +1,20 @@
 import { Hono } from "hono";
 import { createAllRoutes } from "./routes";
+import type { Repos } from "./repo/repos";
 
 /**
  * Build the Hono app, bound to a storage-agnostic movies repository.
  * Pure factory — no database, no environment, no macros. Imported by the local
  * Bun entry (`src/main.ts`), the Worker entry (`src/worker.ts`), and tests.
  */
-export function createApp() {
+export function createApp(repos?: Repos) {
 	const app = new Hono();
 
 	app.get("/", (c) => {
 		return c.text("Hello Hono!");
 	});
 
-	createAllRoutes(app);
+	createAllRoutes(app, repos);
 
 	return app;
 }

@@ -64,7 +64,7 @@ function resolveDb(url: string): { db: string; group: string } {
 		for (const row of list.split("\n")) {
 			const cols = row.trim().split(/\s+/);
 			if (cols[0] === process.env["TURSO_DB_NAME"] && cols.length >= 3) {
-				return { db: cols[0], group: cols[2] };
+				return { db: cols[0] as string, group: cols[2] as string };
 			}
 		}
 		throw new Error(
@@ -75,12 +75,12 @@ function resolveDb(url: string): { db: string; group: string } {
 	for (const row of list.split("\n")) {
 		const cols = row.trim().split(/\s+/);
 		if (cols.length >= 3 && cols[cols.length - 1] === url) {
-			return { db: cols[0], group: cols[2] };
+			return { db: cols[0] as string, group: cols[2] as string };
 		}
 	}
 	// Fall back to the pre-region host prefix as a last resort (group unknown).
 	const match = /libsql:\/\/([^.]+)\./.exec(url);
-	if (match) return { db: match[1], group: "" };
+	if (match) return { db: match[1] as string, group: "" };
 	throw new Error(`Cannot resolve Turso database for URL: ${url}`);
 }
 

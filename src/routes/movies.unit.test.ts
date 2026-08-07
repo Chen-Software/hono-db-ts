@@ -1,12 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
-import type {
-	CreateMovieInput,
-	Movie,
-	MoviesRepo,
-	UpdateMovieInput,
-} from "../repo/movies-repo";
+import { type TableRepo, type Row, type Repos } from "../repo/repos";
 
 /**
  * Unit tests for the /movies REST routes.
@@ -16,9 +11,15 @@ import type {
  * They run for every `bun run test` invocation regardless of DATABASE_TYPE.
  */
 
+interface Movie {
+	id: number;
+	title: string;
+	releaseYear: number | null;
+}
+
 /** In-memory MoviesRepo used to back the app in these tests. */
-class FakeMoviesRepo implements MoviesRepo {
-	private rows = new Map<number, Movie>();
+class FakeMoviesRepo implements TableRepo {
+	private rows = new Map<number, any>();
 	private nextId = 1;
 
 	seed(...movies: Movie[]): void {
@@ -26,32 +27,32 @@ class FakeMoviesRepo implements MoviesRepo {
 		this.nextId = Math.max(this.nextId, ...movies.map((m) => m.id)) + 1;
 	}
 
-	async list(): Promise<Movie[]> {
+	async list(): Promise<Row[]> {
 		return [...this.rows.values()];
 	}
 
-	async get(id: number): Promise<Movie | null> {
+	async get(id: number): Promise<Row | null> {
 		return this.rows.get(id) ?? null;
 	}
 
-	async create(input: CreateMovieInput): Promise<Movie> {
+	async create(input: Row): Promise<Row> {
 		// Mirror a real DB-backed insert: an omitted releaseYear reads back as
 		// null (the column is nullable), not undefined.
-		const movie: Movie = {
+		const movie = {
 			id: this.nextId++,
-			title: input.title,
-			releaseYear: input.releaseYear ?? null,
+			title: (input as any).title,
+			releaseYear: (input as any).releaseYear ?? null,
 		};
 		this.rows.set(movie.id, movie);
-		return movie;
+		return movie as Row;
 	}
 
-	async update(id: number, updates: UpdateMovieInput): Promise<Movie | null> {
+	async update(id: number, updates: Row): Promise<Row | null> {
 		const existing = this.rows.get(id);
 		if (!existing) return null;
-		const next: Movie = { ...existing, ...updates };
+		const next = { ...existing, ...(updates as any) };
 		this.rows.set(id, next);
-		return next;
+		return next as Row;
 	}
 
 	async remove(id: number): Promise<boolean> {
@@ -61,7 +62,8 @@ class FakeMoviesRepo implements MoviesRepo {
 
 function makeApp(): { app: Hono; repo: FakeMoviesRepo } {
 	const repo = new FakeMoviesRepo();
-	return { app: createApp(repo), repo };
+	const repos: Repos = { movies: repo };
+	return { app: createApp(repos), repo };
 }
 
 // JSON shape returned by the API for a single movie.

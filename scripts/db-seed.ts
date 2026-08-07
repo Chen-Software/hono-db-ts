@@ -32,6 +32,7 @@ import {
 	type TursoDb,
 } from "../src/db/client";
 import { schemas } from "../src/db/schema";
+import * as sqliteSchema from "../src/db/schema/sqlite";
 
 const isDev = process.argv.includes("--dev");
 
@@ -94,7 +95,7 @@ function seedRemoteD1(rows: { title: string; releaseYear: number }[]): void {
 	// Generate the INSERT statement for the D1 schema via Drizzle's `toSQL()`,
 	// then inline the bound parameters into a single executable SQL string.
 	const db = drizzle(new Database(":memory:"));
-	const { sql, params } = db.insert(schemas.movies).values(rows).toSQL();
+	const { sql, params } = db.insert(sqliteSchema.movies).values(rows).toSQL();
 
 	let i = 0;
 	const sqlWithValues = sql.replace(/\?/g, () =>
@@ -135,7 +136,7 @@ switch (dialect) {
 		// Local SQLite (sqlite, or d1 in --dev via .env.dev.d1 -> sqlite).
 		const { db, close } = client as DbClient<SqliteDb>;
 		try {
-			await db.insert(schemas.movies).values(seedRows);
+			await db.insert(schemas.movies as any).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -152,7 +153,7 @@ switch (dialect) {
 		// d1 + --dev → local sqlite via .env.dev.d1 (sets DATABASE_TYPE=sqlite).
 		const { db, close } = client as DbClient<SqliteDb>;
 		try {
-			await db.insert(schemas.movies).values(seedRows);
+			await db.insert(schemas.movies as any).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -164,7 +165,7 @@ switch (dialect) {
 		ensureTursoToken();
 		const { db, close } = client as DbClient<TursoDb>;
 		try {
-			await db.insert(schemas.movies).values(seedRows);
+			await db.insert(schemas.movies as any).values(seedRows);
 		} finally {
 			await close();
 		}
@@ -177,7 +178,7 @@ switch (dialect) {
 	case "neon": {
 		const { db, close } = client as DbClient<PostgresDb>;
 		try {
-			await db.insert(schemas.movies).values(seedRows);
+			await db.insert(schemas.movies as any).values(seedRows);
 		} finally {
 			await close();
 		}

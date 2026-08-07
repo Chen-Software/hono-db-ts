@@ -13,7 +13,7 @@
  */
 import { drizzle } from "drizzle-orm/d1";
 import { schemas } from "../db/schema";
-import { createRepos, type Repos, type SqliteRepoDb } from "../repo/repos";
+import { createRepos, type Repos } from "../repo/repos";
 import { createWorker } from "./index";
 
 export default createWorker(createReposFromEnv);
@@ -21,5 +21,5 @@ export default createWorker(createReposFromEnv);
 /** Build all repos (movies, directors, …) from the Worker's D1 binding. */
 export function createReposFromEnv(env: CloudflareBindings): Repos {
 	const db = drizzle(env.DB, { schema: schemas.schema });
-	return createRepos(db as unknown as SqliteRepoDb, schemas.schema);
+	return createRepos(db, schemas.schema);
 }

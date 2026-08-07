@@ -1,9 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
-import { schemas } from "../db/schema";
-
-const { movies } = schemas;
 
 /**
  * Turso endpoint tests.
@@ -12,10 +9,6 @@ const { movies } = schemas;
  * `DATABASE_TYPE` is the unified `turso`; TURSO_URL decides local (`file://`)
  * vs cloud (`libsql://`). Runs via `bun run test` when the active dialect is turso.
  */
-
-const url =
-	process.env["TURSO_URL"] ?? process.env["TURSO_DB_URL"] ?? "file:tursodb.db"; // relative, single-colon form (relative to process CWD)
-const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
 
 let app: Hono;
 

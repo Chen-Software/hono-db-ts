@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
-import type { PostgresDb } from "../db/postgres-client";
-import { createPostgresClient } from "../db/postgres-client";
-import * as pgSchema from "../db/schema/postgres";
-import { createPostgresMoviesRepo } from "../repo/movies-repo";
+import { client } from "../db";
+import { schemas } from "../db/schema";
+import { createRepos } from "../repo/repos";
 
 /**
  * Postgres endpoint tests.
@@ -20,10 +19,9 @@ import { createPostgresMoviesRepo } from "../repo/movies-repo";
  * a live DB; `bun run test` runs it only when the active dialect is postgres/neon.
  */
 
-const DEFAULT_PG_URL = "postgres://postgres:postgres@localhost:5432/mydb";
-
 let app: Hono;
-let db: PostgresDb;
+const db = client.db as any;
+const { movies } = schemas;
 
 // Minimal JSON response shape returned by the API
 interface JsonMovie {
@@ -33,14 +31,13 @@ interface JsonMovie {
 }
 
 beforeAll(() => {
-	const url = process.env["DATABASE_URL"] ?? DEFAULT_PG_URL;
-	db = createPostgresClient(url, 1);
-	app = createApp(createPostgresMoviesRepo(db));
+	const repos = createRepos(db, schemas.schema);
+	app = createApp(repos);
 });
 
 // Reset the table between runs so tests are deterministic.
 afterAll(async () => {
-	await db.delete(pgSchema.movies);
+	await db.delete(movies);
 });
 
 // ——— GET /movies ———
