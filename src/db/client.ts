@@ -188,14 +188,20 @@ export async function createClient(env = process.env): Promise<DbClient> {
 				},
 			};
 		}
-		case "neon":
-			{
-				const [{ default: postgres }, { drizzle }] = await Promise.all([
+		case "neon": {
+			// Neon uses Hyperdrive (the Worker binding) when available, falling
+			// back to a plain `DATABASE_URL` for local/CLI runs.
+			const hyperdrive = env["HYPERDRIVE"] as
+				| { connectionString?: string }
+				| undefined;
+			const url = hyperdrive?.connectionString ?? process.env["DATABASE_URL"] ?? "";
+			const [{ default: postgres }, { drizzle }] = await Promise.all([
 				import("postgres"),
 				import("drizzle-orm/postgres-js"),
 			]);
-			const c = postgres(env["HYPERDRIVE"]?.connectionString, { max: 1 });
+			const c = postgres(url, { max: 1 });
 			const db = drizzle(c, { schema: pgSchema }) as PostgresDb;
+			const handle = (db as { $client?: { end?: () => Promise<void> } }).$client;
 			return {
 				db,
 				close: async () => {
