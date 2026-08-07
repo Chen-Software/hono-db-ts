@@ -1,3 +1,3 @@
-# Artefact
+# Data Modelling Starter
 
-Artefacts are just data, the building blocks of the knowledge graph.
+This is a TypeScript-first validation and data modelling starter.
