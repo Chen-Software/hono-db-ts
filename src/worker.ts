@@ -9,17 +9,28 @@
  */
 
 import { dialect } from "./macros/db";
+import * as d1Worker from "./worker/d1";
+import * as neonWorker from "./worker/neon";
+import * as postgresWorker from "./worker/postgres";
+import * as sqliteWorker from "./worker/sqlite";
+import * as tursoWorker from "./worker/turso";
 
+function getWorker() {
 	switch (dialect()) {
 		case "neon":
+			return neonWorker;
 		case "postgres":
-			return "./worker/neon";
+			return postgresWorker;
 		case "turso":
-			return "./worker/turso";
+			return tursoWorker;
 		case "d1":
+			return d1Worker;
 		case "sqlite":
 		default:
-			return "./worker/d1";
+			return sqliteWorker;
 	}
+}
 
-export default mod.default;
+const worker = getWorker();
+
+export default worker;
