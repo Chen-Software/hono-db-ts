@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import { createApp } from "../app";
-import { createTursoClient } from "../db/turso-client";
 import { schemas } from "../db/schema";
-import { createSqliteMoviesRepo } from "../repo/movies-repo";
+
 
 const { movies } = schemas;
 
@@ -22,13 +21,10 @@ const authToken = process.env["TURSO_AUTH_TOKEN"] ?? process.env["TURSO_TOKEN"];
 let app: Hono;
 
 beforeAll(() => {
-	const db = createTursoClient({ url, authToken });
-	app = createApp(createSqliteMoviesRepo(db));
+	app = createApp();
 });
 
 afterAll(async () => {
-	const db = createTursoClient({ url, authToken });
-	await db.delete(movies);
 });
 
 // ——— GET /movies ———

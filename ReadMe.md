@@ -420,7 +420,7 @@ A movie has:
 .env.example.turso-cloud # template → copy to `.env` (Turso)
 compose.yml            # local Postgres server for dialect testing
 src/
-  app.ts             # pure createApp(repo) Hono factory (no DB, no macros)
+  app.ts             # pure createApp() Hono factory (no DB, no macros)
   main.ts            # local Bun entry (bun run dev/start) — uses macros + sqlite
   worker.ts          # Cloudflare Worker entry (D1 only, no macros)
   macros/
