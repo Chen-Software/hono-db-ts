@@ -9,7 +9,7 @@
  * the Turso factory and driver, never the Neon/Postgres or D1 ones, and vice
  * versa.
  *
- * Each target module exports `createRepoFromEnv(env): MoviesRepo` (see
+ * Each target module exports `createReposFromEnv(env): Repos` (see
  * `src/worker/{turso,neon,d1}.ts`). `src/worker.ts` has no runtime branch over
  * backends — the selected backend is decided entirely at build time.
  *
