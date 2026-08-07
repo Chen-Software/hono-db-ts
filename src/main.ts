@@ -1,9 +1,9 @@
 /**
  * Local Bun entry point.
  *
- * Runs under `bun run dev` / `bun run start`. The repository is selected via
- * `src/repo/movies-repo.ts` `createRepo()`, which uses the unified
- * `src/db/client.ts` `createClient()` to build the right repo from `.env` /
+ * Runs under `bun run dev` / `bun run start`. The repos are selected via
+ * `src/repo/repos.ts` `createRepos()`, which uses the unified
+ * `src/db/client.ts` `createClient()` to build the right repos from `.env` /
  * `NODE_ENV`. `createClient()` dynamic-imports only the active dialect's driver,
  * tree-shaking away unused ones from the local bundle.
  *
@@ -13,13 +13,11 @@
  */
 
 import { createApp } from "./app";
-import { createRepo } from "./repo/create-repo";
 
 export { createApp };
 
 export default {
 	async fetch(request: Request) {
-		const repo = await createRepo();
-		return createApp(repo).fetch(request);
+		return createApp().fetch(request);
 	},
 };
