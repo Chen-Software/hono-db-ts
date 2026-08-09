@@ -1,6 +1,6 @@
-import typia, { tags } from "typia";
 import type { UUID } from "crypto";
-import { type Identifiable } from "../capacities/identifiable";
+import typia, { type tags } from "typia";
+import type { Identifiable } from "../capacities/identifiable";
 
 interface User extends Identifiable<UUID> {
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
@@ -17,10 +17,11 @@ const UserModel = {
 	is: typia.createIs<User>(),
 	equals: typia.createAssertEquals<User>(),
 	assert: typia.createAssert<User>(),
-    validate: typia.createValidate<User>(),
-    encode: typia.protobuf.createAssertEncode<User>(),
-    decode: typia.protobuf.createAssertDecode<User>(),
-    message: typia.protobuf.message<User>()
+	validate: typia.createValidate<User>(),
+	validatePartial: typia.createValidate<Partial<User>>(),
+	encode: typia.protobuf.createAssertEncode<User>(),
+	decode: typia.protobuf.createAssertDecode<User>(),
+	message: typia.protobuf.message<User>(),
 };
 
 export { type User, UserModel };

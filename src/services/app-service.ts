@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import typia from "typia";
 
 import type { IBbsArticle } from "../models/ibbs-article";
+import { UserService } from "./user-service";
 
 // build a reusable validator from the type
 const validate = typia.createValidate<IBbsArticle>();
@@ -25,6 +26,9 @@ AppService.post("/", typiaValidator("json", validate), (c) => {
 		created_at: data.created_at,
 	});
 });
+
+// the app service depends on the user service for user management
+AppService.route("/users", UserService);
 
 AppService.onError((err, c) => {
 	console.error(err);
