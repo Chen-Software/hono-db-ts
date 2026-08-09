@@ -20,11 +20,19 @@ interface User extends Identifiable<UUID>, Timestamped {
 		tags.Maximum<100>;
 }
 
+const _constructor = typia.plain.createAssertClassify<User>();
+const _randomSeeder = typia.createRandom<User>();
+
 const UserModel = {
+	new: _constructor,
+	from: _constructor,
+	newRandom: _randomSeeder,
+	fromRandom: _randomSeeder,
 	is: typia.createIs<User>(),
 	equals: typia.createAssertEquals<User>(),
 	assert: typia.createAssert<User>(),
 	validate: typia.createValidate<User>(),
+	validateEquals: typia.createValidateEquals<User>(),
 	validatePartial: typia.createValidate<Partial<User>>(),
 	toJSON: typia.json.createAssertStringify<User>(),
 	fromJSON: typia.json.createAssertParse<User>(),
@@ -32,8 +40,6 @@ const UserModel = {
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
 	schema: typia.json.schema<[User]>(),
-	new: typia.plain.createAssertClassify<User>(),
-	from: typia.plain.createAssertClassify<User>(),
 };
 
 export { type User, UserModel };

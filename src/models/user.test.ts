@@ -174,6 +174,48 @@ describe("User.equals", () => {
 });
 
 // ---------------------------------------------------------------------------
+// validateEquals – validates first input (second is structural check)
+// ---------------------------------------------------------------------------
+describe("User.validateEquals", () => {
+	it("succeeds when both are valid users (different values)", () => {
+		const result = User.validateEquals(valid, another);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.id).toBe(valid.id);
+		}
+	});
+
+	it("succeeds when both are identical", () => {
+		const result = User.validateEquals(valid, { ...valid });
+		expect(result.success).toBe(true);
+	});
+
+	it("succeeds when only first is valid (second invalid)", () => {
+		const result = User.validateEquals(valid, { ...valid, age: -1 });
+		expect(result.success).toBe(true);
+	});
+
+	it("fails when first is invalid", () => {
+		const result = User.validateEquals({ ...valid, email: "bad" }, valid);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.errors.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("fails when both are invalid (reports first)", () => {
+		const result = User.validateEquals(
+			{ ...valid, email: "bad" },
+			{ ...valid, age: -1 },
+		);
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.errors.some((e) => e.path.includes("email"))).toBe(true);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
 // validatePartial – partial payload validation
 // ---------------------------------------------------------------------------
 describe("User.validatePartial", () => {
@@ -275,5 +317,40 @@ describe("User.new / User.from", () => {
 
 	it("from throws on invalid data", () => {
 		expect(() => User.from({ ...valid, email: "bad" })).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// newRandom / fromRandom — share the same random generator
+// ---------------------------------------------------------------------------
+// Note: typia's createRandom is best-effort and may not satisfy all composite
+// tags (e.g. UUID format, MaxLength bounds), so we test structural shape here.
+describe("User.newRandom / fromRandom", () => {
+	it("are the same function", () => {
+		expect(User.newRandom).toBe(User.fromRandom);
+	});
+
+	it("return objects with all User fields", () => {
+		const u = User.newRandom();
+		expect(typeof u.id).toBe("string");
+		expect(typeof u.name).toBe("string");
+		expect(typeof u.email).toBe("string");
+		expect(typeof u.created_at).toBe("string");
+		expect(["admin", "member", "viewer"]).toContain(u.role);
+		expect(typeof u.age).toBe("number");
+		expect(Number.isInteger(u.age)).toBe(true);
+	});
+
+	it("is a valid User when id and name are fixed", () => {
+		const fixed = User.newRandom();
+		fixed.id = crypto.randomUUID();
+		fixed.name = "Alice";
+		expect(User.is(fixed)).toBe(true);
+	});
+
+	it("generates distinct users across calls", () => {
+		const a = User.newRandom();
+		const b = User.newRandom();
+		expect(a.id).not.toBe(b.id);
 	});
 });
