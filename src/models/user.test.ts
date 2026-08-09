@@ -223,11 +223,11 @@ describe("User.prune", () => {
 });
 
 // ---------------------------------------------------------------------------
-// equals – returns first arg regardless of input (type-assertion passthrough)
+// assertEquals – returns first arg regardless of input (type-assertion passthrough)
 // ---------------------------------------------------------------------------
-describe("User.equals", () => {
+describe("User.assertEquals", () => {
 	it("returns the first argument", () => {
-		const result = User.equals(valid, another);
+		const result = User.assertEquals(valid, { ...valid });
 		expect(result.id).toBe(valid.id);
 	});
 });
@@ -271,6 +271,84 @@ describe("User.validateEquals", () => {
 		if (!result.success) {
 			expect(result.errors.some((e) => e.path.includes("email"))).toBe(true);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// compare (Comparable) – equals / less / more
+// ---------------------------------------------------------------------------
+describe("User.equals", () => {
+	it("returns true for structurally identical users", () => {
+		expect(User.equals(valid, { ...valid })).toBe(true);
+	});
+
+	it("returns false when a field differs (id)", () => {
+		expect(User.equals(valid, { ...valid, id: crypto.randomUUID() })).toBe(
+			false,
+		);
+	});
+
+	it("returns false when email differs", () => {
+		expect(User.equals(valid, { ...valid, email: "other@example.com" })).toBe(
+			false,
+		);
+	});
+
+	it("returns false when age differs", () => {
+		expect(User.equals(valid, { ...valid, age: 30 })).toBe(false);
+	});
+});
+
+describe("User.less", () => {
+	it("returns false for equal users", () => {
+		expect(User.less(valid, { ...valid })).toBe(false);
+	});
+
+	it("returns true when first id is lexicographically smaller", () => {
+		const a = { ...valid, id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" };
+		const b = { ...valid, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" };
+		expect(User.less(a, b)).toBe(true);
+	});
+
+	it("returns false when first id is lexicographically larger", () => {
+		const a = { ...valid, id: "cccccccc-cccc-cccc-cccc-cccccccccccc" };
+		const b = { ...valid, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" };
+		expect(User.less(a, b)).toBe(false);
+	});
+
+	it("compares by name when ids are equal", () => {
+		expect(User.less(valid, { ...valid, name: "Zoe" })).toBe(true);
+		expect(User.less({ ...valid, name: "Zoe" }, valid)).toBe(false);
+	});
+
+	it("compares by age when earlier fields are equal", () => {
+		const younger = { ...valid, age: 20 };
+		const older = { ...valid, age: 80 };
+		expect(User.less(younger, older)).toBe(true);
+		expect(User.less(older, younger)).toBe(false);
+	});
+});
+
+describe("User.more", () => {
+	it("returns false for equal users", () => {
+		expect(User.more(valid, { ...valid })).toBe(false);
+	});
+
+	it("returns true when first id is lexicographically larger", () => {
+		const a = { ...valid, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" };
+		const b = { ...valid, id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" };
+		expect(User.more(a, b)).toBe(true);
+	});
+
+	it("returns false when first id is lexicographically smaller", () => {
+		const a = { ...valid, id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" };
+		const b = { ...valid, id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" };
+		expect(User.more(a, b)).toBe(false);
+	});
+
+	it("compares by name when ids are equal", () => {
+		expect(User.more({ ...valid, name: "Zoe" }, valid)).toBe(true);
+		expect(User.more(valid, { ...valid, name: "Zoe" })).toBe(false);
 	});
 });
 

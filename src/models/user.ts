@@ -22,14 +22,18 @@ interface User extends Identifiable<UUID>, Timestamped {
 
 const _constructor = typia.plain.createAssertClassify<User>();
 const _randomSeeder = typia.createRandom<User>();
-
+const _equals = typia.compare.createEquals<User>();
+const _less = typia.compare.createLess<User>();
 const UserModel = {
 	new: _constructor,
 	from: _constructor,
 	newRandom: _randomSeeder,
 	fromRandom: _randomSeeder,
 	is: typia.createIs<User>(),
-	equals: typia.createAssertEquals<User>(),
+	equals: _equals,
+	less: _less,
+	more: (x: User, y: User) => _less(y, x),
+	assertEquals: typia.createAssertEquals<User>(),
 	assert: typia.createAssert<User>(),
 	validate: typia.createValidate<User>(),
 	validateEquals: typia.createValidateEquals<User>(),
