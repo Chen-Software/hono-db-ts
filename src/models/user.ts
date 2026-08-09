@@ -3,14 +3,24 @@ import typia, { type tags } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
 
 interface User extends Identifiable<UUID> {
+	/** Name of the user. */
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
+
+	/** Email address of the user. */
 	email: string & tags.Format<"email"> & tags.MaxLength<255>;
+
+	/** User role for permission and access control. */
 	role: "admin" | "member" | "viewer";
-	created_at: string & tags.Format<"date-time">;
+
+	/** Age of the user. */
 	age: number &
 		tags.Type<"uint32"> &
 		tags.ExclusiveMinimum<19> &
 		tags.Maximum<100>;
+
+	/** Timestamp when the user was created.*/
+	created_at: string & tags.Format<"date-time">;
+
 }
 
 const UserModel = {
