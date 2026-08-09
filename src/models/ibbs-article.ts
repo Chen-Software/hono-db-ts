@@ -1,4 +1,4 @@
-import { type tags } from "typia";
+import type { tags } from "typia";
 
 export interface IBbsArticle {
 	id: string & tags.Format<"uuid">;
