@@ -19,6 +19,8 @@ const UserModel = {
 	assert: typia.createAssert<User>(),
 	validate: typia.createValidate<User>(),
 	validatePartial: typia.createValidate<Partial<User>>(),
+	toJSON: typia.json.createAssertStringify<User>(),
+	fromJSON: typia.json.createAssertParse<User>(),
 	encode: typia.protobuf.createAssertEncode<User>(),
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
