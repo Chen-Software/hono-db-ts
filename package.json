@@ -17,7 +17,6 @@
 		"@ttsc/unplugin": "^0.25.0",
 		"@types/bun": "latest",
 		"ttsc": "^0.25.0",
-		"uuid": "^14.0.1",
 		"vite": "^8.2.1"
 	},
 	"peerDependencies": {
