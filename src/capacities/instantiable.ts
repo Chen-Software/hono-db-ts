@@ -7,6 +7,5 @@ interface Instantiable<Model> {
 
 const input = { data: "payload", config: { a: 1, b: 2 } };
 const createInstance = typia.plain.createValidateClassify<typeof input>();
-console.log(createInstance(input));
 
 export { createInstance, type Instantiable };
