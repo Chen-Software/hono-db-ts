@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { UserModel as User } from "./user";
+import { User } from "./user";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -479,6 +479,52 @@ describe("User.new / User.from", () => {
 
 	it("from throws on invalid data", () => {
 		expect(() => User.from({ ...valid, email: "bad" })).toThrow();
+	});
+
+	it("is() accepts a value produced by new()", () => {
+		const created = User.new(valid);
+		expect(User.is(created)).toBe(true);
+	});
+
+	it("is() accepts a value produced by from()", () => {
+		const created = User.from(valid);
+		expect(User.is(created)).toBe(true);
+	});
+
+	it("instance.is(User) works on a User.new(...) object", () => {
+		const userobj = User.new(valid);
+		expect(userobj.is(User)).toBe(true);
+	});
+
+	it("instance.is(User) works on a User.from(...) object", () => {
+		const userobj = User.from(valid);
+		expect(userobj.is(User)).toBe(true);
+	});
+
+	it("instance exposes bound methods (equals, stringify, clone, validate, assert)", () => {
+		const userobj = User.new(valid);
+		expect(typeof userobj.is).toBe("function");
+		expect(typeof userobj.equals).toBe("function");
+		expect(typeof userobj.stringify).toBe("function");
+		expect(typeof userobj.clone).toBe("function");
+		expect(typeof userobj.validate).toBe("function");
+		expect(typeof userobj.assert).toBe("function");
+
+		expect(userobj.equals(valid)).toBe(true);
+		const parsed = JSON.parse(userobj.stringify());
+		expect(parsed.id).toBe(valid.id);
+
+		const cloned = userobj.clone();
+		expect(cloned.is(User)).toBe(true);
+		expect(cloned).not.toBe(userobj);
+	});
+
+	it("instance JSON.stringify yields the user data (not a string)", () => {
+		const userobj = User.new(valid);
+		const serialized = JSON.parse(JSON.stringify(userobj));
+		expect(serialized.id).toBe(valid.id);
+		expect(serialized.name).toBe(valid.name);
+		expect(typeof serialized.is).toBe("undefined");
 	});
 });
 
