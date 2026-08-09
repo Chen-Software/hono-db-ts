@@ -2,6 +2,7 @@ import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
+import { isProd } from "@/macros";
 
 interface User extends Identifiable<UUID>, Timestamped {
 	/** Name of the user. */
@@ -46,6 +47,7 @@ const UserModel = {
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
 	schema: typia.json.schema<[User]>(),
+	...(!isProd && { metaSchema: typia.reflect.schema<User>() }),
 };
 
 export { type User, UserModel };
