@@ -1,6 +1,6 @@
-import { WebService } from "./services/web-service";
+import { AppService } from "./services/app-service";
 
-const app = WebService;
+const app = AppService;
 
 const PORT = Number(Bun.env["PORT"] ?? 8080);
 
