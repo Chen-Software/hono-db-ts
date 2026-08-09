@@ -437,18 +437,24 @@ describe("User.schema", () => {
 // metaSchema – reflection schema (function, non-prod only)
 // ---------------------------------------------------------------------------
 describe("User.metaSchema", () => {
-	const metaSchema = (User as unknown as { metaSchema?: () => unknown })
-		.metaSchema;
+	const metaSchema = (User as unknown as { metaSchema?: unknown }).metaSchema;
 
 	it("is exposed in non-prod builds", () => {
-		expect(typeof metaSchema).toBe("function");
+		expect(metaSchema).toBeDefined();
+		expect(typeof metaSchema).toBe("object");
 	});
 
-	it("returns a JSON Schema object describing User", () => {
-		expect(typeof metaSchema).toBe("function");
-		const schema = (metaSchema as () => unknown)();
-		expect(typeof schema).toBe("object");
-		expect(schema).toBeDefined();
+	it("describes the User shape as an IJsonSchema", () => {
+		// typia.reflect.schema is transformed into a static JSON Schema object.
+		expect(typeof metaSchema).toBe("object");
+		const schema = metaSchema as {
+			schema?: Record<string, unknown>;
+			components?: Record<string, unknown>;
+		};
+		// The schema must reference the User type (by properties or $defs).
+		const hasShape =
+			schema.schema !== undefined || schema.components !== undefined;
+		expect(hasShape).toBe(true);
 	});
 });
 

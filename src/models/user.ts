@@ -4,6 +4,9 @@ import type { Identifiable } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { isProd } from "@/macros";
 
+/**
+ * User data model
+ */
 interface User extends Identifiable<UUID>, Timestamped {
 	/** Name of the user. */
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
@@ -21,19 +24,21 @@ interface User extends Identifiable<UUID>, Timestamped {
 		tags.Maximum<100>;
 }
 
+/**
+ * User model and instantiation
+ */
 const _constructor = typia.plain.createAssertClassify<User>();
 const _randomSeeder = typia.createRandom<User>();
-const _equals = typia.compare.createEquals<User>();
-const _less = typia.compare.createLess<User>();
+const _metaSchema = typia.reflect.schema<User>();
 const UserModel = {
 	new: _constructor,
 	from: _constructor,
 	newRandom: _randomSeeder,
 	fromRandom: _randomSeeder,
 	is: typia.createIs<User>(),
-	equals: _equals,
-	less: _less,
-	more: (x: User, y: User) => _less(y, x),
+	equals: typia.compare.createEquals<User>(),
+	less: (x: User, y: User) => typia.compare.less<User>(x, y),
+	more: (x: User, y: User) => typia.compare.less<User>(y, x),
 	assertEquals: typia.createAssertEquals<User>(),
 	assert: typia.createAssert<User>(),
 	validate: typia.createValidate<User>(),
@@ -47,7 +52,7 @@ const UserModel = {
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
 	schema: typia.json.schema<[User]>(),
-	...(!isProd && { metaSchema: typia.reflect.schema<User>() }),
+	...(!isProd && { metaSchema: _metaSchema }),
 };
 
 export { type User, UserModel };
