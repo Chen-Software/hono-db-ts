@@ -1,9 +1,8 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
-import { createInstance, type Instantiable } from "@/capacities/instantiable";
 
-interface User extends Identifiable<UUID>, Instantiable<User> {
+interface User extends Identifiable<UUID> {
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
 	email: string & tags.Format<"email"> & tags.MaxLength<255>;
 	role: "admin" | "member" | "viewer";
@@ -26,8 +25,8 @@ const UserModel = {
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
 	schema: typia.json.schema<[User]>(),
-	new: (...args: any[]) => createInstance(args),
-	from: (seed: Instantiable<User>) => createInstance(seed),
+	new: typia.plain.createAssertClassify<User>(),
+	from: typia.plain.createAssertClassify<User>(),
 };
 
 export { type User, UserModel };

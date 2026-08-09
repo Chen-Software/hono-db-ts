@@ -1,7 +1,5 @@
-import { typiaValidator } from "@hono/typia-validator";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import typia from "typia";
 import { UserService } from "./user-service";
 
 const AppService = new Hono();
