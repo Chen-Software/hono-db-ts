@@ -434,6 +434,25 @@ describe("User.schema", () => {
 });
 
 // ---------------------------------------------------------------------------
+// metaSchema – reflection schema (function, non-prod only)
+// ---------------------------------------------------------------------------
+describe("User.metaSchema", () => {
+	const metaSchema = (User as unknown as { metaSchema?: () => unknown })
+		.metaSchema;
+
+	it("is exposed in non-prod builds", () => {
+		expect(typeof metaSchema).toBe("function");
+	});
+
+	it("returns a JSON Schema object describing User", () => {
+		expect(typeof metaSchema).toBe("function");
+		const schema = (metaSchema as () => unknown)();
+		expect(typeof schema).toBe("object");
+		expect(schema).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // new / from – plain object assertion
 // ---------------------------------------------------------------------------
 describe("User.new / User.from", () => {

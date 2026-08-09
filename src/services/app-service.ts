@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { UserService } from "./user-service";
 
 const AppService = new Hono();
 
 AppService.get("/", (c) => c.json({ status: "ok" }));
+AppService.route("/users", UserService);
 
 AppService.onError((err, c) => {
 	console.error(err);
