@@ -6,7 +6,7 @@ import { type User, UserModel } from "../models/user";
 // Fixtures
 // ---------------------------------------------------------------------------
 const makeUser = (overrides?: Partial<User>): User =>
-	UserModel.new({
+	UserModel.from({
 		id: crypto.randomUUID(),
 		name: "Alice",
 		email: "alice@example.com",

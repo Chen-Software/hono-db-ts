@@ -223,21 +223,21 @@ describe("User.prune", () => {
 });
 
 // ---------------------------------------------------------------------------
-// assertEquals – returns first arg regardless of input (type-assertion passthrough)
+// assertStrict – returns first arg regardless of input (type-assertion passthrough)
 // ---------------------------------------------------------------------------
-describe("User.assertEquals", () => {
+describe("User.assertStrict", () => {
 	it("returns the first argument", () => {
-		const result = User.assertEquals(valid, { ...valid });
+		const result = User.assertStrict(valid, { ...valid });
 		expect(result.id).toBe(valid.id);
 	});
 });
 
 // ---------------------------------------------------------------------------
-// validateEquals – validates first input (second is structural check)
+// validateStrict – validates first input (second is structural check)
 // ---------------------------------------------------------------------------
-describe("User.validateEquals", () => {
+describe("User.validateStrict", () => {
 	it("succeeds when both are valid users (different values)", () => {
-		const result = User.validateEquals(valid, another);
+		const result = User.validateStrict(valid, another);
 		expect(result.success).toBe(true);
 		if (result.success) {
 			expect(result.data.id).toBe(valid.id);
@@ -245,17 +245,17 @@ describe("User.validateEquals", () => {
 	});
 
 	it("succeeds when both are identical", () => {
-		const result = User.validateEquals(valid, { ...valid });
+		const result = User.validateStrict(valid, { ...valid });
 		expect(result.success).toBe(true);
 	});
 
 	it("succeeds when only first is valid (second invalid)", () => {
-		const result = User.validateEquals(valid, { ...valid, age: -1 });
+		const result = User.validateStrict(valid, { ...valid, age: -1 });
 		expect(result.success).toBe(true);
 	});
 
 	it("fails when first is invalid", () => {
-		const result = User.validateEquals({ ...valid, email: "bad" }, valid);
+		const result = User.validateStrict({ ...valid, email: "bad" }, valid);
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.errors.length).toBeGreaterThan(0);
@@ -263,7 +263,7 @@ describe("User.validateEquals", () => {
 	});
 
 	it("fails when both are invalid (reports first)", () => {
-		const result = User.validateEquals(
+		const result = User.validateStrict(
 			{ ...valid, email: "bad" },
 			{ ...valid, age: -1 },
 		);
@@ -459,31 +459,18 @@ describe("User.metaSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// new / from – plain object assertion
+// from – plain object assertion
 // ---------------------------------------------------------------------------
-describe("User.new / User.from", () => {
-	it("new returns the input data on success", () => {
-		const result = User.new(valid);
+describe("User.from", () => {
+	it("returns the input data on success", () => {
+		const result = User.from(valid);
 		expect(result.id).toBe(valid.id);
 		expect(result.name).toBe(valid.name);
 	});
 
-	it("new throws on invalid data", () => {
-		expect(() => User.new({ ...valid, age: 0 })).toThrow();
-	});
-
-	it("from returns the input data on success", () => {
-		const result = User.from(valid);
-		expect(result.id).toBe(valid.id);
-	});
-
-	it("from throws on invalid data", () => {
+	it("throws on invalid data", () => {
+		expect(() => User.from({ ...valid, age: 0 })).toThrow();
 		expect(() => User.from({ ...valid, email: "bad" })).toThrow();
-	});
-
-	it("is() accepts a value produced by new()", () => {
-		const created = User.new(valid);
-		expect(User.is(created)).toBe(true);
 	});
 
 	it("is() accepts a value produced by from()", () => {
@@ -491,19 +478,8 @@ describe("User.new / User.from", () => {
 		expect(User.is(created)).toBe(true);
 	});
 
-	it("instance.is(User) works on a User.new(...) object", () => {
-		const userobj = User.new(valid);
-		expect(userobj.is(User)).toBe(true);
-	});
-
-	it("instance.is(User) works on a User.from(...) object", () => {
-		const userobj = User.from(valid);
-		expect(userobj.is(User)).toBe(true);
-	});
-
 	it("instance exposes bound methods (equals, stringify, clone, validate, assert)", () => {
-		const userobj = User.new(valid);
-		expect(typeof userobj.is).toBe("function");
+		const userobj = User.from(valid);
 		expect(typeof userobj.equals).toBe("function");
 		expect(typeof userobj.stringify).toBe("function");
 		expect(typeof userobj.clone).toBe("function");
@@ -515,31 +491,27 @@ describe("User.new / User.from", () => {
 		expect(parsed.id).toBe(valid.id);
 
 		const cloned = userobj.clone();
-		expect(cloned.is(User)).toBe(true);
+		expect(User.is(cloned)).toBe(true);
 		expect(cloned).not.toBe(userobj);
 	});
 
 	it("instance JSON.stringify yields the user data (not a string)", () => {
-		const userobj = User.new(valid);
+		const userobj = User.from(valid);
 		const serialized = JSON.parse(JSON.stringify(userobj));
 		expect(serialized.id).toBe(valid.id);
 		expect(serialized.name).toBe(valid.name);
-		expect(typeof serialized.is).toBe("undefined");
+		expect(typeof serialized.equals).toBe("undefined");
 	});
 });
 
 // ---------------------------------------------------------------------------
-// newRandom / fromRandom — share the same random generator
+// random — random user generator
 // ---------------------------------------------------------------------------
 // Note: typia's createRandom is best-effort and may not satisfy all composite
 // tags (e.g. UUID format, MaxLength bounds), so we test structural shape here.
-describe("User.newRandom / fromRandom", () => {
-	it("are the same function", () => {
-		expect(User.newRandom).toBe(User.fromRandom);
-	});
-
+describe("User.random", () => {
 	it("return objects with all User fields", () => {
-		const u = User.newRandom();
+		const u = User.random();
 		expect(typeof u.id).toBe("string");
 		expect(typeof u.name).toBe("string");
 		expect(typeof u.email).toBe("string");
@@ -550,15 +522,15 @@ describe("User.newRandom / fromRandom", () => {
 	});
 
 	it("is a valid User when id and name are fixed", () => {
-		const fixed = User.newRandom();
+		const fixed = User.random();
 		fixed.id = crypto.randomUUID();
 		fixed.name = "Alice";
 		expect(User.is(fixed)).toBe(true);
 	});
 
 	it("generates distinct users across calls", () => {
-		const a = User.newRandom();
-		const b = User.newRandom();
+		const a = User.random();
+		const b = User.random();
 		expect(a.id).not.toBe(b.id);
 	});
 });

@@ -29,11 +29,12 @@ const pruneFn = typia.plain.createAssertPrune<UserData>();
 /**
  * User class
  *
- * - Static members `UserModel` API: `User.is`,
- *   `User.equals`, `User.new`, `User.from`, `User.newRandom`, `User.validate`,
+ * - Static members mirror the `UserModel` API: `User.is`,
+ *   `User.equals`, `User.from`, `User.validate`,
  *   `User.clone`, `User.toJSON`, `User.fromJSON`, `User.encode`, ...
- * - `User.new` / `User.from` return a `User` *instance* with bound methods
- *   (`u.is(User)`, `u.equals(other)`, `u.stringify()`, ...).
+ * - `User.from` returns a `User` *instance* with bound methods
+ *   (`u.equals(other)`, `u.stringify()`, ...). Instance methods
+ *   are defined on the prototype and operate on the data copied onto `this`.
  */
 class User implements UserData {
 	id!: UUID;
@@ -42,48 +43,12 @@ class User implements UserData {
 	role!: "admin" | "member" | "viewer";
 	age!: number & tags.Type<"uint32"> & tags.ExclusiveMinimum<19> & tags.Maximum<100>;
 	created_at!: string;
-	updated_at!: string;
-
-	// ---- instance methods (bound in the constructor) ------------------------
-	is!: (model: typeof User) => boolean;
-	equals!: (other: UserData | User) => boolean;
-	less!: (than: UserData | User) => boolean;
-	more!: (than: UserData | User) => boolean;
-	assertEquals!: (other: UserData | User) => UserData;
-	assert!: () => UserData;
-	validate!: () => ReturnType<typeof User.validate>;
-	clone!: () => User;
-	prune!: () => User;
-	/** JSON string representation (use `JSON.stringify(u)` for the object). */
-	stringify!: () => string;
-	/** Raw data, so `JSON.stringify(u)` yields the user object. */
-	toJSON!: () => UserData;
-	encode!: () => Uint8Array;
-	decode!: () => UserData;
 
 	private constructor(data: Classifiable<UserData>) {
-		const classified = typia.plain.assertClassify<UserData>(data);
-		Object.assign(this, classified);
-		this.is = () => User.is(classified);
-		this.equals = (other) => User.equals(classified, other);
-		this.less = (than) => User.less(classified, than);
-		this.more = (than) => User.more(classified, than);
-		this.assertEquals = (other) => User.assertEquals(other);
-		this.assert = () => User.assert(classified);
-		this.validate = () => User.validate(classified);
-		this.clone = () => User.from(cloneFn(classified));
-		this.prune = () => User.from(pruneFn(classified));
-		this.stringify = () => User.toJSON(classified);
-		this.toJSON = () => classified;
-		this.encode = () => User.encode(classified);
-		this.decode = () => User.decode(User.encode(classified));
+		return Object.assign(this, typia.plain.assertClassify<UserData>(data));
 	}
 
 	// ---- static factory / creators ------------------------------------------
-	static new(data: UserData): User {
-		return new User(data);
-	}
-
 	static from(data: UserData): User {
 		return new User(data);
 	}
@@ -92,19 +57,73 @@ class User implements UserData {
 		return randomFn();
 	}
 
-	static newRandom = User.random;
+	// ---- instance methods (prototype) ---------------------------------------
+	/** Structural equality against another user or user instance. */
+	equals(other: UserData | User): boolean {
+		return User.equals(this, other);
+	}
 
-	static fromRandom = User.random;
+	/** Whether this user is ordered after `than`. */
+	more(than: UserData | User): boolean {
+		return User.more(this, than);
+	}
 
-	// ---- static functions -------------
+	/** Whether this user is ordered before `than`. */
+	less(than: UserData | User): boolean {
+		return User.less(this, than);
+	}
+
+	/** Assert this instance is a valid user (throws otherwise). */
+	assert(): UserData {
+		return User.assert(this);
+	}
+
+	/** Validate this instance, returning structured errors if any. */
+	validate() {
+		return User.validate(this);
+	}
+
+	/** Clone this instance (deep copy, strips extras). */
+	clone(): User {
+		return User.from(cloneFn(this));
+	}
+
+	/** Prune this instance to the validated schema. */
+	prune(): User {
+		return User.from(pruneFn(this));
+	}
+
+	/** JSON string representation. */
+	stringify(): string {
+		return User.toJSON(this);
+	}
+
+	/** Raw data, so `JSON.stringify(u)` yields the user object. */
+	toJSON(): UserData {
+		return this;
+	}
+
+	/** Protobuf-encode this instance. */
+	encode(): Uint8Array {
+		return User.encode(this);
+	}
+
+	/** Protobuf-decode a fresh instance from this instance's encoding. */
+	decode(): UserData {
+		return User.decode(User.encode(this));
+	}
+
+	// ---- static functions ---------------------------------------------------
 	static is = typia.createIs<UserData>();
 	static equals = typia.compare.createEquals<UserData>();
-	static less = (x: UserData, y: UserData) => typia.compare.less<UserData>(x, y);
-	static more = (x: UserData, y: UserData) => typia.compare.less<UserData>(y, x);
-	static assertEquals = typia.createAssertEquals<UserData>();
+	static less = (a: UserData, b: UserData): boolean =>
+		typia.compare.less<UserData>(a, b);
+	static more = (a: UserData, b: UserData): boolean =>
+		typia.compare.less<UserData>(b, a);
+	static assertStrict = typia.createAssertEquals<UserData>();
 	static assert = typia.createAssert<UserData>();
 	static validate = typia.createValidate<UserData>();
-	static validateEquals = typia.createValidateEquals<UserData>();
+	static validateStrict = typia.createValidateEquals<UserData>();
 	static validatePartial = typia.createValidate<Partial<UserData>>();
 	static clone = typia.plain.createAssertClone<UserData>();
 	static prune = typia.plain.createAssertPrune<UserData>();
