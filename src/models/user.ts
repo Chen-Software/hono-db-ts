@@ -24,6 +24,7 @@ const UserModel = {
 	encode: typia.protobuf.createAssertEncode<User>(),
 	decode: typia.protobuf.createAssertDecode<User>(),
 	message: typia.protobuf.message<User>(),
+	schema: typia.json.schema<[User]>(),
 };
 
 export { type User, UserModel };
