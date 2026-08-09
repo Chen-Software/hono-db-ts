@@ -4,13 +4,18 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { type Blake3 } from "../tags/format-string-blake3";
 import { type Identifiable } from "./identifiable";
 import { type Versioned, versionedUpdate } from "./versioned";
+import { type Immutable, createUpdate } from "./immutable";
 
 /**
  * ContentField maps the (model-specific) content key to a single `string`
  * field. By making the key a type parameter we let each model name its payload
  * field whatever it likes — `content` by default, or `body`, `text`, ...
+ *
+ * The field is `readonly`: a content-addressed entity's payload is immutable —
+ * you never mutate it in place, you reconstruct. That is exactly why
+ * `ContentAddressable` extends the `Immutable` capacity.
  */
-type ContentField<K extends string> = { [P in K]: string };
+type ContentField<K extends string> = { readonly [P in K]: string };
 
 /**
  * ContentAddressable is the capacity for CONTENT-ADDRESSED entities.
@@ -32,17 +37,24 @@ type ContentField<K extends string> = { [P in K]: string };
  * positional generic with a default rather than the wished-for
  * `ContentAddressable<contentKey="body">`:
  * ```ts
- * interface PostData extends ContentAddressable<"body"> { body: string; ... }
+ * interface PostData extends ContentAddressable<"body"> { ... }
  * ```
- * `ContentField<"body">` resolves to exactly `{ body: string }`, so the model
- * simply has a `body: string` field plus the shared `hash` field.
+ * which resolves to `{ readonly body: string; readonly hash: string & Blake3 }`.
+ *
+ * SEMANTIC CORRECTNESS IS NOT A TAG. `Blake3` only checks the *format* of the
+ * hash string. We deliberately do NOT use an object-scoped tag to assert
+ * `hash === blake3(content)` — content is immutable, so the hash must be
+ * RE-DERIVED every time content is set (at construction and on update), not
+ * merely validated once. That job belongs to the runtime helpers below:
+ * `createAssertHash` (construction) and `updateHash` (update).
  *
  * @typeParam K - the name of the content field. Defaults to `"content"`.
  */
-export type ContentAddressable<K extends string = "content"> = ContentField<K> & {
-	/** BLAKE3 hash (lowercase 64-hex) of the content field — the content's address. */
-	hash: string & Blake3;
-};
+export type ContentAddressable<K extends string = "content"> = Immutable &
+	ContentField<K> & {
+		/** BLAKE3 hash (lowercase 64-hex) of the content field — the address. */
+		readonly hash: string & Blake3;
+	};
 
 // ---------------------------------------------------------------------------
 // Hashing helpers (the runtime counterpart to the type-level capacity)
@@ -80,82 +92,146 @@ export function verifyContentAddress<K extends string>(
 }
 
 /**
- * Attach the correct BLAKE3 hash to a content payload. Takes a payload object
- * that has the content field but not yet `hash`, computes the digest over
- * `contentKey`, and returns the fully-addressed object. Useful in services
- * right before persisting an entity.
+ * Attach the correct BLAKE3 hash to a content payload, recomputing it from
+ * `contentKey` and OVERWRITING any incoming `hash`. Returns the fully-addressed
+ * object. This is the primitive behind `createAssertHash` (construction) and
+ * `updateHash` (update).
+ *
+ * Generic over `D` (the full entity data shape) so the result still carries
+ * every other field — it is assignable back to `D` (e.g. `PostData`), which is
+ * what lets the caller feed it straight into a model's `from`.
  *
  * @example
  * const post = Post.from(withContentHash({ ...data, body }, "body"));
  */
-export function withContentHash<K extends string>(
-	payload: Omit<ContentAddressable<K>, "hash"> & Record<K, string>,
-	contentKey: K,
-): ContentAddressable<K> {
+export function withContentHash<
+	K extends string,
+	D extends Record<K, string>,
+>(payload: D & { hash?: string }, contentKey: K): D & { hash: string } {
 	const content = payload[contentKey];
 	return { ...payload, hash: hashContent(content) };
 }
 
 // ---------------------------------------------------------------------------
-// Composed update — the "automatic updateContentHash" mechanism
+// Construction-time: stamp the hash (the "assert" half)
 // ---------------------------------------------------------------------------
 
 /**
- * contentAddressableUpdate — fuse the ContentAddressable + Versioned capacities
- * into ONE immutable update that ALSO keeps the content hash in sync with its
- * payload. On every call it:
+ * createAssertHash — bind a content field name and return a function that STAMPS
+ * the correct BLAKE3 hash onto a payload, recomputing it from `key` and ignoring
+ * any caller-supplied hash. This is the construction-time counterpart to
+ * `updateHash`: wire it into a model's `from`/`constructor` so every new
+ * instance is correctly addressed without callers having to compute the hash.
  *
- *   1. applies `patch` to `entity`,
- *   2. recomputes `hash` from `contentKey` (so the address always matches the
- *      content — you never hand-write an `updateContentHash` call),
- *   3. delegates to `versionedUpdate`, so the result is a brand-new instance
- *      with the same `id` and a strictly-later `updated_at`.
- *
- * `contentKey` is a runtime parameter because the generic `K` is erased at
- * runtime. The hash is recomputed unconditionally (idempotent when the content
- * is unchanged), which guarantees the address can never drift from the content.
+ * Because objects are immutable, the constructor is the ONLY place that needs to
+ * set the hash up — once stamped, it can never drift.
  *
  * @example
- * class Post {
- *   update(patch: Partial<PostData>): Post {
- *     return contentAddressableUpdate(this, patch, "body", Post.from);
- *   }
- * }
+ * const assertBodyHash = createAssertHash("body");
+ * // inside Post.from:
+ * return new Post(assertBodyHash(data));
  */
-export function contentAddressableUpdate<
-	K extends string,
-	D extends Identifiable<string> & Versioned & ContentAddressable<K>,
-	T,
->(entity: D, patch: Partial<D>, contentKey: K, reconstruct: (data: D) => T): T {
-	const merged = { ...entity, ...patch } as D;
-	const addressed = withContentHash(merged, contentKey);
-	return versionedUpdate(entity, addressed, reconstruct);
+export function createAssertHash<K extends string>(key: K) {
+	return <D extends Record<K, string>>(
+		payload: D & { hash?: string },
+	): D & { hash: string } => withContentHash(payload, key);
 }
 
+// ---------------------------------------------------------------------------
+// Update-time: recompute the hash on every content set (the "mutation" half)
+// ---------------------------------------------------------------------------
+
 /**
- * Build a model-bound, content-addressing update function — the analogue of
- * `createUpdate` for entities that are BOTH `Versioned` AND `ContentAddressable`.
- * The returned function recomputes the content hash on every call, so callers
- * get automatic `updateContentHash` behaviour for free, with no scattered
- * hashing logic at the call sites.
+ * updateHash — bind a content field + a model constructor and return an
+ * IMMUTABLE update function that, on EVERY call:
+ *   1. applies `patch` and bumps the version via the shared `Versioned`
+ *      capacity (same `id`, strictly-later `updated_at`), then
+ *   2. recomputes the BLAKE3 hash from `key` (idempotent when the content is
+ *      unchanged) so the address can never drift from the content.
+ *
+ * The hash is recomputed HERE (not merely delegated to `from`) so the result is
+ * content-addressed even if the model's `from` were naive. Wire it into a
+ * model's `update` method:
  *
  * @example
- * const updatePost = createContentAddressableUpdate("body", Post);
- * // in Post.update:  return updatePost(this, patch);
+ * const updatePost = updateHash("body", Post);
+ * // inside Post.update:  return updatePost(this, patch);
  */
-export function createContentAddressableUpdate<
+export function updateHash<
 	K extends string,
-	D extends Identifiable<string> & Versioned & ContentAddressable<K>,
+	D extends Identifiable<string> & Versioned & Record<K, string>,
 	T,
->(contentKey: K, ctor: { from(data: D): T }) {
+>(key: K, ctor: { from(data: D): T }) {
 	return (entity: D, patch: Partial<D>): T =>
-		contentAddressableUpdate(entity, patch, contentKey, ctor.from);
+		versionedUpdate(entity, patch, (d) => ctor.from(withContentHash(d, key)));
+}
+
+// ---------------------------------------------------------------------------
+// One-mention enabler: name your content key ONCE, get both wiring hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * createContentAddressing — the MINIMAL boilerplate enabler for the capacity.
+ *
+ * A model only has to name its content key a single time; this returns the
+ * hooks it needs to wire the capacity into its `from` (construction) and
+ * `update` (mutation) methods:
+ *
+ * - `assertHash`        — stamp the correct hash at construction (`createAssertHash`)
+ * - `updateFor`         — RE-DERIVE the hash on every content set, with NO
+ *                         version bump. Requires only `Identifiable & Immutable`,
+ *                         so a content-addressable entity does NOT have to be
+ *                         versioned (the two capacities are independent).
+ * - `updateForVersioned`— RE-DERIVE the hash AND bump the version, for entities
+ *                         that wear BOTH `ContentAddressable` and `Versioned`
+ *                         (e.g. `Post`). Delegates to `updateHash`.
+ *
+ * @example (content-addressable but NOT versioned)
+ * const CA = createContentAddressing("content");
+ * static from(d) { return new Blob(CA.assertHash(d)); }
+ * update(p) { return blobUpdate(this, p); }
+ * const blobUpdate = CA.updateFor(Blob);
+ *
+ * @example (both — e.g. Post)
+ * const CA = createContentAddressing("body");
+ * const assertBodyHash = CA.assertHash;
+ * const updatePost = CA.updateForVersioned(Post);
+ */
+export function createContentAddressing<K extends string>(key: K) {
+	return {
+		/** Stamp the correct BLAKE3 hash from `key` — use inside `from`. */
+		assertHash: createAssertHash(key),
+
+		/**
+		 * Bind a model class; returns an update fn that RE-DERIVES the hash from
+		 * `key` on every content set. Requires NO `Versioned` — this is the path
+		 * for entities that are content-addressable but NOT versioned. Built on
+		 * the `Immutable` capacity's base `createUpdate`.
+		 */
+		updateFor: <
+			D extends Identifiable<string> & Immutable & Record<K, string>,
+			T,
+		>(
+			ctor: { from(data: D): T },
+		) => createUpdate<D, T>((d) => ctor.from(withContentHash(d, key))),
+
+		/**
+		 * Bind a model class; returns an update fn that bumps the version AND
+		 * re-derives the hash — for entities wearing BOTH `Versioned` and
+		 * `ContentAddressable`. Delegates to `updateHash`, which composes the
+		 * `Versioned` capacity's version step with the hash re-derivation.
+		 */
+		updateForVersioned: <
+			D extends Identifiable<string> & Versioned & Record<K, string>,
+			T,
+		>(
+			ctor: { from(data: D): T },
+		) => updateHash(key, ctor),
+	};
 }
 
 // ---------------------------------------------------------------------------
 // Concrete validators for the default "content" key (mirrors identifiable.ts)
 // ---------------------------------------------------------------------------
-const isContentAddressable = typia.createIs<ContentAddressable>();
-const validateContentAddressable = typia.createValidate<ContentAddressable>();
-
-export { isContentAddressable, validateContentAddressable };
+export const isContentAddressable = typia.createIs<ContentAddressable>();
+export const validateContentAddressable = typia.createValidate<ContentAddressable>();

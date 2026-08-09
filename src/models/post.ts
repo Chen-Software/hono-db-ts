@@ -2,8 +2,13 @@ import type { UUID } from "crypto";
 import typia, { type tags, type Classifiable } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
-import { type Versioned, versionedUpdate } from "../capacities/versioned";
+import { type Versioned } from "../capacities/versioned";
+import {
+	type ContentAddressable,
+	createContentAddressing,
+} from "../capacities/content-addressable";
 import type { User } from "./user";
+import { type Blake3 } from "../tags/format-string-blake3";
 import { isProd } from "@/macros";
 
 /**
@@ -17,11 +22,17 @@ import { isProd } from "@/macros";
  * `createUpdate` factory) by wiring in the shared `versionedUpdate` helper,
  * with zero capacity changes.
  */
-interface PostData extends Identifiable<UUID>, Timestamped, Versioned {
+interface PostData extends
+	Identifiable<UUID>,
+	Timestamped,
+	Versioned,
+	ContentAddressable<"body"> {
 	/** Post title. */
 	title: string & tags.MinLength<1> & tags.MaxLength<200>;
 
-	/** Post body / content. */
+	/** Post body / content. (The `body` field + `hash` come from the
+	 *  `ContentAddressable<"body">` capacity; the length constraints are added
+	 *  here — the intersection accumulates the tags.) */
 	body: string & tags.MinLength<1> & tags.MaxLength<10000>;
 
 	/** Author of the post — a nested `User` (instance or plain data). */
@@ -46,7 +57,10 @@ const pruneFn = typia.plain.createAssertPrune<PostData>();
 class Post implements PostData {
 	id!: UUID;
 	title!: string;
-	body!: string;
+	/** Content field — `readonly` because content addressing requires the
+	 *  payload to be immutable (you reconstruct, never mutate). Supplied by the
+	 *  `ContentAddressable<"body">` capacity. */
+	readonly body!: string;
 	author!: User;
 	published!: boolean;
 	created_at!: string;
@@ -54,13 +68,21 @@ class Post implements PostData {
 	/** Version timestamp — strictly increases on every update; equals `created_at` on the first version. This field IS the version. */
 	updated_at!: string & tags.Format<"date-time">;
 
+	/** BLAKE3 content address of `body` — `readonly`; always derived from
+	 *  `body` by `createAssertHash` (construction) or `updateHash` (update).
+	 *  Supplied by the `ContentAddressable<"body">` capacity. */
+	readonly hash!: string & Blake3;
+
 	private constructor(data: Classifiable<PostData>) {
 		return Object.assign(this, typia.plain.assertClassify<PostData>(data));
 	}
 
 	// ---- static factory / creators ------------------------------------------
 	static from(data: PostData): Post {
-		return new Post(data);
+		// The constructor is the single place that STAMPS the content address,
+		// because objects are immutable. `assertBodyHash` recomputes `hash`
+		// from `body`, overwriting any caller-supplied value.
+		return new Post(assertBodyHash(data));
 	}
 
 	// ---- instance methods (prototype) ---------------------------------------
@@ -97,7 +119,9 @@ class Post implements PostData {
 	 * versioning logic lives in exactly one place.
 	 */
 	update(patch: Partial<PostData>): Post {
-		return versionedUpdate(this, patch, Post.from);
+		// `updatePost` bumps the version (Versioned) AND recomputes the content
+		// address from `body` — the hash can never drift from the content.
+		return updatePost(this, patch);
 	}
 
 	/** JSON string representation. */
@@ -137,6 +161,17 @@ class Post implements PostData {
 	static schema = typia.json.schema<[PostData]>();
 	static metaSchema = !isProd ? typia.reflect.schema<PostData>() : undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Content-addressing wiring (Immutable + ContentAddressable capacities)
+// ---------------------------------------------------------------------------
+// Name the content key ONCE via `createContentAddressing`. Everything else —
+// stamping the hash at construction and re-deriving it (plus bumping the
+// version, since Post is also `Versioned`) on update — is bound from that
+// single key. `updateForVersioned` composes both capacities.
+const CA = createContentAddressing("body");
+const assertBodyHash = CA.assertHash; // stamp hash from `body` (→ createAssertHash)
+const updatePost = CA.updateForVersioned(Post); // version bump + re-hash (→ updateHash)
 
 export { type PostData, Post };
 export { Post as PostModel };

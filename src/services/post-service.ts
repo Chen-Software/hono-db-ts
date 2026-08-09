@@ -19,8 +19,8 @@ const PostService = new Hono();
 // GET / — list the latest version of every post
 PostService.get("/", (c) => {
 	const list = store.listLatest().map((p) => {
-		const { id, title, published, author, created_at, updated_at } = p;
-		return { id, title, published, author, created_at, updated_at };
+		const { id, title, published, author, created_at, updated_at, hash } = p;
+		return { id, title, published, author, created_at, updated_at, hash };
 	});
 	return c.json(list);
 });

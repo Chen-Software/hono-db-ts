@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PostService } from "./post-service";
+import { hashContent } from "../capacities/content-addressable";
 import { type User } from "../models/user";
 import { type Post, PostModel } from "../models/post";
 
@@ -18,6 +19,10 @@ const author: User = {
 	updated_at: "2026-08-09T12:00:00.000Z",
 };
 
+// Valid 64-hex placeholder. The model recomputes the REAL hash from `body`, so
+// this only needs to pass the `Blake3` format check at the input boundary.
+const HASH_PLACEHOLDER = "a".repeat(64);
+
 const makePost = (overrides?: Partial<Post>): Post =>
 	PostModel.from({
 		id: crypto.randomUUID(),
@@ -27,6 +32,7 @@ const makePost = (overrides?: Partial<Post>): Post =>
 		published: false,
 		created_at: "2026-08-09T12:00:00.000Z",
 		updated_at: "2026-08-09T12:00:00.000Z",
+		hash: HASH_PLACEHOLDER,
 		...overrides,
 	});
 
@@ -41,6 +47,7 @@ const payload = (overrides?: Record<string, unknown>) => ({
 	published: false,
 	created_at: "2026-08-09T12:00:00.000Z",
 	updated_at: "2026-08-09T12:00:00.000Z",
+	hash: HASH_PLACEHOLDER,
 	...overrides,
 });
 
@@ -78,6 +85,16 @@ describe("PostService", () => {
 			expect(body.id).toBe(base.id);
 			expect(body.title).toBe(base.title);
 			expect(body.author.id).toBe(author.id);
+		});
+
+		it("stamps a correct content hash from body on create", async () => {
+			// Use a FRESH id so we don't collide with `base` (already stored by
+			// the "creates a valid post" test above).
+			const fresh = { ...base, id: crypto.randomUUID() };
+			const res = await request("/", jsonBody(fresh));
+			expect(res.status).toBe(201);
+			const body = await res.json<Post>();
+			expect(body.hash).toBe(hashContent(body.body));
 		});
 
 		it("rejects duplicate id with 409", async () => {
@@ -156,6 +173,18 @@ describe("PostService", () => {
 			// update created a NEW instance with the same id and a strictly
 			// later version timestamp (updated_at)
 			expect(isLater(body.updated_at, base.updated_at)).toBe(true);
+		});
+
+		it("recomputes the content hash when body changes on update", async () => {
+			const res = await request(
+				`/${base.id}`,
+				jsonBody({ body: "rehashed body" }, "PATCH"),
+			);
+			expect(res.status).toBe(200);
+
+			const body = await res.json<Post>();
+			expect(body.body).toBe("rehashed body");
+			expect(body.hash).toBe(hashContent("rehashed body"));
 		});
 
 		it("returns 404 when patching non-existent post", async () => {

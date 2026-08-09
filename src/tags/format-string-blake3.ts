@@ -1,24 +1,28 @@
 import { type tags } from "typia";
 
 /**
- * Blake3 — a custom typia type-tag for the canonical lowercase-HEX encoding of
- * a 32-byte (256-bit) BLAKE3 digest.
+ * Blake3 — FORMAT-ONLY custom tag (the practical stand-in for
+ * `tags.Format<"blake3">`).
  *
- * WHY A CUSTOM TAG (and not `tags.Format<"blake3">`):
- * `tags.Format<T>` is a CLOSED set. typia only generates validators for a fixed
- * allow-list of formats (date-time, uuid, email, uri, hostname, ipv4, ipv6, …).
- * Any *unknown* format string — including "blake3" — is SILENTLY IGNORED:
- * `string & tags.Format<"blake3">` compiles, but the runtime check is a no-op
- * that happily accepts `"not-a-hash!!!"` as valid. There is no public
- * extension point to teach `tags.Format` a new format (its validation is
- * hardcoded in typia's transformer, not data-driven), so a custom tag via
- * `tags.TagBase` is the only way to get REAL validation. Use it as
- * `string & Blake3` — functionally identical ergonomically to what
- * `Format<"blake3">` *would* be, but actually enforced.
+ * Validates that a string is the canonical lowercase-HEX encoding of a 32-byte
+ * (256-bit) BLAKE3 digest: exactly 64 `[a-f0-9]` characters. This is a PURELY
+ * SYNTACTIC check — it confirms the string *looks like* a BLAKE3 hash. It does
+ * NOT verify that the hash actually equals `blake3(content)`; that SEMANTIC
+ * correctness is the job of the runtime helpers in the `ContentAddressable`
+ * capacity (`createAssertHash` at construction, `updateHash` on update) and the
+ * `verifyContentAddress` integrity check — NOT of any typia tag.
  *
- * The `validate` string is emitted verbatim by typia's transformer into the
- * generated runtime checker; `$input` is substituted with the value under
- * test. BLAKE3's default output is 32 bytes → 64 lowercase hex characters.
+ * WHY WE DO NOT USE `tags.Format<"blake3">`: typia's built-in `Format` is a
+ * closed allow-list (date-time, uuid, email, uri, …) and SILENTLY IGNORES
+ * unknown formats, so a real custom tag via `tags.TagBase` is required. Use as
+ * `string & Blake3`.
+ *
+ * WHY WE DO NOT USE AN OBJECT TAG FOR THE SEMANTIC CHECK: a field tag only sees
+ * its own value, so it cannot recompute the hash from a sibling content field;
+ * an object-scoped tag that *could* read the sibling was rejected because
+ * content is immutable — the hash must be RE-DERIVED on every content set by
+ * the model's constructor/update, not merely validated once. Hence the
+ * function-based approach in `content-addressable.ts`.
  */
 export type Blake3 = tags.TagBase<{
 	kind: "blake3";

@@ -1,9 +1,16 @@
 import { type tags } from "typia";
 import type { Identifiable } from "./identifiable";
+import type { Immutable } from "./immutable";
 
 /**
  * Versioned marks an entity as an immutable, append-only instance of a logical
  * object identified by its `id`.
+ *
+ * It EXTENDS the `Immutable` capacity — every versioned entity is, by
+ * definition, immutable (a modification yields a NEW instance, never an
+ * in-place mutation). Inheriting the marker is what lets a `Versioned` entity
+ * reuse the `Immutable` update vocabulary (`createUpdate`, `createAssertUpdate`,
+ * `createValidateUpdate`, …).
  *
  * The version discriminator is the `updated_at` timestamp: every modification
  * produces a NEW object with the same `id` and a *strictly later* `updated_at`.
@@ -12,7 +19,7 @@ import type { Identifiable } from "./identifiable";
  * identifier — lexicographic comparison of the ISO strings orders versions
  * chronologically, and equals `created_at` on the very first version.
  */
-interface Versioned {
+interface Versioned extends Immutable {
 	/** Version timestamp. Strictly increases on every update; equals `created_at` on the first version. */
 	updated_at: string & tags.Format<"date-time">;
 }
@@ -56,30 +63,45 @@ export function versionedUpdate<
 	D extends Identifiable<string> & Versioned,
 	T,
 >(entity: D, patch: Partial<D>, reconstruct: (data: D) => T): T {
-	return reconstruct({
-		...entity,
-		...patch,
-		id: entity.id,
-		updated_at: nextUpdatedAt(entity.updated_at),
-	});
+	// Merge, then make `id` and `updated_at` authoritative: any `id`/`updated_at`
+	// in the patch is ignored in favour of the existing id and a freshly
+	// bumped version. `withVersionBump` supplies the strictly-later `updated_at`.
+	const merged = { ...entity, ...patch };
+	return reconstruct({ ...withVersionBump(merged), id: entity.id });
 }
 
 /**
- * Build a reusable, model-bound update function — the functional analogue of
- * `typia.createAssert`, but for immutable versioned updates.
+ * Bump the version of a plain data object WITHOUT reconstructing — the pure
+ * "version step" other update helpers compose. Returns a shallow clone with a
+ * strictly-later `updated_at`. `id` is left untouched (callers are
+ * responsible for preserving identity; `versionedUpdate` does that for you).
+ */
+export function withVersionBump<
+	D extends Identifiable<string> & Versioned,
+>(data: D): D {
+	return { ...data, updated_at: nextUpdatedAt(data.updated_at) };
+}
+
+/**
+ * Model-bound, VERSION-BUMPING immutable update — the functional analogue of
+ * `typia.createAssert`, but for versioned models.
+ *
+ * It delegates to the shared {@link versionedUpdate}, so every call returns a
+ * brand-new instance carrying the same `id` and a *strictly later* `updated_at`
+ * (the `Versioned` contract) — and `id`/`updated_at` in a patch are ignored.
  *
  * Pass the model CLASS (not merely a type argument) so the factory can capture
  * its static `from` at runtime AND infer both the plain data shape `D` and the
- * instance type `T` from `from`'s signature. A type-only `createUpdate<User>()`
+ * instance type `T` from `from`'s signature. A type-only `createVersionedUpdate<User>()`
  * would have no runtime handle on `User.from` and therefore could not
  * reconstruct a new instance — which is why the class is required.
  *
  * @example
- * const updateUser = createUpdate(User);
+ * const updateUser = createVersionedUpdate(User);
  * const next = updateUser(existingUser, { name: "Alicia" });
  * // `next` is a brand-new User, same id, strictly-later updated_at.
  */
-export function createUpdate<
+export function createVersionedUpdate<
 	D extends Identifiable<string> & Versioned,
 	T,
 >(ctor: { from(data: D): T }): (entity: D, patch: Partial<D>) => T {

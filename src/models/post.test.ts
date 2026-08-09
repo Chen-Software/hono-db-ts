@@ -1,11 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { createUpdate } from "../capacities/versioned";
+import { createVersionedUpdate } from "../capacities/versioned";
+import { hashContent, verifyContentAddress } from "../capacities/content-addressable";
 import { User } from "./user";
 import { Post } from "./post";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
+// A valid 64-hex placeholder hash. The model's constructor (`Post.from` →
+// `createAssertHash`) recomputes the REAL hash from `body`, so this value only
+// needs to satisfy the `Blake3` FORMAT check at the input boundary.
+const HASH_PLACEHOLDER = "a".repeat(64);
+
 const authorData = {
 	id: crypto.randomUUID(),
 	name: "Alice",
@@ -24,6 +30,7 @@ const valid = {
 	published: false,
 	created_at: "2026-08-09T12:00:00.000Z",
 	updated_at: "2026-08-09T12:00:00.000Z",
+	hash: HASH_PLACEHOLDER,
 };
 
 // ---------------------------------------------------------------------------
@@ -168,10 +175,10 @@ describe("Post.update (Versioned capacity)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// createUpdate(Post) factory — the typia.createAssert-style reusable update
+// createVersionedUpdate(Post) factory — the typia.createAssert-style reusable update
 // ---------------------------------------------------------------------------
-describe("createUpdate(Post) factory", () => {
-	const updatePost = createUpdate(Post);
+describe("createVersionedUpdate(Post) factory", () => {
+	const updatePost = createVersionedUpdate(Post);
 	const isLater = (a: string, b: string) => a > b;
 
 	it("produces a new instance with the same id and a later version", () => {
@@ -207,5 +214,39 @@ describe("createUpdate(Post) factory", () => {
 	it("returns the same type as the instance method (Post)", () => {
 		const p = Post.from(valid);
 		expect(Post.is(updatePost(p, { title: "y" }))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// content addressing (ContentAddressable capacity — construction + update)
+// ---------------------------------------------------------------------------
+describe("Post content addressing (ContentAddressable capacity)", () => {
+	it("constructor stamps the correct hash from body (overwriting any input)", () => {
+		const p = Post.from({ ...valid, hash: "a".repeat(64) });
+		expect(p.hash).toBe(hashContent(p.body));
+		expect(verifyContentAddress(p, "body")).toBe(true);
+	});
+
+	it("update recomputes the hash when body changes (address follows content)", () => {
+		const p = Post.from(valid);
+		const next = p.update({ body: "edited body" });
+		expect(next.body).toBe("edited body");
+		expect(next.hash).toBe(hashContent("edited body"));
+		expect(verifyContentAddress(next, "body")).toBe(true);
+		// the previous version's hash is unchanged (immutability).
+		expect(p.hash).toBe(hashContent(valid.body));
+	});
+
+	it("hash is idempotent when body is unchanged on update", () => {
+		const p = Post.from(valid);
+		const next = p.update({ title: "new title" });
+		expect(next.hash).toBe(hashContent(valid.body));
+		expect(verifyContentAddress(next, "body")).toBe(true);
+	});
+
+	it("tampering with body after construction is detected", () => {
+		const p = Post.from(valid);
+		const tampered = { ...p, body: "mutated" } as Post;
+		expect(verifyContentAddress(tampered, "body")).toBe(false);
 	});
 });

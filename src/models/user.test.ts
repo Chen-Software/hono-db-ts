@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createUpdate } from "../capacities/versioned";
+import { createVersionedUpdate } from "../capacities/versioned";
 import { User } from "./user";
 
 // ---------------------------------------------------------------------------
@@ -547,9 +547,9 @@ describe("User.update", () => {
 	});
 });
 
-describe("createUpdate(User) factory", () => {
+describe("createVersionedUpdate(User) factory", () => {
 	// The functional analogue of typia.createAssert, bound to a model class.
-	const updateUser = createUpdate(User);
+	const updateUser = createVersionedUpdate(User);
 	const isLater = (a: string, b: string) => a > b;
 
 	it("produces a new instance with the same id and a later version", () => {
