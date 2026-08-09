@@ -1,8 +1,9 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
+import type { Timestamped } from "../capacities/timestamped";
 
-interface User extends Identifiable<UUID> {
+interface User extends Identifiable<UUID>, Timestamped {
 	/** Name of the user. */
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
 
@@ -17,10 +18,6 @@ interface User extends Identifiable<UUID> {
 		tags.Type<"uint32"> &
 		tags.ExclusiveMinimum<19> &
 		tags.Maximum<100>;
-
-	/** Timestamp when the user was created.*/
-	created_at: string & tags.Format<"date-time">;
-
 }
 
 const UserModel = {
