@@ -45,17 +45,21 @@ UserService.get("/:id", (c) => {
 });
 
 // PATCH /:id — partial update with typia validation
-UserService.patch("/:id", typiaValidator("json", UserModel.validatePartial), (c) => {
-	const id = c.req.param("id");
-	const existing = users.get(id);
-	if (!existing) {
-		throw new HTTPException(404, { message: "User not found" });
-	}
-	const patch = c.req.valid("json"); // typed as Partial<User>
-	const updated = { ...existing, ...patch, id: existing.id }; // id is immutable
-	users.set(id, updated);
-	return c.json(updated);
-});
+UserService.patch(
+	"/:id",
+	typiaValidator("json", UserModel.validatePartial),
+	(c) => {
+		const id = c.req.param("id");
+		const existing = users.get(id);
+		if (!existing) {
+			throw new HTTPException(404, { message: "User not found" });
+		}
+		const patch = c.req.valid("json"); // typed as Partial<User>
+		const updated = { ...existing, ...patch, id: existing.id }; // id is immutable
+		users.set(id, updated);
+		return c.json(updated);
+	},
+);
 
 // DELETE /:id — remove a user
 UserService.delete("/:id", (c) => {
