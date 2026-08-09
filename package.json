@@ -8,7 +8,8 @@
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
 		"lint": "bun x @biomejs/biome lint --fix .",
-		"start": "bun run src/main.ts"
+		"start": "bunx ttsc && bun run src/main.ts",
+		"build": "bunx vite build"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
