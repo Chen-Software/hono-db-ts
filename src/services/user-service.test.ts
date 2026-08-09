@@ -13,6 +13,7 @@ const makeUser = (overrides?: Partial<User>): User =>
 		role: "member",
 		age: 25,
 		created_at: "2026-08-09T12:00:00.000Z",
+		updated_at: "2026-08-09T12:00:00.000Z",
 		...overrides,
 	});
 
@@ -24,10 +25,11 @@ const payload = (overrides?: Record<string, unknown>) => ({
 	name: "Alice",
 	email: "alice@example.com",
 	role: "member",
-	age: 25,
-	created_at: "2026-08-09T12:00:00.000Z",
-	...overrides,
-});
+		age: 25,
+		created_at: "2026-08-09T12:00:00.000Z",
+		updated_at: "2026-08-09T12:00:00.000Z",
+		...overrides,
+	});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,6 +45,9 @@ function jsonBody(body: unknown, method = "POST"): RequestInit {
 		body: JSON.stringify(body),
 	};
 }
+
+/** ISO-8601 timestamps of fixed length sort chronologically as text. */
+const isLater = (a: string, b: string) => a > b;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -131,12 +136,55 @@ describe("UserService", () => {
 			const body = await res.json<User>();
 			expect(body.name).toBe("Alicia");
 			expect(body.id).toBe(base.id);
+			// update created a NEW instance with the same id and a strictly
+			// later version timestamp (updated_at)
+			expect(isLater(body.updated_at, base.updated_at)).toBe(true);
 		});
 
 		it("returns 404 when patching non-existent user", async () => {
 			const res = await request(
 				"/00000000-0000-4000-8000-000000000000",
 				jsonBody({ name: "Ghost" }, "PATCH"),
+			);
+			expect(res.status).toBe(404);
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// GET /:id/history — full version history (immutable audit log)
+	// -----------------------------------------------------------------------
+	describe("GET /:id/history", () => {
+		it("returns every version, newest last, with a constant id", async () => {
+			// build up a few more versions on top of the one created in POST
+			await request(`/${base.id}`, jsonBody({ name: "A1" }, "PATCH"));
+			await request(`/${base.id}`, jsonBody({ name: "A2" }, "PATCH"));
+
+			const res = await request(`/${base.id}/history`);
+			expect(res.status).toBe(200);
+
+			const history = await res.json<User[]>();
+			expect(Array.isArray(history)).toBe(true);
+			// v1 (POST) + 1 (PATCH describe above) + 2 (this test) = 4
+			expect(history.length).toBeGreaterThanOrEqual(4);
+			expect(history.every((h) => h.id === base.id)).toBe(true);
+
+			// version timestamps must be strictly increasing
+			const stamps = history.map((h) => h.updated_at);
+			for (let i = 1; i < stamps.length; i++) {
+				expect(isLater(stamps[i]!, stamps[i - 1]!)).toBe(true);
+			}
+
+			// the last entry equals the current latest
+			const latest = await (await request(`/${base.id}`)).json<User>();
+			const last = history[history.length - 1]!;
+			expect(last.id).toBe(latest.id);
+			expect(last.updated_at).toBe(latest.updated_at);
+			expect(last.name).toBe(latest.name);
+		});
+
+		it("returns 404 for an unknown id", async () => {
+			const res = await request(
+				"/11111111-1111-4111-8111-111111111111/history",
 			);
 			expect(res.status).toBe(404);
 		});

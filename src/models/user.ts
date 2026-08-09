@@ -2,12 +2,13 @@ import type { UUID } from "crypto";
 import typia, { type tags, type Classifiable } from "typia";
 import type { Identifiable } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
+import { type Versioned, versionedUpdate } from "../capacities/versioned";
 import { isProd } from "@/macros";
 
 /**
  * User data model
  */
-interface UserData extends Identifiable<UUID>, Timestamped {
+interface UserData extends Identifiable<UUID>, Timestamped, Versioned {
 	/** Name of the user. */
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
 
@@ -21,11 +22,6 @@ interface UserData extends Identifiable<UUID>, Timestamped {
 	age: number & tags.Type<"uint32"> & tags.ExclusiveMinimum<19> & tags.Maximum<100>;
 }
 
-// static reusable functions
-const randomFn = typia.createRandom<UserData>();
-const cloneFn = typia.plain.createAssertClone<UserData>();
-const pruneFn = typia.plain.createAssertPrune<UserData>();
-
 /**
  * User class
  *
@@ -38,11 +34,14 @@ const pruneFn = typia.plain.createAssertPrune<UserData>();
  */
 class User implements UserData {
 	id!: UUID;
-	name!: string & tags.MinLength<1> & tags.MaxLength<100>;
-	email!: string & tags.Format<"email"> & tags.MaxLength<255>;
+	name!: string;
+	email!: string;
 	role!: "admin" | "member" | "viewer";
-	age!: number & tags.Type<"uint32"> & tags.ExclusiveMinimum<19> & tags.Maximum<100>;
+	age!: number;
 	created_at!: string;
+
+	/** Version timestamp — strictly increases on every update; equals `created_at` on the first version. This field IS the version. */
+	updated_at!: string & tags.Format<"date-time">;
 
 	private constructor(data: Classifiable<UserData>) {
 		return Object.assign(this, typia.plain.assertClassify<UserData>(data));
@@ -51,10 +50,6 @@ class User implements UserData {
 	// ---- static factory / creators ------------------------------------------
 	static from(data: UserData): User {
 		return new User(data);
-	}
-
-	static random(): UserData {
-		return randomFn();
 	}
 
 	// ---- instance methods (prototype) ---------------------------------------
@@ -83,14 +78,25 @@ class User implements UserData {
 		return User.validate(this);
 	}
 
-	/** Clone this instance (deep copy, strips extras). */
+	/** 
+	 * Clone
+	 */
 	clone(): User {
-		return User.from(cloneFn(this));
+		return User.from(this);
 	}
 
-	/** Prune this instance to the validated schema. */
-	prune(): User {
-		return User.from(pruneFn(this));
+	/**
+	 * Immutable update. Returns a BRAND-NEW `User` instance carrying the same
+	 * `id` and a *strictly later* `updated_at` (the version timestamp). The
+	 * current instance is never mutated. `id` and `updated_at` are always
+	 * authoritative — any `id` or `updated_at` present in `patch` is ignored in
+	 * favour of the existing `id` and a freshly generated timestamp.
+	 *
+	 * Delegates to the shared `versionedUpdate` helper from the `Versioned`
+	 * capacity so the versioning logic lives in exactly one place.
+	 */
+	update(patch: Partial<UserData>): User {
+		return versionedUpdate(this, patch, User.from);
 	}
 
 	/** JSON string representation. */
@@ -114,6 +120,7 @@ class User implements UserData {
 	}
 
 	// ---- static functions ---------------------------------------------------
+	static random = typia.createRandom<UserData>();
 	static is = typia.createIs<UserData>();
 	static equals = typia.compare.createEquals<UserData>();
 	static less = (a: UserData, b: UserData): boolean =>
@@ -125,8 +132,6 @@ class User implements UserData {
 	static validate = typia.createValidate<UserData>();
 	static validateStrict = typia.createValidateEquals<UserData>();
 	static validatePartial = typia.createValidate<Partial<UserData>>();
-	static clone = typia.plain.createAssertClone<UserData>();
-	static prune = typia.plain.createAssertPrune<UserData>();
 	static toJSON = typia.json.createAssertStringify<UserData>();
 	static fromJSON = typia.json.createAssertParse<UserData>();
 	static encode = typia.protobuf.createAssertEncode<UserData>();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createUpdate } from "../capacities/versioned";
 import { User } from "./user";
 
 // ---------------------------------------------------------------------------
@@ -11,6 +12,7 @@ const valid = {
 	role: "member" as const,
 	created_at: "2026-08-09T12:00:00.000Z",
 	age: 25,
+	updated_at: "2026-08-09T12:00:00.000Z",
 };
 
 const another = {
@@ -164,63 +166,48 @@ describe("User.assert", () => {
 });
 
 // ---------------------------------------------------------------------------
-// clone – deep copy that strips extra fields, throws on invalid
+// User#clone (instance) – deep copy into a new instance, strips extra fields
 // ---------------------------------------------------------------------------
-describe("User.clone", () => {
+describe("User#clone (instance)", () => {
 	it("returns a different object reference", () => {
-		const cloned = User.clone(valid);
-		expect(cloned).not.toBe(valid);
+		const userobj = User.from(valid);
+		const cloned = userobj.clone();
+		expect(cloned).not.toBe(userobj);
 	});
 
 	it("preserves all values (deep copy)", () => {
-		const cloned = User.clone(valid);
+		const userobj = User.from(valid);
+		const cloned = userobj.clone();
 		expect(cloned.id).toBe(valid.id);
 		expect(cloned.name).toBe(valid.name);
 		expect(cloned.email).toBe(valid.email);
 		expect(cloned.role).toBe(valid.role);
 		expect(cloned.age).toBe(valid.age);
 		expect(cloned.created_at).toBe(valid.created_at);
+		expect(cloned.updated_at).toBe(valid.updated_at);
 	});
 
-	it("strips extra unknown fields", () => {
-		const cloned = User.clone({ ...valid, bogus: "x" } as User);
+	it("strips extra unknown fields added to the source instance", () => {
+		const userobj = User.from(valid) as User & { bogus?: string };
+		(userobj as Record<string, unknown>).bogus = "x";
+		const cloned = userobj.clone();
 		expect("bogus" in cloned).toBe(false);
 	});
 
-	it("throws on invalid data", () => {
-		expect(() => User.clone({ ...valid, age: -1 } as User)).toThrow();
+	it("produces an independent copy (mutating the clone does not affect the original)", () => {
+		const userobj = User.from(valid);
+		const cloned = userobj.clone();
+		cloned.name = "Changed";
+		expect(userobj.name).toBe("Alice");
+	});
+
+	it("returns a valid User", () => {
+		const userobj = User.from(valid);
+		const cloned = userobj.clone();
+		expect(User.is(cloned)).toBe(true);
 	});
 });
 
-// ---------------------------------------------------------------------------
-// prune – mutates in-place by stripping extra fields, throws on invalid
-// ---------------------------------------------------------------------------
-describe("User.prune", () => {
-	it("returns the same object reference (mutates in-place)", () => {
-		const withExtra = { ...valid, bogus: "x" } as User;
-		const pruned = User.prune(withExtra);
-		expect(pruned).toBe(withExtra);
-	});
-
-	it("strips extra unknown fields", () => {
-		const withExtra = { ...valid, bogus: "x", junk: 42 } as User;
-		const pruned = User.prune(withExtra);
-		expect("bogus" in pruned).toBe(false);
-		expect("junk" in pruned).toBe(false);
-	});
-
-	it("preserves all valid fields", () => {
-		const withExtra = { ...valid, bogus: "x" } as User;
-		const pruned = User.prune(withExtra);
-		expect(pruned.name).toBe(valid.name);
-		expect(pruned.email).toBe(valid.email);
-		expect(pruned.age).toBe(valid.age);
-	});
-
-	it("throws on invalid data", () => {
-		expect(() => User.prune({ ...valid, age: -1 } as User)).toThrow();
-	});
-});
 
 // ---------------------------------------------------------------------------
 // assertStrict – returns first arg regardless of input (type-assertion passthrough)
@@ -505,6 +492,110 @@ describe("User.from", () => {
 });
 
 // ---------------------------------------------------------------------------
+// update — immutable modify: new instance, same id, strictly-later updated_at
+// ---------------------------------------------------------------------------
+describe("User.update", () => {
+	// ISO-8601 strings of fixed length sort chronologically as text.
+	const isLater = (a: string, b: string) => a > b;
+
+	it("returns a new object reference (does not mutate the receiver)", () => {
+		const u = User.from(valid);
+		const next = u.update({ name: "Alicia" });
+		expect(next).not.toBe(u);
+		expect(u.name).toBe("Alice"); // original must stay untouched
+	});
+
+	it("retains the same id", () => {
+		const u = User.from(valid);
+		const next = u.update({ age: 30 });
+		expect(next.id).toBe(u.id);
+	});
+
+	it("stamps a strictly-later updated_at (the version)", () => {
+		const u = User.from(valid); // updated_at == created_at
+		const next = u.update({ name: "Alicia" });
+		expect(next.updated_at).not.toBe(u.updated_at);
+		expect(isLater(next.updated_at, u.updated_at)).toBe(true);
+	});
+
+	it("applies the patched fields and preserves the rest", () => {
+		const u = User.from(valid);
+		const next = u.update({ name: "Alicia", email: "alicia@example.com" });
+		expect(next.name).toBe("Alicia");
+		expect(next.email).toBe("alicia@example.com");
+		expect(next.age).toBe(valid.age);
+		expect(next.created_at).toBe(valid.created_at);
+		expect(next.updated_at).not.toBe(u.updated_at);
+	});
+
+	it("ignores any id/updated_at supplied in the patch", () => {
+		const u = User.from(valid);
+		const patched = u.update({
+			id: crypto.randomUUID(),
+			updated_at: "1970-01-01T00:00:00.000Z",
+			name: "X",
+		});
+		expect(patched.id).toBe(u.id);
+		expect(patched.updated_at).not.toBe("1970-01-01T00:00:00.000Z");
+		expect(isLater(patched.updated_at, u.updated_at)).toBe(true);
+		expect(patched.name).toBe("X");
+	});
+
+	it("throws when the patched result is invalid", () => {
+		const u = User.from(valid);
+		expect(() => u.update({ age: 16 })).toThrow();
+	});
+});
+
+describe("createUpdate(User) factory", () => {
+	// The functional analogue of typia.createAssert, bound to a model class.
+	const updateUser = createUpdate(User);
+	const isLater = (a: string, b: string) => a > b;
+
+	it("produces a new instance with the same id and a later version", () => {
+		const u = User.from(valid);
+		const next = updateUser(u, { name: "Alicia" });
+		expect(next).not.toBe(u);
+		expect(next.id).toBe(u.id);
+		expect(isLater(next.updated_at, u.updated_at)).toBe(true);
+	});
+
+	it("is equivalent to the instance method User#update (apart from the global-monotonic clock)", () => {
+		const u = User.from(valid);
+		const viaFactory = updateUser(u, { age: 30, email: "x@example.com" });
+		const viaMethod = u.update({ age: 30, email: "x@example.com" });
+		// Applied fields are identical...
+		expect(viaFactory.id).toBe(viaMethod.id);
+		expect(viaFactory.age).toBe(viaMethod.age);
+		expect(viaFactory.email).toBe(viaMethod.email);
+		// ...but `nextUpdatedAt` keeps a global monotonic counter, so two calls
+		// from the same base `u` (factory first, method second) yield *distinct*
+		// strictly-later timestamps regardless of call order.
+		expect(viaFactory.updated_at !== viaMethod.updated_at).toBe(true);
+		expect(isLater(viaFactory.updated_at, u.updated_at)).toBe(true);
+		expect(isLater(viaMethod.updated_at, u.updated_at)).toBe(true);
+	});
+
+	it("ignores any id/updated_at supplied in the patch", () => {
+		const u = User.from(valid);
+		const patched = updateUser(u, {
+			id: crypto.randomUUID(),
+			updated_at: "1970-01-01T00:00:00.000Z",
+			name: "X",
+		});
+		expect(patched.id).toBe(u.id);
+		expect(isLater(patched.updated_at, u.updated_at)).toBe(true);
+		expect(patched.name).toBe("X");
+	});
+
+	it("returns the same type as the instance method (User)", () => {
+		const u = User.from(valid);
+		const next = updateUser(u, { name: "Alicia" });
+		expect(User.is(next)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // random — random user generator
 // ---------------------------------------------------------------------------
 // Note: typia's createRandom is best-effort and may not satisfy all composite
@@ -525,6 +616,7 @@ describe("User.random", () => {
 		const fixed = User.random();
 		fixed.id = crypto.randomUUID();
 		fixed.name = "Alice";
+		fixed.updated_at = "2026-08-09T12:00:00.000Z";
 		expect(User.is(fixed)).toBe(true);
 	});
 
