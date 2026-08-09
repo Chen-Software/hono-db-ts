@@ -164,6 +164,65 @@ describe("User.assert", () => {
 });
 
 // ---------------------------------------------------------------------------
+// clone – deep copy that strips extra fields, throws on invalid
+// ---------------------------------------------------------------------------
+describe("User.clone", () => {
+	it("returns a different object reference", () => {
+		const cloned = User.clone(valid);
+		expect(cloned).not.toBe(valid);
+	});
+
+	it("preserves all values (deep copy)", () => {
+		const cloned = User.clone(valid);
+		expect(cloned.id).toBe(valid.id);
+		expect(cloned.name).toBe(valid.name);
+		expect(cloned.email).toBe(valid.email);
+		expect(cloned.role).toBe(valid.role);
+		expect(cloned.age).toBe(valid.age);
+		expect(cloned.created_at).toBe(valid.created_at);
+	});
+
+	it("strips extra unknown fields", () => {
+		const cloned = User.clone({ ...valid, bogus: "x" } as User);
+		expect("bogus" in cloned).toBe(false);
+	});
+
+	it("throws on invalid data", () => {
+		expect(() => User.clone({ ...valid, age: -1 } as User)).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// prune – mutates in-place by stripping extra fields, throws on invalid
+// ---------------------------------------------------------------------------
+describe("User.prune", () => {
+	it("returns the same object reference (mutates in-place)", () => {
+		const withExtra = { ...valid, bogus: "x" } as User;
+		const pruned = User.prune(withExtra);
+		expect(pruned).toBe(withExtra);
+	});
+
+	it("strips extra unknown fields", () => {
+		const withExtra = { ...valid, bogus: "x", junk: 42 } as User;
+		const pruned = User.prune(withExtra);
+		expect("bogus" in pruned).toBe(false);
+		expect("junk" in pruned).toBe(false);
+	});
+
+	it("preserves all valid fields", () => {
+		const withExtra = { ...valid, bogus: "x" } as User;
+		const pruned = User.prune(withExtra);
+		expect(pruned.name).toBe(valid.name);
+		expect(pruned.email).toBe(valid.email);
+		expect(pruned.age).toBe(valid.age);
+	});
+
+	it("throws on invalid data", () => {
+		expect(() => User.prune({ ...valid, age: -1 } as User)).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // equals – returns first arg regardless of input (type-assertion passthrough)
 // ---------------------------------------------------------------------------
 describe("User.equals", () => {

@@ -34,6 +34,8 @@ const UserModel = {
 	validate: typia.createValidate<User>(),
 	validateEquals: typia.createValidateEquals<User>(),
 	validatePartial: typia.createValidate<Partial<User>>(),
+	clone: typia.plain.createAssertClone<User>(),
+	prune: typia.plain.createAssertPrune<User>(),
 	toJSON: typia.json.createAssertStringify<User>(),
 	fromJSON: typia.json.createAssertParse<User>(),
 	encode: typia.protobuf.createAssertEncode<User>(),
