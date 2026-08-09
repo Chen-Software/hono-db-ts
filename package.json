@@ -8,8 +8,9 @@
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
 		"lint": "bun x @biomejs/biome lint --fix .",
-		"start": "bunx ttsc && bun run src/main.ts",
-		"build": "bunx vite build"
+		"build": "bun build --outdir dist src/main.ts",
+		"start": "bun run src/main.ts",
+		"dev": "bun --hot run src/main.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
@@ -23,6 +24,7 @@
 		"typescript": "^7.0.2"
 	},
 	"dependencies": {
+		"hono": "^4.13.1",
 		"typia": "^13.2.0"
 	}
 }
