@@ -1,5 +1,5 @@
 import typia, { type tags } from "typia";
-import { type UUID } from "crypto";
+import type { UUID } from "crypto";
 
 interface Identifiable<T extends UUID> {
 	id: T & tags.Format<"uuid">;
