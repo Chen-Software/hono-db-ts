@@ -1,11 +1,12 @@
 import typia, { type Classifiable } from "typia";
 
-interface Instantiable<T> {
-	new (...args: any[]): T;
-	from(seed: Classifiable<T>): T;
+interface Instantiable<Model> {
+	new (...args: any[]): Model;
+	from(seed: Classifiable<Model>): Model;
 }
 
-const input = { data: "payload" };
+const input = { data: "payload", config: { a: 1, b: 2 } };
 const createInstance = typia.plain.createValidateClassify<typeof input>();
+console.log(createInstance(input));
 
-export { type Instantiable, createInstance };
+export { createInstance, type Instantiable };
