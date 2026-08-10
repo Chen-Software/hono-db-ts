@@ -16,14 +16,83 @@ import type { Table } from "drizzle-orm";
 import type { RelationCardinality, OnDelete } from "../tags/reference";
 
 /**
+ * `ReferenceMeta` — the decoded shape of a `Reference` tag (`x-reference`
+ * extension in the reflected JSON schema). Mirrors the tag declared in
+ * `src/tags/reference.ts`.
+ */
+export interface ReferenceMeta {
+	/** Target model name, e.g. `"UserSchema"`. */
+	target: string;
+	/** Referenced column on the target table. Default `"id"`. */
+	column?: string;
+	/** Relation cardinality. Default `"many-to-one"`. */
+	cardinality?: RelationCardinality;
+	/** Referential action on delete. Default `"noAction"`. */
+	onDelete?: OnDelete;
+}
+
+/**
+ * Module-level registry of derived Drizzle tables, keyed by model name (optionally
+ * suffixed with `:pg` for the Postgres projection). Populated by
+ * {@link toDrizzleTable} so that a `references()` clause on one table can resolve
+ * another model's table lazily — circular-import safe and dialect-aware.
+ */
+const tableRegistry = new Map<string, () => Table>();
+
+function regKey(modelName: string, dialect: SqlDialect): string {
+	return dialect === "pg" ? `${modelName}:pg` : modelName;
+}
+
+/** Register a derived table so other tables can reference it. */
+export function registerTable(
+	modelName: string,
+	dialect: SqlDialect,
+	thunk: () => Table,
+): void {
+	tableRegistry.set(regKey(modelName, dialect), thunk);
+}
+
+/** Resolve a registered table (throws if the target was never derived). */
+export function resolveTableThunk(modelName: string, dialect: SqlDialect): () => Table {
+	const thunk = tableRegistry.get(regKey(modelName, dialect));
+	if (!thunk) {
+		throw new Error(
+			`sql-tablisable: table "${modelName}" (${dialect}) was referenced via a ` +
+				`Reference tag but never derived. Make sure the target model composes ` +
+				`SqlSerialisable so toDrizzleTable runs for it first.`,
+		);
+	}
+	return thunk;
+}
+
+/** Read the `Reference` tag off a reflected JSON-schema property, if present. */
+function referenceOf(prop: JsonProp): ReferenceMeta | undefined {
+	const meta = (prop as Record<string, unknown>)["x-reference"];
+	if (!meta || typeof meta !== "object") return undefined;
+	return meta as ReferenceMeta;
+}
+
+/**
  * `sql-tablisable` — the model → Drizzle bridge.
  *
- * typia's reflected schema (`typia.reflect.schema<T>()` / `typia.json.schema<T>()`,
- * surfaced on the model as `mod.schema`) is a JSON Schema object. This module
- * turns THAT into a real Drizzle {@link SqlSchemaDef} — a `Table` plus
- * `toRow` / `fromRow` mappers — for either dialect. The model never writes a
- * drizzle `Table` by hand; the reflected schema is the single source of truth
- * and both the SQLite and Postgres projections fall out of it.
+ * typia's reflected JSON schema (`typia.json.schema<T>()`, surfaced on the
+ * model as `mod.schema`) is a JSON Schema object whose properties carry our
+ * custom `Reference` tag as an `x-reference` extension. This module turns THAT
+ * into a real Drizzle {@link SqlSchemaDef} — a `Table` plus `toRow` / `fromRow`
+ * mappers — for either dialect, AND derives foreign-key columns + `.references()`
+ * constraints from any `x-reference` metadata it finds. The model never writes a
+ * drizzle `Table` by hand; the reflected schema (with `Reference` tags) is the
+ * single source of truth and both the SQLite and Postgres projections fall out
+ * of it.
+ *
+ * Cross-model targets are resolved through a module-level {@link tableRegistry}.
+ * Why a registry (and not `typia.reflect.schemas<A,B>()`): the current toolchain
+ * only transforms the single-argument typia entry points (`typia.json.schema<T>`,
+ * `typia.reflect.schema<T>`), not the multi-type `schemas<A,B>` collection. The
+ * registry reproduces what `schemas` would give us — a shared pool so a `Post`
+ * table can reference a `User` table — by registering each derived table under
+ * its model name and letting `.references()` look the target up lazily (a thunk),
+ * which is also circular-import safe.
  *
  * It is deliberately typia-FREE at runtime: `mod.schema` is already a plain
  * JSON object (typia inlined it at build time), so {@link toDrizzleTable} runs
@@ -65,31 +134,37 @@ export interface SqlTablisableOptions {
 	name: string;
 	/** Dialect to build columns for. Default `"sqlite"`. */
 	dialect?: SqlDialect;
+	/**
+	 * Model name (`schemaName`) used to register the derived table in the
+	 * {@link tableRegistry} so other tables' `Reference` tags can resolve it.
+	 * Usually the `schemaName` from the model's `defineModel` call. If omitted,
+	 * the table is still built but not registered for cross-references.
+	 */
+	modelName?: string;
 }
 
 /**
- * `SqlRelationDef` — one foreign-key relation on a model's SQL table.
+ * `SqlRelationDef` — one foreign-key relation on a model's SQL table, derived
+ * from a `Reference` tag on a property.
  *
- * `column` is the FK column ON THIS table (e.g. `"authorId"`); `targetTable`
- * is a thunk (so two models can reference each other without a circular-import
- * failure at module load, mirroring `Referencible`'s `target: () => Class`),
- * and `targetColumn` defaults to `"id"`. `cardinality` / `onDelete` mirror the
- * `Referencible` vocabulary so the in-memory relation and the SQL constraint
- * stay consistent.
+ * `column` is the FK column ON THIS table (e.g. `"authorId"`); `target` is the
+ * referenced model name (resolved through {@link resolveTableThunk} so two
+ * models can reference each other without a circular-import failure at module
+ * load — mirroring `Referencible`'s `target: () => Class`). `cardinality` /
+ * `onDelete` mirror the `Referencible` vocabulary so the in-memory relation and
+ * the SQL constraint stay consistent.
  */
 export interface SqlRelationDef {
-	/** Relation name (e.g. `"user"`, `"posts"`). */
-	name: string;
 	/** FK column ON THIS table, e.g. `"authorId"`. */
 	column: string;
-	/** Thunk to the referenced table (circular-safe). */
-	targetTable: () => Table;
+	/** Referenced model name, e.g. `"UserSchema"`. */
+	target: string;
 	/** Referenced column on the target. Default `"id"`. */
-	targetColumn?: string;
+	targetColumn: string;
 	/** Cardinality — mirrors `Referencible`. Default `"many-to-one"`. */
-	cardinality?: RelationCardinality;
+	cardinality: RelationCardinality;
 	/** Referential action on delete. Default `"noAction"`. */
-	onDelete?: OnDelete;
+	onDelete: OnDelete;
 }
 
 /**
@@ -137,6 +212,8 @@ interface ColPlan {
 	kind: ColKind;
 	nullable: boolean;
 	isId: boolean;
+	/** Decoded `Reference` tag, if this column is a foreign key. */
+	reference?: ReferenceMeta;
 }
 
 /**
@@ -190,6 +267,7 @@ function planColumns(schema: JsonSchema): ColPlan[] {
 		kind: kindOf(p),
 		nullable: isNullable(p),
 		isId: name === "id",
+		reference: name !== "id" ? referenceOf(p) : undefined,
 	}));
 }
 
@@ -217,9 +295,34 @@ function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any
 		}
 		if (c.isId) col = col.primaryKey();
 		else if (!c.nullable) col = col.notNull();
+
+		// Foreign key → wire `.references()` against the registered target table.
+		if (c.reference) {
+			const targetThunk = resolveTableThunk(c.reference.target, dialect);
+			const targetColumn = c.reference.column ?? "id";
+			const onDelete = c.reference.onDelete ?? "noAction";
+			col = col.references(() => targetThunk()[targetColumn], { onDelete });
+		}
+
 		cols[c.name] = col;
 	}
 	return cols;
+}
+
+/** Build the `SqlRelationDef[]` for a plan set (no FK resolution needed here). */
+function planRelations(plans: ColPlan[]): SqlRelationDef[] {
+	const rels: SqlRelationDef[] = [];
+	for (const c of plans) {
+		if (!c.reference) continue;
+		rels.push({
+			column: c.name,
+			target: c.reference.target,
+			targetColumn: c.reference.column ?? "id",
+			cardinality: c.reference.cardinality ?? "many-to-one",
+			onDelete: c.reference.onDelete ?? "noAction",
+		});
+	}
+	return rels;
 }
 
 /**
@@ -300,12 +403,35 @@ export function toDrizzleTable<T = any>(
 	options: SqlTablisableOptions,
 ): SqlSchemaDef<T> {
 	const dialect = options.dialect ?? "sqlite";
-	const plans = planColumns(schema);
+	// `mod.schema` may be the full typia JSON-schema envelope
+	// (`{ components, schema }`) or a bare object schema. Unwrap to the object.
+	const root: JsonSchema =
+		"schema" in schema && schema.schema && typeof schema.schema === "object"
+			? (schema.schema as JsonSchema)
+			: schema;
+
+	// Order matters: plans must be computed before building columns, because
+	// `buildColumns` resolves FK `.references()` against the registry, which
+	// requires the TARGET table to already be registered. The caller (the
+	// SqlSerialisable capacity) is responsible for deriving targets first.
+	const plans = planColumns(root);
 	const columns = buildColumns(plans, dialect);
 	const { toRow, fromRow } = makeMappers(plans, dialect);
 	const table =
 		dialect === "sqlite"
 			? sqliteTable(options.name, columns)
 			: pgTable(options.name, columns);
-	return { table: table as any, toRow, fromRow };
+
+	// Register BEFORE returning so later tables can reference this one.
+	if (options.modelName) {
+		registerTable(options.modelName, dialect, () => table as Table);
+	}
+
+	const relations = planRelations(plans);
+	return {
+		table: table as any,
+		toRow,
+		fromRow,
+		...(relations.length ? { relations } : {}),
+	};
 }

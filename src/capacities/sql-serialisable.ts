@@ -6,6 +6,7 @@ import {
 	type SqlDialect,
 	type SqlTablisableOptions,
 } from "./sql-tablisable";
+import { registerTable } from "./sql-tablisable";
 
 /**
  * Options for the {@link SqlSerialisable} capacity.

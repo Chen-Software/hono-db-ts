@@ -4,11 +4,7 @@ import { BlobBackend } from "../providers/blob-backend";
 import { SqlBackend, type DrizzleRunner } from "../providers/sql-backend";
 import type { BlobStoreProvider } from "../providers/blob-store";
 import type { UserRepository, UserRole } from "../ports/user-repository";
-import {
-	User,
-	UserSchemaModule,
-	type UserSchema,
-} from "../models/user";
+import { User, UserSchemaModule, type UserSchema } from "../models/user";
 
 /**
  * `UserRepo` — the concrete host for `User`.
@@ -79,7 +75,8 @@ export class UserRepo
 		db: DrizzleRunner,
 		dialect: "sqlite" | "pg" = "sqlite",
 	): UserRepo {
-		const def = dialect === "pg" ? UserSchemaModule.sqlPg : UserSchemaModule.sql;
+		const def =
+			dialect === "pg" ? UserSchemaModule.sqlPg : UserSchemaModule.sql;
 		if (!def) {
 			throw new Error(
 				`UserRepo.overSql: no \`sql\` projection for dialect "${dialect}" ` +

@@ -99,7 +99,11 @@ function createApp(env: Env): Hono {
 // ---------------------------------------------------------------------------
 
 export default {
-	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+	async fetch(
+		request: Request,
+		env: Env,
+		_ctx: ExecutionContext,
+	): Promise<Response> {
 		const app = createApp(env);
 		return app.fetch(request);
 	},

@@ -40,10 +40,7 @@ class LocalD1PreparedStatement {
 
 	async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
 		return this.measure(() => {
-			const runResult = this.db.run(
-				this.sql,
-				...(this.params as [never]),
-			);
+			const runResult = this.db.run(this.sql, ...(this.params as [never]));
 			return {
 				rows: [] as T[],
 				written: runResult.changes ?? 0,
@@ -63,9 +60,7 @@ class LocalD1PreparedStatement {
 		return rows;
 	}
 
-	async first<T = Record<string, unknown>>(
-		col?: string,
-	): Promise<T | null> {
+	async first<T = Record<string, unknown>>(col?: string): Promise<T | null> {
 		const stmt = this.db.prepare(this.sql);
 		const row = (
 			this.params.length > 0
@@ -83,10 +78,7 @@ class LocalD1PreparedStatement {
 	 */
 	execSync(): D1Result {
 		const start = performance.now();
-		const runResult = this.db.run(
-			this.sql,
-			...(this.params as [never]),
-		);
+		const runResult = this.db.run(this.sql, ...(this.params as [never]));
 		const duration = performance.now() - start;
 		return {
 			results: [],

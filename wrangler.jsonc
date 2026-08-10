@@ -29,11 +29,6 @@
 		}
 	],
 
-	// ---- Migrations ------------------------------------------------------
-	// D1 migrations are applied with:
-	//   npx wrangler d1 migrations apply artefact-db
-	"migrations_dir": "migrations",
-
 	// ---- Observability (optional) ----------------------------------------
 	"observability": {
 		"enabled": false
