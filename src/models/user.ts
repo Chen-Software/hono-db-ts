@@ -7,7 +7,6 @@ import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Validatable } from "@/capacities/validatable";
 import { Referencible } from "@/capacities/referencible";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
-import type { Table } from "drizzle-orm";
 import type { SchemaModule } from "../capacities/schema-module";
 import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
