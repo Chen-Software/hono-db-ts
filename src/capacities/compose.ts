@@ -1,13 +1,14 @@
 import type { CapacityConstructor } from "./capable";
 import { Capable } from "./capable";
-import { JsonSerialisable } from "./json-serialisable";
-import { ProtobufEncodable } from "./protobuf-encodable";
-import { Validatable } from "./validatable";
 import { Clonable } from "./clonable";
-import { Immutable } from "./immutable";
 import { Comparable } from "./comparable";
-import { Triggerable } from "./triggerable";
+import { Immutable } from "./immutable";
+import { JsonSerialisable } from "./json-serialisable";
+import { Persistable } from "./persistable";
+import { ProtobufEncodable } from "./protobuf-encodable";
 import type { SchemaModule } from "./schema-module";
+import { Triggerable } from "./triggerable";
+import { Validatable } from "./validatable";
 
 /**
  * `composeCapabilities` — the declarative capacity-chaining helper.
@@ -55,7 +56,12 @@ import type { SchemaModule } from "./schema-module";
  * capacity — e.g. `Clonable` defaults its clone to the validated `assertClone`
  * variant when `Validatable` is also declared.
  */
-type AnyCapacity = (base: any, schemaModule?: any, options?: any, ctx?: ComposeContext) => any;
+type AnyCapacity = (
+	base: any,
+	schemaModule?: any,
+	options?: any,
+	ctx?: ComposeContext,
+) => any;
 
 /**
  * Context handed to every capacity during composition. `has(name)` reports
@@ -85,7 +91,9 @@ export type CapacityOptions = Record<string, unknown>;
  *
  *   [JsonSerialisable, { capacity: Validatable, options: { onNew: "assert" } }]
  */
-export type CapacityEntry = CapacityRef | { capacity: CapacityRef; options?: CapacityOptions };
+export type CapacityEntry =
+	| CapacityRef
+	| { capacity: CapacityRef; options?: CapacityOptions };
 
 /** Array declarative form: an ordered list of {@link CapacityEntry}. */
 export type CapacityList = readonly CapacityEntry[];
@@ -121,6 +129,7 @@ for (const [name, fn] of [
 	["Validatable", Validatable],
 	["Clonable", Clonable],
 	["Comparable", Comparable],
+	["Persistable", Persistable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
@@ -209,7 +218,9 @@ function normalize(
 	// middleware into. Drop any explicit mention from the user list (we prepend
 	// our own), so ordering is always correct and both are always applied.
 	const foundation = new Set([Capable, Triggerable]);
-	const withoutFoundation = specs.filter((s) => !foundation.has(resolveRef(s.ref)));
+	const withoutFoundation = specs.filter(
+		(s) => !foundation.has(resolveRef(s.ref)),
+	);
 	const all: { ref: CapacityRef; options?: CapacityOptions }[] = [
 		{ ref: Capable },
 		{ ref: Triggerable },
