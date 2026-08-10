@@ -6,12 +6,13 @@ import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Validatable } from "@/capacities/validatable";
 import { Referencible } from "@/capacities/referencible";
+import { SqlSerialisable } from "../capacities/sql-serialisable";
+import type { Table } from "drizzle-orm";
+import type { SchemaModule } from "../capacities/schema-module";
 import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
 import { Post } from "./post";
-import { sqliteTable, text as sText, integer } from "drizzle-orm/sqlite-core";
-import { pgTable, text as pText, integer as pInt } from "drizzle-orm/pg-core";
 
 /**
  * User schema — the plain-data contract.
@@ -39,47 +40,14 @@ interface UserSchema extends IdentifiableSchema<UUID>, Timestamped {
 }
 
 /**
- * Drizzle table projections of `UserSchema`. The SAME `toRow` / `fromRow`
- * mappers serve both dialects — they only read/write column NAME strings, not
- * the column-builder objects — so a `SqlBackend` over either driver works. The
- * role enum is stored as `text` in both (sqlite has no enum; pg avoids a
- * migration for the demonstration) and re-typed on the way out.
+ * `User`'s relational projection is DERIVED, not hand-written: the
+ * `SqlSerialisable` capacity builds the drizzle tables + `toRow`/`fromRow`
+ * mappers from the reflected `UserSchema` at composition time (see
+ * `capacities/sql-tablisable.ts`). The model binds zero drizzle column code,
+ * and the derived `sql` (primary dialect) / `sqlPg` (opposite dialect) slices
+ * are what `SqlBackend` / `UserRepo.overSql` consume. The capacity also LIFTS
+ * `User.table` / `User.toRow` / `User.fromRow` onto the class.
  */
-export const UserSqliteTable = sqliteTable("users", {
-	id: sText("id").primaryKey(),
-	name: sText("name").notNull(),
-	email: sText("email").notNull(),
-	role: sText("role").notNull(),
-	age: integer("age").notNull(),
-	created_at: sText("created_at").notNull(),
-});
-
-export const UserPgTable = pgTable("users", {
-	id: pText("id").primaryKey(),
-	name: pText("name").notNull(),
-	email: pText("email").notNull(),
-	role: pText("role").notNull(),
-	age: pInt("age").notNull(),
-	created_at: pText("created_at").notNull(),
-});
-
-const userToRow = (u: UserSchema) => ({
-	id: u.id,
-	name: u.name,
-	email: u.email,
-	role: u.role,
-	age: u.age,
-	created_at: u.created_at,
-});
-
-const userFromRow = (r: Record<string, unknown>): UserSchema => ({
-	id: r.id as string,
-	name: r.name as string,
-	email: r.email as string,
-	role: r.role as "admin" | "member" | "viewer",
-	age: Number(r.age),
-	created_at: r.created_at as string,
-});
 
 /**
  * UserSchemaModule — the FIXED bundle of every typia function `User` needs,
@@ -93,7 +61,7 @@ const userFromRow = (r: Record<string, unknown>): UserSchema => ({
 const userEquals = typia.compare.createEquals<UserSchema>();
 const userLess = typia.compare.createLess<UserSchema>();
 
-const UserSchemaModule = {
+const UserSchemaModule: SchemaModule<UserSchema> = {
 	schema: typia.reflect.schema<UserSchema>(),
 	// classify family (plain default; Validatable upgrades construction to assertClassify)
 	classify: typia.plain.createClassify<UserSchema>(),
@@ -135,9 +103,9 @@ const UserSchemaModule = {
 	more: (x: any, y: any) => userLess(y, x),
 	// random
 	random: typia.createRandom<UserSchema>(),
-	// sql (drizzle) projection — default LOCAL sqlite table; the remote (pg)
-	// table is `UserPgTable`, used by `SqlBackend` for the postgres driver.
-	sql: { table: UserSqliteTable, toRow: userToRow, fromRow: userFromRow },
+	// NOTE: `sql` / `sqlPg` are intentionally NOT bound here — the
+	// `SqlSerialisable` capacity derives them from `schema` (reflected above)
+	// at composition time.
 };
 
 /**
@@ -152,7 +120,12 @@ const UserSchemaModule = {
  *   - `JsonSerialisable` — JSON (de)serialisation (`toJSON` / `fromJSON` +
  *     a JSON-override constructor), pulled from `UserSchemaModule`;
  *   - `ProtobufEncodable` — protobuf (de)serialisation (`encode` / `decode` /
- *     `message`), pulled from `UserSchemaModule`.
+ *     `message`), pulled from `UserSchemaModule`;
+ *   - `SqlSerialisable` — derives the relational projection from the reflected
+ *     `UserSchema` (into `UserSchemaModule.sql` / `.sqlPg`) AND lifts
+ *     `User.table` / `User.toRow` / `User.fromRow` (+ instance `toRow()`) onto
+ *     the class. `name` is required (the table name); `dialect` picks the
+ *     primary projection.
  */
 const UserModel = defineModel<UserSchema>({
 	schemaName: "UserSchema",
@@ -160,6 +133,7 @@ const UserModel = defineModel<UserSchema>({
 	capacities: [
 		JsonSerialisable,
 		ProtobufEncodable,
+		{ capacity: SqlSerialisable, options: { name: "users", dialect: "sqlite" } },
 		// Validatable pulls its validators from `UserSchemaModule`; here we
 		// demonstrate BOTH lifecycle hooks: `onNew` (assert on construction) and
 		// `onUpdate` (assert on the mutable `update`). The `validate` / `assert`
@@ -209,11 +183,4 @@ class User extends UserModel {
 	}
 }
 
-export {
-	User,
-	UserModel,
-	UserSchemaModule,
-	userToRow,
-	userFromRow,
-	type UserSchema,
-};
+export { User, UserModel, UserSchemaModule, type UserSchema };

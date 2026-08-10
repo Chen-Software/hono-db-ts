@@ -5,9 +5,6 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import {
 	UserSchemaModule,
-	UserSqliteTable,
-	userToRow,
-	userFromRow,
 	type UserSchema,
 } from "../src/models/user";
 import { StoreProvider } from "../src/providers/store-provider";
@@ -90,11 +87,9 @@ for (const [label, blob] of blobBackends) {
 	const sp = new StoreProvider<UserSchema>({
 		schema: UserSchemaModule,
 		namespace: NS,
-		backend: new SqlBackend(sqlite, {
-			table: UserSqliteTable,
-			toRow: userToRow,
-			fromRow: userFromRow,
-		}),
+		// The table + mappers are the model's DERIVED `sql` projection — the
+		// `SqlSerialisable` capacity built them from the reflected UserSchema.
+		backend: new SqlBackend(sqlite, UserSchemaModule.sql!),
 	});
 	const { id } = await sp.insert(sample);
 	const loaded = await sp.load(id);
@@ -112,14 +107,15 @@ for (const [label, blob] of blobBackends) {
 
 // 1c. Postgres REMOTE driver — NOT run here (would need a real server / the
 // removed `@electric-sql/pglite`). The same `SqlBackend` targets it unchanged:
-// swap the driver + `UserPgTable` and nothing else moves.
+// swap the driver + use `UserRepo.overSql("users", pgDb, "pg")` (reads the
+// model's DERIVED `sqlPg` projection) and nothing else moves.
 
 // 2. UserRepo + UserService over the LOCAL sqlite backend -------------------
 const bus = new InMemoryBus("smoke");
 const svcClient = new Database(join(tmp, "svc.sqlite"));
 await svcClient.run(USERS_DDL);
 const svcDb = drizzle(svcClient);
-const repo = UserRepo.overSql("users", svcDb, UserSqliteTable);
+const repo = UserRepo.overSql("users", svcDb, "sqlite");
 const svc = new UserService({ repo, bus });
 
 const created = await svc.createUser(sample);

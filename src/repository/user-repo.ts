@@ -4,13 +4,9 @@ import { BlobBackend } from "../providers/blob-backend";
 import { SqlBackend, type DrizzleRunner } from "../providers/sql-backend";
 import type { BlobStoreProvider } from "../providers/blob-store";
 import type { UserRepository, UserRole } from "../ports/user-repository";
-import type { Table } from "drizzle-orm";
 import {
 	User,
 	UserSchemaModule,
-	UserPgTable,
-	userToRow,
-	userFromRow,
 	type UserSchema,
 } from "../models/user";
 
@@ -20,17 +16,19 @@ import {
  * It binds two things the generic `Repository` cannot know:
  *   - the `User` model class (for rehydration), and
  *   - the `UserSchemaModule` (already bound inside `User`) — including its
- *     `sql` slice for the relational backend.
+ *     `sql` / `sqlPg` slices for the relational backend. These are DERIVED by
+ *     the `SqlSerialisable` capacity from the reflected `UserSchema`, so the
+ *     model contains no hand-written drizzle table or mappers.
  *
  * The two `static` factories make the UNIFIED provider explicit — the user's
  * sketch (`new UserRepo(storageProvider)`) where `storageProvider` is itself
  * built from a backend + driver:
  *
- *   // local file (sqlite)
- *   UserRepo.overSql("users", drizzle(new Database("./app.db")), UserSqliteTable)
+ *   // local file (sqlite) — uses the derived `sql` slice
+ *   UserRepo.overSql("users", drizzle(new Database("./app.db")), "sqlite")
  *
- *   // remote (postgres)
- *   UserRepo.overSql("users", drizzle(postgres(DB_URL)), UserPgTable)
+ *   // remote (postgres) — uses the derived `sqlPg` slice
+ *   UserRepo.overSql("users", drizzle(postgres(DB_URL)), "pg")
  *
  *   // object store / fs / db-as-blob
  *   UserRepo.overBlob("users", new ObjectStoreProvider(new LocalObjectStoreClient("./data")))
@@ -69,17 +67,32 @@ export class UserRepo
 		);
 	}
 
-	/** Unified repo over any SQL backend (bun:sqlite local / postgres remote). */
-	static overSql(namespace: string, db: DrizzleRunner, table: Table): UserRepo {
+	/**
+	 * Unified repo over any SQL backend (bun:sqlite local / postgres remote).
+	 * `dialect` selects which DERIVED projection to use: `"sqlite"` reads
+	 * `UserSchemaModule.sql`, `"pg"` reads `UserSchemaModule.sqlPg`. The table +
+	 * row mappers come from the model's `SqlSerialisable` capacity — the caller
+	 * never hand-writes a drizzle table.
+	 */
+	static overSql(
+		namespace: string,
+		db: DrizzleRunner,
+		dialect: "sqlite" | "pg" = "sqlite",
+	): UserRepo {
+		const def = dialect === "pg" ? UserSchemaModule.sqlPg : UserSchemaModule.sql;
+		if (!def) {
+			throw new Error(
+				`UserRepo.overSql: no \`sql\` projection for dialect "${dialect}" ` +
+					`— declare the SqlSerialisable capacity on the User model ` +
+					"(with `both: true` to derive both dialects).",
+			);
+		}
 		return new UserRepo(
 			new StoreProvider({
 				schema: UserSchemaModule,
 				namespace,
-				backend: new SqlBackend(db, { table, toRow: userToRow, fromRow: userFromRow }),
+				backend: new SqlBackend(db, def),
 			}),
 		);
 	}
 }
-
-// Re-export so callers can pass the right table without re-importing the model.
-export { UserPgTable };

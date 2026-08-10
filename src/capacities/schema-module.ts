@@ -18,8 +18,10 @@ import type { Table } from "drizzle-orm";
  * row; `table` is the concrete drizzle `Table` (sqlite-core OR pg-core — the
  * same mappers work for both because they only touch column NAME strings, not
  * the column-builder objects). A model that is never stored relationally simply
- * does not bind `sql`, exactly like the optional `http` slice. The `SqlBackend`
- * capacity/provider consumes this; everything else ignores it.
+ * does not bind `sql`, exactly like the optional `http` slice. Two consumers
+ * read this slice and everything else ignores it: the `SqlSerialisable`
+ * capacity lifts it onto the MODEL class (`static table` / `toRow` / `fromRow`),
+ * and the `SqlBackend` provider consumes it on the STORAGE side.
  */
 export interface SqlSchemaDef<T, Tbl extends Table = Table> {
 	table: Tbl;
@@ -261,6 +263,19 @@ export interface SchemaModule<T = unknown> {
 	 * can map entities to real relational columns. Absent when the model is
 	 * only ever stored as a blob. Mirrors the optional `http` slice: a model
 	 * that is never persisted relationally simply does not bind it.
+	 *
+	 * In the manual world the model bind this by hand (`table: UserPgTable,
+	 * toRow, fromRow`). With the `SqlSerialisable` capacity, this slice is
+	 * DERIVED from `schema` (typia's reflected JSON schema) at compose time —
+	 * the model just declares the capacity and a table name.
 	 */
 	sql?: SqlSchemaDef<T>;
+
+	/**
+	 * The SAME projection for the OPPOSITE dialect. When `SqlSerialisable`
+	 * runs with `dialect: "sqlite"`, it derives `sql` (sqlite) here AND `sqlPg`
+	 * (postgres), so a multi-dialect app can pick the right table per
+	 * deployment (local sqlite vs remote pg) without a second model binding.
+	 */
+	sqlPg?: SqlSchemaDef<T>;
 }

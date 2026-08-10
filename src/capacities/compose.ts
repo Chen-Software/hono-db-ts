@@ -10,6 +10,7 @@ import { Persistable } from "./persistable";
 import { ProtobufEncodable } from "./protobuf-encodable";
 import { Reactive } from "./reactive";
 import type { SchemaModule } from "./schema-module";
+import { SqlSerialisable } from "./sql-serialisable";
 import { Triggerable } from "./triggerable";
 import { Validatable } from "./validatable";
 
@@ -136,6 +137,7 @@ for (const [name, fn] of [
 	["Reactive", Reactive],
 	["Derivable", Derivable],
 	["Connectable", Connectable],
+	["SqlSerialisable", SqlSerialisable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }

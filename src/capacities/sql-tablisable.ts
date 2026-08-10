@@ -1,0 +1,247 @@
+import {
+	sqliteTable,
+	text as sText,
+	integer as sInt,
+	real as sReal,
+} from "drizzle-orm/sqlite-core";
+import {
+	pgTable,
+	text as pText,
+	integer as pInt,
+	doublePrecision as pDouble,
+	boolean as pBool,
+} from "drizzle-orm/pg-core";
+import type { SqlSchemaDef } from "./schema-module";
+
+/**
+ * `sql-tablisable` — the model → Drizzle bridge.
+ *
+ * typia's reflected schema (`typia.reflect.schema<T>()` / `typia.json.schema<T>()`,
+ * surfaced on the model as `mod.schema`) is a JSON Schema object. This module
+ * turns THAT into a real Drizzle {@link SqlSchemaDef} — a `Table` plus
+ * `toRow` / `fromRow` mappers — for either dialect. The model never writes a
+ * drizzle `Table` by hand; the reflected schema is the single source of truth
+ * and both the SQLite and Postgres projections fall out of it.
+ *
+ * It is deliberately typia-FREE at runtime: `mod.schema` is already a plain
+ * JSON object (typia inlined it at build time), so {@link toDrizzleTable} runs
+ * under plain `bun` with no transformer — handy for unit-testing the mapping.
+ */
+
+/** The slice of typia's `IJsonSchema` we actually read. */
+export interface JsonProp {
+	type?: string | string[];
+	format?: string;
+	nullable?: boolean;
+	enum?: readonly unknown[];
+	items?: JsonSchema;
+	properties?: Record<string, JsonProp>;
+	required?: string[];
+	// numeric / string bounds (recorded for documentation; ignored for columns)
+	minimum?: number;
+	maximum?: number;
+	exclusiveMinimum?: number | boolean;
+	// typia may emit extra metadata we don't consume
+	[x: string]: unknown;
+}
+
+/** typia's reflected JSON schema (loosely typed — we read a known subset). */
+export interface JsonSchema {
+	type?: string | string[];
+	format?: string;
+	nullable?: boolean;
+	properties?: Record<string, JsonProp>;
+	required?: string[];
+	items?: JsonSchema;
+	[x: string]: unknown;
+}
+
+export type SqlDialect = "sqlite" | "pg";
+
+export interface SqlTablisableOptions {
+	/** Table name. Required — the reflected schema has no reliable table name. */
+	name: string;
+	/** Dialect to build columns for. Default `"sqlite"`. */
+	dialect?: SqlDialect;
+}
+
+/** How a property is stored. Drives both the column builder and the mappers. */
+type ColKind = "string" | "integer" | "number" | "boolean" | "enum" | "json";
+
+interface ColPlan {
+	name: string;
+	kind: ColKind;
+	nullable: boolean;
+	isId: boolean;
+}
+
+/**
+ * Normalize typia's object-or-array schema to the underlying object schema.
+ * `typia.reflect.schema<T>()` yields an object schema directly, but
+ * `typia.json.schema<[T]>()` wraps it in an array-of-one (`{ type: "array",
+ * items: { type: "object", … } }`) — both must produce the same columns.
+ */
+function unwrapObject(schema: JsonSchema): JsonSchema {
+	const isArray =
+		schema.type === "array" ||
+		(Array.isArray(schema.type) && schema.type.includes("array"));
+	if (isArray && schema.items) return schema.items as JsonSchema;
+	return schema;
+}
+
+function baseType(p: JsonProp): string | undefined {
+	const t = p.type;
+	if (Array.isArray(t)) return t.find((x) => x !== "null");
+	return t;
+}
+
+function isNullable(p: JsonProp): boolean {
+	if (p.nullable) return true;
+	if (Array.isArray(p.type)) return p.type.includes("null");
+	return false;
+}
+
+function isDate(p: JsonProp): boolean {
+	return p.format === "date-time" || p.format === "date";
+}
+
+/** Map a reflected property to a storage strategy. */
+function kindOf(p: JsonProp): ColKind {
+	if (p.enum && p.enum.length > 0) return "enum";
+	if (isDate(p)) return "string"; // ISO strings round-trip as text
+	const t = baseType(p);
+	if (t === "string") return "string";
+	if (t === "integer") return "integer";
+	if (t === "number") return "number";
+	if (t === "boolean") return "boolean";
+	// object / array / unknown → JSON-encoded text column
+	return "json";
+}
+
+function planColumns(schema: JsonSchema): ColPlan[] {
+	const obj = unwrapObject(schema);
+	const props = obj.properties ?? {};
+	return Object.entries(props).map(([name, p]) => ({
+		name,
+		kind: kindOf(p),
+		nullable: isNullable(p),
+		isId: name === "id",
+	}));
+}
+
+function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any> {
+	const cols: Record<string, any> = {};
+	for (const c of plans) {
+		// Default keeps the column non-nullable-safe if a kind is somehow missed.
+		let col: any = dialect === "sqlite" ? sText(c.name) : pText(c.name);
+		switch (c.kind) {
+			case "string":
+			case "enum":
+			case "json":
+				col = dialect === "sqlite" ? sText(c.name) : pText(c.name);
+				break;
+			case "integer":
+				col = dialect === "sqlite" ? sInt(c.name) : pInt(c.name);
+				break;
+			case "number":
+				col = dialect === "sqlite" ? sReal(c.name) : pDouble(c.name);
+				break;
+			case "boolean":
+				// SQLite has no boolean: store 0/1. Postgres keeps a real bool.
+				col = dialect === "sqlite" ? sInt(c.name) : pBool(c.name);
+				break;
+		}
+		if (c.isId) col = col.primaryKey();
+		else if (!c.nullable) col = col.notNull();
+		cols[c.name] = col;
+	}
+	return cols;
+}
+
+/**
+ * Build dialect-aware row mappers. `toRow` emits ONLY columns the table knows
+ * (so partial patches become partial `SET`s), JSON-encoding objects/arrays and
+ * normalizing booleans/date-times per dialect. `fromRow` inverts.
+ */
+function makeMappers(plans: ColPlan[], dialect: SqlDialect) {
+	const byName = new Map(plans.map((p) => [p.name, p]));
+
+	const toRow = (e: any): Record<string, unknown> => {
+		const row: Record<string, unknown> = {};
+		for (const [name, plan] of byName) {
+			if (!(name in e)) continue; // absent → partial update, skip
+			const v = e[name];
+			if (v == null) {
+				if (!plan.nullable) continue; // never write NULL into NOT NULL
+				row[name] = null;
+				continue;
+			}
+			switch (plan.kind) {
+				case "json":
+					row[name] = JSON.stringify(v);
+					break;
+				case "boolean":
+					row[name] = dialect === "sqlite" ? (v ? 1 : 0) : !!v;
+					break;
+				case "string": // date-time: keep ISO; coerce a Date if given
+					row[name] = v instanceof Date ? v.toISOString() : v;
+					break;
+				default:
+					row[name] = v;
+			}
+		}
+		return row;
+	};
+
+	const fromRow = (r: Record<string, unknown>): any => {
+		const out: Record<string, unknown> = {};
+		for (const [name, plan] of byName) {
+			if (!(name in r)) continue;
+			const v = r[name];
+			if (v == null) {
+				out[name] = null;
+				continue;
+			}
+			switch (plan.kind) {
+				case "json":
+					out[name] = typeof v === "string" ? JSON.parse(v) : v;
+					break;
+				case "boolean":
+					out[name] = dialect === "sqlite" ? (v === 1 || v === true) : !!v;
+					break;
+				case "string":
+					out[name] = v instanceof Date ? v.toISOString() : v;
+					break;
+				default:
+					out[name] = v;
+			}
+		}
+		return out;
+	};
+
+	return { toRow, fromRow };
+}
+
+/**
+ * Derive a Drizzle {@link SqlSchemaDef} from a reflected JSON schema.
+ *
+ * @example
+ * const def = toDrizzleTable(userSchema, { dialect: "sqlite", name: "users" });
+ * // def.table  — a `sqliteTable("users", { id: text.pk(), name: text.nn(), … })`
+ * // def.toRow  — entity → row (booleans → 0/1, objects → JSON text)
+ * // def.fromRow— row → entity
+ */
+export function toDrizzleTable<T = any>(
+	schema: JsonSchema,
+	options: SqlTablisableOptions,
+): SqlSchemaDef<T> {
+	const dialect = options.dialect ?? "sqlite";
+	const plans = planColumns(schema);
+	const columns = buildColumns(plans, dialect);
+	const { toRow, fromRow } = makeMappers(plans, dialect);
+	const table =
+		dialect === "sqlite"
+			? sqliteTable(options.name, columns)
+			: pgTable(options.name, columns);
+	return { table: table as any, toRow, fromRow };
+}
