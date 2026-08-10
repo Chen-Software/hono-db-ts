@@ -1,4 +1,10 @@
 import type { Classifiable } from "typia";
+// `IValidation` / `AssertionGuard` are typia's exact validator return types,
+// defined in `@typia/interface` (typia's own dependency). Importing them keeps
+// `SchemaModule` precisely aligned with what `typia.createValidate*` /
+// `createAssertGuard*` actually return, so a model's bound module object is
+// assignable here verbatim.
+import type { AssertionGuard, IValidation } from "@typia/interface";
 
 /**
  * `SchemaModule<T>` — the FIXED, complete set of typia bindings a model
@@ -43,4 +49,27 @@ export interface SchemaModule<T = unknown> {
 
 	/** `typia.protobuf.message<T>()` — the proto3 schema string. */
 	message: string;
+
+	// --- typia VALIDATORS (consumed by the `Validatable` capacity) ----------
+	/** `typia.createValidate<T>()` — non-throwing; returns `IValidation<T>`. */
+	validate: (input: unknown) => IValidation<T>;
+
+	/** `typia.createAssert<T>()` — throws on invalid; returns the data. */
+	assert: (input: unknown) => T;
+
+	/** `typia.createAssertGuard<T>()` — assertion guard; `asserts input is T`. */
+	assertGuard: AssertionGuard<T>;
+
+	/** `typia.createValidateEquals<T>()` — strict-equal `validate` variant. */
+	"validate-equals": (input: unknown) => IValidation<T>;
+
+	/** `typia.createAssertEquals<T>()` — strict-equal `assert` variant. */
+	"assert-equals": (input: unknown) => T;
+
+	/**
+	 * Strict-equal `assertGuard` variant. typia has no equals-guard of its own,
+	 * so this aliases `typia.createAssertGuard<T>()` — but it is kept as a
+	 * distinct, named key so a model can wire `assertGuard` to it explicitly.
+	 */
+	"assert-guard-validate": AssertionGuard<T>;
 }

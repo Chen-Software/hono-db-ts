@@ -4,6 +4,7 @@ import { type IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
+import { Validatable } from "@/capacities/validatable";
 import { defineModel } from "./base";
 
 /**
@@ -48,6 +49,13 @@ const UserSchemaModule = {
 	encode: typia.protobuf.createAssertEncode<UserSchema>(),
 	decode: typia.protobuf.createAssertDecode<UserSchema>(),
 	message: typia.protobuf.message<UserSchema>(),
+	// validators — consumed by the `Validatable` capacity
+	validate: typia.createValidate<UserSchema>(),
+	assert: typia.createAssert<UserSchema>(),
+	assertGuard: typia.createAssertGuard<UserSchema>(),
+	"validate-equals": typia.createValidateEquals<UserSchema>(),
+	"assert-equals": typia.createAssertEquals<UserSchema>(),
+	"assert-guard-validate": typia.createAssertGuard<UserSchema>(),
 };
 
 /**
@@ -67,7 +75,16 @@ const UserSchemaModule = {
 const UserModel = defineModel<UserSchema>({
 	schemaName: "UserSchema",
 	schemaModule: UserSchemaModule,
-	capacities: [JsonSerialisable, ProtobufEncodable],
+	capacities: [
+		JsonSerialisable,
+		ProtobufEncodable,
+		// Validatable pulls its validators from `UserSchemaModule`; here we
+		// demonstrate the `onNew` lifecycle hook (assert on construction). The
+		// `validate` / `assert` / `assertGuard` overrides default to the
+		// structural module functions — swap any to a `*-equals` / `*-guard`
+		// variant to tighten them (see src/capacities/validatable.test.ts).
+		{ capacity: Validatable, options: { onNew: "assert" } },
+	],
 });
 
 /**

@@ -65,6 +65,14 @@ const PostSchemaModule = {
 	encode: typia.protobuf.createAssertEncode<PostData>(),
 	decode: typia.protobuf.createAssertDecode<PostData>(),
 	message: typia.protobuf.message<PostData>(),
+	// validators — consumed by the `Validatable` capacity (Post currently binds
+	// these directly as statics; kept here so the module contract is complete).
+	validate: typia.createValidate<PostData>(),
+	assert: typia.createAssert<PostData>(),
+	assertGuard: typia.createAssertGuard<PostData>(),
+	"validate-equals": typia.createValidateEquals<PostData>(),
+	"assert-equals": typia.createAssertEquals<PostData>(),
+	"assert-guard-validate": typia.createAssertGuard<PostData>(),
 };
 
 /**

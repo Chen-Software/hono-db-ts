@@ -2,6 +2,7 @@ import type { CapacityConstructor } from "./capable";
 import { Capable } from "./capable";
 import { JsonSerialisable } from "./json-serialisable";
 import { ProtobufEncodable } from "./protobuf-encodable";
+import { Validatable } from "./validatable";
 import { Immutable } from "./immutable";
 import type { SchemaModule } from "./schema-module";
 
@@ -36,22 +37,41 @@ import type { SchemaModule } from "./schema-module";
  * (`JsonSerialisable`, `Immutable`); others mutate `Base` **in place** and
  * return the same constructor (`Capable`, `ProtobufEncodable`). Both fold
  * identically under left-to-right reduction, because every capacity has the
- * uniform shape `(base, schemaModule) => adornedClass`.
+ * uniform shape `(base, schemaModule, options?) => adornedClass`.
  */
 
 /**
- * The uniform capacity shape: `(base, schemaModule) => adornedClass`.
+ * The uniform capacity shape: `(base, schemaModule, options?) => adornedClass`.
  * `schemaModule` is the fixed bundle of already-bound typia functions the model
  * hands in (typia can't be invoked generically inside a mixin, so the model
- * binds it and the capacity merely consumes its slice).
+ * binds it and the capacity merely consumes its slice). `options` is an
+ * optional per-capacity config bag (e.g. {@link ValidatableOptions}) forwarded
+ * from the declarative entry — capacities that don't take options ignore it.
  */
-type AnyCapacity = (base: any, schemaModule?: any) => any;
+type AnyCapacity = (base: any, schemaModule?: any, options?: any) => any;
 
 /** A bare capacity reference: the constructor itself, or its exported name. */
 export type CapacityRef = AnyCapacity | string;
 
-/** Array declarative form: an ordered list of {@link CapacityRef}. */
-export type CapacityList = readonly CapacityRef[];
+/**
+ * Per-capacity options bag passed through to the capacity at compose time
+ * (e.g. {@link ValidatableOptions}). Kept intentionally loose here; each
+ * capacity narrows it to its own options interface.
+ */
+export type CapacityOptions = Record<string, unknown>;
+
+/**
+ * One entry in the ARRAY declarative form. Either a bare {@link CapacityRef},
+ * or an object that names the capacity plus an options bag — used when a
+ * capacity needs configuration (e.g. `Validatable`'s validator overrides and
+ * lifecycle hooks):
+ *
+ *   [JsonSerialisable, { capacity: Validatable, options: { onNew: "assert" } }]
+ */
+export type CapacityEntry = CapacityRef | { capacity: CapacityRef; options?: CapacityOptions };
+
+/** Array declarative form: an ordered list of {@link CapacityEntry}. */
+export type CapacityList = readonly CapacityEntry[];
 
 /** Object declarative form: `{ CapacityName: true }` (presence only). */
 export type CapacityObject = Record<string, boolean | undefined>;
@@ -80,6 +100,7 @@ for (const [name, fn] of [
 	["JsonSerialisable", JsonSerialisable],
 	["ProtobufEncodable", ProtobufEncodable],
 	["Immutable", Immutable],
+	["Validatable", Validatable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
@@ -129,23 +150,49 @@ function resolveRef(ref: CapacityRef): AnyCapacity {
  * tuples ready to fold. `Capable` is always prepended (and de-duplicated) so it
  * runs first regardless of what the model declared.
  */
+/** Coerce a single array entry into `{ ref, options? }`. */
+function normalizeEntry(item: unknown): {
+	ref: CapacityRef;
+	options?: CapacityOptions;
+} {
+	if (item && typeof item === "object" && "capacity" in (item as object)) {
+		const e = item as { capacity: CapacityRef; options?: CapacityOptions };
+		return { ref: e.capacity, options: e.options };
+	}
+	return { ref: item as CapacityRef };
+}
+
+/**
+ * Normalise the declaration into an ordered list of `[fn, schemaModule,
+ * options?]` tuples ready to fold. `Capable` is always prepended (and
+ * de-duplicated) so it runs first regardless of what the model declared.
+ */
 function normalize(
 	declaration: CapacityDeclaration | undefined,
 	schemaModule: SchemaModule<any>,
-): [AnyCapacity, SchemaModule<any>][] {
-	const resolved: AnyCapacity[] = !declaration
+): [AnyCapacity, SchemaModule<any>, CapacityOptions?][] {
+	const specs: { ref: CapacityRef; options?: CapacityOptions }[] = !declaration
 		? []
 		: Array.isArray(declaration)
-			? declaration.map(resolveRef)
-			: Object.keys(declaration).map((name) => resolveRef(name));
+			? declaration.map(normalizeEntry)
+			: Object.keys(declaration).map((name) => ({ ref: name as CapacityRef }));
 
 	// Capable must run first and exactly once. Drop any explicit Capable from
 	// the user list (we prepend our own), so ordering is always correct — and
 	// Capable is always applied (even when the model declares no capacities).
-	const withoutCapable = resolved.filter((fn) => fn !== Capable);
+	const withoutCapable = specs.filter((s) => resolveRef(s.ref) !== Capable);
+	const all: { ref: CapacityRef; options?: CapacityOptions }[] = [
+		{ ref: Capable },
+		...withoutCapable,
+	];
 
-	return [Capable, ...withoutCapable].map(
-		(fn) => [fn, schemaModule] as [AnyCapacity, SchemaModule<any>],
+	return all.map(
+		(s) =>
+			[resolveRef(s.ref), schemaModule, s.options] as [
+				AnyCapacity,
+				SchemaModule<any>,
+				CapacityOptions?,
+			],
 	);
 }
 
@@ -169,7 +216,7 @@ export function composeCapabilities<B extends CapacityConstructor>(
 	specs: CapacityDeclaration | undefined,
 	schemaModule: SchemaModule<any>,
 ): B {
-	return normalize(specs, schemaModule).reduce<B>((acc, [fn, mod]) => {
-		return fn(acc, mod) as B;
+	return normalize(specs, schemaModule).reduce<B>((acc, [fn, mod, options]) => {
+		return fn(acc, mod, options) as B;
 	}, base);
 }
