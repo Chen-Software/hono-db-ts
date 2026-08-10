@@ -3,6 +3,7 @@ import typia from "typia";
 import { Capable } from "./capable";
 import { JsonSerialisable } from "./json-serialisable";
 import { ProtobufEncodable } from "./protobuf-encodable";
+import type { SchemaModule } from "./schema-module";
 
 /**
  * A tiny concrete schema used to bind the codec. typia cannot resolve a generic
@@ -14,15 +15,15 @@ interface Ping {
 	n: number;
 }
 
-const codec = {
+// The fixed schema module — bound once, handed to every capacity.
+const pingModule: SchemaModule<Ping> = {
+	schema: typia.json.schema<[Ping]>(),
+	classify: (d: any) => d,
+	toJSON: typia.json.createAssertStringify<Ping>(),
+	fromJSON: typia.json.createAssertParse<Ping>(),
 	encode: typia.protobuf.createAssertEncode<Ping>(),
 	decode: typia.protobuf.createAssertDecode<Ping>(),
 	message: typia.protobuf.message<Ping>(),
-};
-
-const jsonCodec = {
-	toJSON: typia.json.createAssertStringify<Ping>(),
-	fromJSON: typia.json.createAssertParse<Ping>(),
 };
 
 /** Cast helper so we can read the (runtime) capacity registry without `any`. */
@@ -40,7 +41,7 @@ function makeModel() {
 
 describe("ProtobufEncodable — registration (Capable gatekeeper)", () => {
 	it("registers itself once Capable has paved the registry", () => {
-		const Model = ProtobufEncodable(Capable(makeModel()), codec);
+		const Model = ProtobufEncodable(Capable(makeModel()), pingModule);
 		const caps = (Model as unknown as WithCapacities).prototype.capacities;
 		expect(caps).toBeDefined();
 		expect([...caps!]).toContain("Capable");
@@ -48,7 +49,7 @@ describe("ProtobufEncodable — registration (Capable gatekeeper)", () => {
 	});
 
 	it("does NOT register when Capable is absent (guard short-circuits)", () => {
-		const Model = ProtobufEncodable(makeModel(), codec);
+		const Model = ProtobufEncodable(makeModel(), pingModule);
 		// No registry was ever created, so `capacities` stays undefined.
 		expect((Model as unknown as WithCapacities).prototype.capacities).toBeUndefined();
 	});
@@ -56,14 +57,14 @@ describe("ProtobufEncodable — registration (Capable gatekeeper)", () => {
 	it("still attaches the codec even without Capable", () => {
 		// The capacity guard only gates *registration*; codec attachment is
 		// unconditional, matching JsonSerialisable / Immutable behaviour.
-		const Model = ProtobufEncodable(makeModel(), codec);
+		const Model = ProtobufEncodable(makeModel(), pingModule);
 		expect(typeof (Model as any).encode).toBe("function");
 		expect(typeof (Model as any).decode).toBe("function");
 	});
 });
 
 describe("ProtobufEncodable — attached codec", () => {
-	const Model = ProtobufEncodable(Capable(makeModel()), codec);
+	const Model = ProtobufEncodable(Capable(makeModel()), pingModule);
 
 	it("attaches static encode / decode / message", () => {
 		expect(typeof (Model as any).encode).toBe("function");
@@ -107,8 +108,8 @@ describe("ProtobufEncodable — attached codec", () => {
 describe("ProtobufEncodable — composes after JsonSerialisable (real wiring)", () => {
 	it("registers both capacities and exposes both codecs", () => {
 		const Composed = ProtobufEncodable(
-			JsonSerialisable(Capable(makeModel()), jsonCodec),
-			codec,
+			JsonSerialisable(Capable(makeModel()), pingModule),
+			pingModule,
 		);
 		const caps = (Composed as unknown as WithCapacities).prototype.capacities;
 		expect([...caps!]).toContain("Capable");

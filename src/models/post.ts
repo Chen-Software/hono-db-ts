@@ -2,7 +2,7 @@ import type { UUID } from "crypto";
 import typia, { type tags, type Classifiable } from "typia";
 import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
-import { Capable, type CapacityConstructor } from "../capacities/capable";
+import { JsonSerialisable } from "../capacities/json-serialisable";
 import { ProtobufEncodable } from "../capacities/protobuf-encodable";
 import { type Versioned } from "../capacities/versioned";
 import {
@@ -50,6 +50,24 @@ const cloneFn = typia.plain.createAssertClone<PostData>();
 const pruneFn = typia.plain.createAssertPrune<PostData>();
 
 /**
+ * PostSchemaModule — the FIXED bundle of every typia function `Post` needs,
+ * bound ONCE and concretely here (where `PostData` is real). Fed to every
+ * capacity during composition; `JsonSerialisable` and `ProtobufEncodable`
+ * each pull their slice and ignore the rest. The base model consumes `schema`
+ * and `classify`.
+ */
+const PostSchemaModule = {
+	schema: typia.json.schema<[PostData]>(),
+	classify: (data: Classifiable<PostData>) =>
+		typia.plain.assertClassify<PostData>(data),
+	toJSON: typia.json.createAssertStringify<PostData>(),
+	fromJSON: typia.json.createAssertParse<PostData>(),
+	encode: typia.protobuf.createAssertEncode<PostData>(),
+	decode: typia.protobuf.createAssertDecode<PostData>(),
+	message: typia.protobuf.message<PostData>(),
+};
+
+/**
  * Post class — same shape contract as `User`:
  * - static members mirror the typia model API (`Post.is`, `Post.validate`,
  *   `Post.from`, `Post.clone`, `Post.toJSON`, `Post.encode`, ...);
@@ -60,8 +78,8 @@ const pruneFn = typia.plain.createAssertPrune<PostData>();
  */
 const PostBase = defineModel<PostData>({
 	schemaName: "PostData",
-	schema: typia.json.schema<[PostData]>(),
-	classify: (data) => typia.plain.assertClassify<PostData>(data),
+	schemaModule: PostSchemaModule,
+	capacities: [JsonSerialisable, ProtobufEncodable],
 });
 
 class Post extends PostBase implements PostData {
@@ -145,12 +163,18 @@ class Post extends PostBase implements PostData {
 		return Post.toJSON(this);
 	}
 
-	/** Raw data, so `JSON.stringify(p)` yields the post object. */
-	toJSON(): PostData {
-		return this;
-	}
+	// `toJSON` / `fromJSON` are provided at RUNTIME by the `JsonSerialisable`
+	// capacity (pulled from `PostSchemaModule` during composition), but
+	// `defineModel`'s return type is widened to `typeof Model`, which hides them
+	// from the checker. `declare` re-teaches the type without emitting a second
+	// (conflicting) runtime initializer.
+	declare static toJSON: (input: PostData) => string;
+	declare static fromJSON: (input: string) => PostData;
 
 	// ---- static functions ---------------------------------------------------
+	// NOTE: `toJSON` / `fromJSON` (and JSON-override construction) are provided
+	// by the `JsonSerialisable` capacity, which pulls them from PostSchemaModule
+	// during composition — no manual JSON statics needed here.
 	static random = typia.createRandom<PostData>();
 	static is = typia.createIs<PostData>();
 	static equals = typia.compare.createEquals<PostData>();
@@ -159,8 +183,6 @@ class Post extends PostBase implements PostData {
 	static validatePartial = typia.createValidate<Partial<PostData>>();
 	static clone = typia.plain.createAssertClone<PostData>();
 	static prune = typia.plain.createAssertPrune<PostData>();
-	static toJSON = typia.json.createAssertStringify<PostData>();
-	static fromJSON = typia.json.createAssertParse<PostData>();
 	static metaSchema = !isProd ? typia.reflect.schema<PostData>() : undefined;
 }
 
@@ -174,20 +196,6 @@ class Post extends PostBase implements PostData {
 const CA = createContentAddressing("body");
 const assertBodyHash = CA.assertHash; // stamp hash from `body` (→ createAssertHash)
 const updatePost = CA.updateForVersioned(Post); // version bump + re-hash (→ updateHash)
-
-// ---------------------------------------------------------------------------
-// Protobuf (de)serialisation capacity.
-//
-// The encode/decode/message typia transforms are bound to the concrete
-// `PostData` schema *here* (typia cannot resolve a generic transform inside the
-// mixin), then attached to `Post` via the capacity. `Capable` paves the
-// registry first so `ProtobufEncodable` can register itself ("ProtobufEncodable").
-// ---------------------------------------------------------------------------
-ProtobufEncodable(Capable(Post as unknown as CapacityConstructor), {
-	encode: typia.protobuf.createAssertEncode<PostData>(),
-	decode: typia.protobuf.createAssertDecode<PostData>(),
-	message: typia.protobuf.message<PostData>(),
-});
 
 export { type PostData, Post };
 export { Post as PostModel };

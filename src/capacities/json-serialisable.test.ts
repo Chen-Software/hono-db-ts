@@ -5,6 +5,7 @@ import {
 	JsonSerialisable,
 	type JsonSerialisableSchema,
 } from "./json-serialisable";
+import type { SchemaModule } from "./schema-module";
 
 /**
  * Minimal schema + base model, isolated per test (the capacity mutates the
@@ -29,14 +30,20 @@ function Guarded<TBase extends CapacityConstructor>(Base: TBase) {
 	return class extends Base {};
 }
 
-const serialiser = {
+// The fixed schema module — bound once, handed to the capacity.
+const fooModule: SchemaModule<Foo> = {
+	schema: typia.json.schema<[Foo]>(),
+	classify: (d: any) => d,
 	toJSON: typia.json.createAssertStringify<Foo>(),
 	fromJSON: typia.json.createAssertParse<Foo>(),
+	encode: typia.protobuf.createAssertEncode<Foo>(),
+	decode: typia.protobuf.createAssertDecode<Foo>(),
+	message: typia.protobuf.message<Foo>(),
 };
 
 describe("JsonSerialisable registers itself (via Capable gatekeeper)", () => {
 	it("adds 'JsonSerialisable' to the registry once Capable is present", () => {
-		const C = JsonSerialisable(Capable(makeFooModel()), serialiser);
+		const C = JsonSerialisable(Capable(makeFooModel()), fooModule);
 		const caps = (C as unknown as { prototype: { capacities: Set<string> } })
 			.prototype.capacities;
 		expect(caps.has("Capable")).toBe(true);
@@ -44,7 +51,7 @@ describe("JsonSerialisable registers itself (via Capable gatekeeper)", () => {
 	});
 
 	it("without Capable, the capacity refuses to register (guarded)", () => {
-		const C = Guarded(JsonSerialisable(makeFooModel(), serialiser));
+		const C = Guarded(JsonSerialisable(makeFooModel(), fooModule));
 		const caps = (C as unknown as { prototype: { capacities?: Set<string> } })
 			.prototype.capacities;
 		expect(caps).toBeUndefined();
@@ -52,7 +59,7 @@ describe("JsonSerialisable registers itself (via Capable gatekeeper)", () => {
 });
 
 describe("JsonSerialisable adds toJSON / fromJSON", () => {
-	const C = JsonSerialisable(Capable(makeFooModel()), serialiser);
+	const C = JsonSerialisable(Capable(makeFooModel()), fooModule);
 
 	it("exposes both as static functions", () => {
 		expect(typeof (C as unknown as { toJSON: unknown }).toJSON).toBe("function");
@@ -89,7 +96,7 @@ describe("JsonSerialisable adds toJSON / fromJSON", () => {
 });
 
 describe("JsonSerialisable instance toJSON + JSON-override constructor", () => {
-	const C = JsonSerialisable(Capable(makeFooModel()), serialiser);
+	const C = JsonSerialisable(Capable(makeFooModel()), fooModule);
 
 	it("instance toJSON() returns the instance so JSON.stringify yields the object", () => {
 		const inst = new C({ name: "y", n: 2 }) as unknown as {
@@ -101,7 +108,7 @@ describe("JsonSerialisable instance toJSON + JSON-override constructor", () => {
 
 	it("JSON-override constructor: new X(jsonString) parses then constructs", () => {
 		const json = '{"name":"z","n":3}';
-		const inst = new C(json) as unknown as Foo & { constructor: unknown };
+		const inst = new C(json as any) as unknown as Foo & { constructor: unknown };
 		expect(inst.name).toBe("z");
 		expect(inst.n).toBe(3);
 		expect(inst instanceof C).toBe(true);

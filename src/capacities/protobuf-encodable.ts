@@ -1,4 +1,5 @@
 import type { CapacityConstructor } from "./capable";
+import type { SchemaModule } from "./schema-module";
 
 /**
  * `ProtobufEncodableSchema` — the type-level MARKER for the capacity.
@@ -13,36 +14,22 @@ import type { CapacityConstructor } from "./capable";
 type ProtobufEncodableSchema = Record<never, never>;
 
 /**
- * The protobuf codec a model binds when it adopts the capacity.
- *
- * typia's transformer cannot resolve a *generic* type argument inside a mixin
- * (`typia.protobuf.createAssertEncode<T>()` fails with
- * "non-specified generic argument" under the `@ttsc` bun plugin), so — exactly
- * like {@link JsonSerialisable} receives its `serializer` — the model supplies
- * the already-instantiated, schema-specific functions here. The plain-data
- * schema (`UserSchema`, `PostData`, …) is concrete at the model, so the typia
- * calls resolve fine there.
- */
-interface ProtobufCodec<T> {
-	/** Assert + encode data into protobuf bytes. */
-	encode: (input: T) => Uint8Array;
-	/** Assert + decode protobuf bytes back into data. */
-	decode: (input: Uint8Array) => T;
-	/** proto3 schema string for the message (`typia.protobuf.message<T>()`). */
-	message: string;
-}
-
-/**
  * ProtobufEncodable — a capacity that equips a class with protobuf
  * (de)serialisation.
  *
  * It adds, to the adorned class:
- *   - `static encode`    — the bound `codec.encode` (assert + encode).
- *   - `static decode`    — the bound `codec.decode` (assert + decode).
- *   - `static message`   — the proto3 schema string (`typia.protobuf.message<T>()`).
+ *   - `static encode`    — `mod.encode` (assert + encode).
+ *   - `static decode`    — `mod.decode` (assert + decode).
+ *   - `static message`   — `mod.message`, the proto3 schema string.
  *   - an instance `encode()` that encodes `this`.
  *   - an instance `decode()` that re-decodes this instance's own encoding
  *     (a round-trip self-check — mirrors the previous inline behaviour).
+ *
+ * Like {@link JsonSerialisable}, this capacity binds NO typia transform itself —
+ * typia cannot resolve a generic type argument inside a mixin. It pulls
+ * `encode` / `decode` / `message` out of the {@link SchemaModule} the model
+ * handed to `defineModel`. If the model does not declare `ProtobufEncodable`
+ * in its `capacities`, those three functions simply stay unused in the module.
  *
  * Unlike {@link JsonSerialisable} (and {@link Immutable}), this mixin mutates
  * `Base` **in place** and returns the same constructor — the way {@link Capable}
@@ -53,9 +40,7 @@ interface ProtobufCodec<T> {
  *     class** (e.g. `Post`, which carries its own hand-written constructor and
  *     methods) without forcing it into a `class X extends Mixin(...)` chain;
  *   - it still composes cleanly *after* other layered mixins, e.g.
- *     `ProtobufEncodable(JsonSerialisable(Capable(UserModel), json), pb)` —
- *     statics and prototype methods land on the composed class and are inherited
- *     by the downstream `class User extends caps`.
+ *     `composeCapabilities(PostBase, [JsonSerialisable, ProtobufEncodable], mod)`.
  *
  * It registers itself in the capacity registry so the class is introspectable as
  * `ProtobufEncodable` — but only when {@link Capable} has already paved the
@@ -63,35 +48,45 @@ interface ProtobufCodec<T> {
  * `Base.prototype.capacities && Base.prototype.addCapacity("X")`).
  *
  * @example
- * const pb = {
+ * // In the model:
+ * const schemaModule = {
+ *   schema: typia.json.schema<[PostData]>(),
+ *   classify: (d) => typia.plain.assertClassify<PostData>(d),
+ *   toJSON: typia.json.createAssertStringify<PostData>(),
+ *   fromJSON: typia.json.createAssertParse<PostData>(),
  *   encode: typia.protobuf.createAssertEncode<PostData>(),
  *   decode: typia.protobuf.createAssertDecode<PostData>(),
  *   message: typia.protobuf.message<PostData>(),
  * };
- * ProtobufEncodable(Capable(Post), pb);
- * Post.encode(valid);   // → Uint8Array
+ * const PostBase = defineModel<PostData>({
+ *   schemaName: "PostData",
+ *   schemaModule,
+ *   capacities: [JsonSerialisable, ProtobufEncodable],
+ * });
+ * Post.encode(valid);   // → Uint8Array (pulled from the module)
  * Post.decode(bytes);   // → validated data
  * Post.message;         // → "syntax = \"proto3\";\nmessage Post { … }"
  */
 function ProtobufEncodable<TBase extends CapacityConstructor>(
 	Base: TBase,
-	codec: ProtobufCodec<any>,
+	mod: SchemaModule<any>,
 ) {
+	const { encode, decode, message } = mod;
 	Base.prototype.capacities && Base.prototype.addCapacity("ProtobufEncodable");
 
 	// Statics — bound codec functions, lifted onto the adorned class.
-	(Base as any).encode = codec.encode;
-	(Base as any).decode = codec.decode;
-	(Base as any).message = codec.message;
+	(Base as any).encode = encode;
+	(Base as any).decode = decode;
+	(Base as any).message = message;
 
 	// Instance methods — operate on `this` (the entity instance).
 	(Base.prototype as any).encode = function (this: any): Uint8Array {
-		return codec.encode(this);
+		return encode(this);
 	};
 
 	(Base.prototype as any).decode = function (this: any): unknown {
 		// Round-trip self-check, matching the previous inline behaviour.
-		return codec.decode(codec.encode(this));
+		return decode(encode(this));
 	};
 
 	return Base;

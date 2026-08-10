@@ -1,4 +1,5 @@
 import type { CapacityConstructor } from "./capable";
+import type { SchemaModule } from "./schema-module";
 
 /**
  * `JsonSerialisableSchema` — the type-level MARKER for the capacity.
@@ -12,34 +13,23 @@ import type { CapacityConstructor } from "./capable";
 type JsonSerialisableSchema = Record<never, never>;
 
 /**
- * The (de)serialisation functions a model binds when it adopts the capacity.
- *
- * typia's transformer cannot resolve a *generic* type argument inside a mixin
- * (`typia.json.createAssertStringify<T>()` fails with
- * "non-specified generic argument" under the `@ttsc` bun plugin), so the model
- * supplies the already-instantiated, schema-specific functions here — exactly
- * the way {@link Validatable} receives its `validators`. The plain-data schema
- * (`UserSchema`, `PostData`, …) is concrete at the model, so the typia calls
- * resolve fine there.
- */
-interface JsonSerializer {
-	/** Assert + stringify data into a JSON string. */
-	toJSON: (input: unknown) => string;
-	/** Parse + validate a JSON string back into data (throws on bad input). */
-	fromJSON: (input: string) => unknown;
-}
-
-/**
  * JsonSerialisable — a capacity that equips a class with JSON (de)serialisation.
  *
  * It adds, to the adorned class:
- *   - `static toJSON`   — the bound `serializer.toJSON` (assert + stringify).
- *   - `static fromJSON` — the bound `serializer.fromJSON` (parse + validate).
+ *   - `static toJSON`   — `mod.toJSON` (assert + stringify).
+ *   - `static fromJSON` — `mod.fromJSON` (parse + validate).
  *   - an instance `toJSON()` that returns `this`, so
  *     `JSON.stringify(instance)` yields the entity's plain object.
  *   - a **JSON-override constructor**: passing a *string* to `new X(json)`
  *     parses it through `fromJSON` first, so `new User('{"name": …}')` builds
  *     exactly like `new User(data)`.
+ *
+ * The capacity does NOT bind any typia transform itself — it cannot (typia's
+ * transformer rejects a generic type argument inside a mixin). Instead it pulls
+ * `toJSON` / `fromJSON` out of the {@link SchemaModule} the model handed to
+ * `defineModel`. If the model did not declare `JsonSerialisable` in its
+ * `capacities`, these two functions simply stay unused in the module — that is
+ * the "use them, or ignore them" split.
  *
  * It also registers itself in the capacity registry (see {@link Capable}) so the
  * class is introspectable as `JsonSerialisable` — but only when `Capable` has
@@ -47,27 +37,36 @@ interface JsonSerializer {
  * `Base.prototype.capacities && Base.prototype.addCapacity("X")`).
  *
  * @example
- * const caps = JsonSerialisable(Capable(UserModel), {
+ * // In the model:
+ * const schemaModule = {
+ *   schema: typia.reflect.schema<UserSchema>(),
+ *   classify: (d) => typia.plain.assertClassify<UserSchema>(d),
  *   toJSON: typia.json.createAssertStringify<UserSchema>(),
  *   fromJSON: typia.json.createAssertParse<UserSchema>(),
+ *   // …encode / decode / message also bound here…
+ * };
+ * const UserModel = defineModel<UserSchema>({
+ *   schemaName: "UserSchema",
+ *   schemaModule,
+ *   capacities: [JsonSerialisable, ProtobufEncodable],
  * });
- * class User extends caps {}
- * User.toJSON(valid);        // → JSON string
- * User.fromJSON(json);       // → validated data
- * new User(jsonString);      // parses the string, then classifies
+ * User.toJSON(valid);   // → JSON string (pulled from the module)
+ * User.fromJSON(json);  // → validated data
+ * new User(jsonString); // parses the string, then classifies
  */
 function JsonSerialisable<TBase extends CapacityConstructor>(
 	Base: TBase,
-	serializer: JsonSerializer,
+	mod: SchemaModule<any>,
 ) {
+	const { toJSON, fromJSON } = mod;
 	Base.prototype.capacities && Base.prototype.addCapacity("JsonSerialisable");
 
 	return class extends Base {
 		/** Assert + stringify data into a JSON string. */
-		static toJSON = serializer.toJSON;
+		static toJSON = toJSON;
 
 		/** Parse + validate a JSON string back into data (throws on bad input). */
-		static fromJSON = serializer.fromJSON;
+		static fromJSON = fromJSON;
 
 		/** Plain data — so `JSON.stringify(instance)` yields the entity object. */
 		toJSON() {
@@ -78,7 +77,7 @@ function JsonSerialisable<TBase extends CapacityConstructor>(
 			const head = args[0];
 			if (typeof head === "string") {
 				// JSON-override: parse the string before classifying/constructing.
-				super(serializer.fromJSON(head), ...args.slice(1));
+				super(fromJSON(head), ...args.slice(1));
 			} else {
 				super(...args);
 			}

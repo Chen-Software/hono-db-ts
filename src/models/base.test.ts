@@ -1,17 +1,28 @@
 import { describe, it, expect } from "bun:test";
 import { defineModel } from "./base";
 import typia from "typia";
+import type { Classifiable } from "typia";
 
 interface Point {
 	x: number;
 	y: number;
 }
 
+// The fixed bundle of typia bindings, bound concretely at the model site.
+const PointSchemaModule = {
+	schema: typia.json.schema<[Point]>(),
+	classify: (d: Classifiable<Point>) => typia.plain.assertClassify<Point>(d),
+	toJSON: typia.json.createAssertStringify<Point>(),
+	fromJSON: typia.json.createAssertParse<Point>(),
+	encode: typia.protobuf.createAssertEncode<Point>(),
+	decode: typia.protobuf.createAssertDecode<Point>(),
+	message: typia.protobuf.message<Point>(),
+};
+
 describe("defineModel (shared base model)", () => {
 	const PointModel = defineModel<Point>({
 		schemaName: "Point",
-		schema: typia.json.schema<[Point]>(),
-		classify: (d) => typia.plain.assertClassify<Point>(d),
+		schemaModule: PointSchemaModule,
 	});
 
 	it("exposes the schema type name as a runtime string", () => {

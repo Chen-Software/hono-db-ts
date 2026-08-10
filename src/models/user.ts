@@ -2,7 +2,6 @@ import type { UUID } from "crypto";
 import typia, { type tags, type Classifiable } from "typia";
 import { type IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
-import { Capable } from "@/capacities/capable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { defineModel } from "./base";
@@ -33,49 +32,55 @@ interface UserSchema extends IdentifiableSchema<UUID>, Timestamped {
 }
 
 /**
- * UserModel — the classified constructor base, produced by the shared
- * {@link defineModel} base model.
+ * UserSchemaModule — the FIXED bundle of every typia function `User` needs,
+ * bound ONCE and concretely here (where `UserSchema` is real). `defineModel`
+ * hands this single module to every capacity; each capacity pulls its own
+ * slice (`JsonSerialisable` → `toJSON`/`fromJSON`, `ProtobufEncodable` →
+ * `encode`/`decode`/`message`) and ignores the rest. The base model itself
+ * consumes `schema` and `classify`.
+ */
+const UserSchemaModule = {
+	schema: typia.reflect.schema<UserSchema>(),
+	classify: (data: Classifiable<UserSchema>) =>
+		typia.plain.assertClassify<UserSchema>(data),
+	toJSON: typia.json.createAssertStringify<UserSchema>(),
+	fromJSON: typia.json.createAssertParse<UserSchema>(),
+	encode: typia.protobuf.createAssertEncode<UserSchema>(),
+	decode: typia.protobuf.createAssertDecode<UserSchema>(),
+	message: typia.protobuf.message<UserSchema>(),
+};
+
+/**
+ * UserModel — the classified constructor base PLUS its composed capacities,
+ * produced declaratively by the shared {@link defineModel} base model.
  *
- * `defineModel` supplies the `assertClassify` constructor plus the runtime
- * `schemaName` (`"UserSchema"`) and `schema` (reflect object). It carries no
- * behaviour of its own, so the capacities can layer serialisation on top
- * without fighting an inherited constructor.
+ * `defineModel` supplies the `assertClassify` constructor (`schemaModule.classify`)
+ * and the runtime `schemaName` (`"UserSchema"`) / `schema` (reflect object),
+ * then folds the declared capacities (below) onto it. `Capable` is
+ * auto-prepended, so the only capacities the model names are the behavioural
+ * ones:
+ *   - `JsonSerialisable` — JSON (de)serialisation (`toJSON` / `fromJSON` +
+ *     a JSON-override constructor), pulled from `UserSchemaModule`;
+ *   - `ProtobufEncodable` — protobuf (de)serialisation (`encode` / `decode` /
+ *     `message`), pulled from `UserSchemaModule`.
  */
 const UserModel = defineModel<UserSchema>({
 	schemaName: "UserSchema",
-	schema: typia.reflect.schema<UserSchema>(),
-	classify: (data) => typia.plain.assertClassify<UserSchema>(data),
+	schemaModule: UserSchemaModule,
+	capacities: [JsonSerialisable, ProtobufEncodable],
 });
 
 /**
- * User capacities.
- *
- * `Capable` paves the registry; `JsonSerialisable` layers JSON (de)serialisation
- * — `toJSON` / `fromJSON` statics plus a JSON-override constructor — and
- * `ProtobufEncodable` layers protobuf (de)serialisation — `encode` / `decode`
- * statics plus a `message` schema string. Both are bound to the concrete
- * `UserSchema`.
+ * `User` — the model class, extending the processed "caps" class. It adds only
+ * model-specific statics (`from`); the capacity behaviour lives on `UserModel`.
  *
  * We intentionally do NOT apply the `Identifiable` / `Validatable` *mixins* here.
  * Their generated constructors expect a `(data, id)` two-arg shape and conflict
- * with `UserSchema` carrying `id` as a field (and with each other: `Validatable`
- * wraps the args array while `Identifiable` pops `id` from it). `UserSchema`
+ * with `UserSchema` carrying `id` as a field (and with each other). `UserSchema`
  * already extends the `IdentifiableSchema` / `Timestamped` *type* markers, and
  * all validation happens in `UserModel`'s `assertClassify`.
  */
-const caps = ProtobufEncodable(
-	JsonSerialisable(Capable(UserModel), {
-		toJSON: typia.json.createAssertStringify<UserSchema>(),
-		fromJSON: typia.json.createAssertParse<UserSchema>(),
-	}),
-	{
-		encode: typia.protobuf.createAssertEncode<UserSchema>(),
-		decode: typia.protobuf.createAssertDecode<UserSchema>(),
-		message: typia.protobuf.message<UserSchema>(),
-	},
-);
-
-class User extends caps {
+class User extends UserModel {
 	/** Construct (or parse-from-JSON) a validated `User`. */
 	static from(data: Classifiable<UserSchema> | string): User {
 		return new User(data as Classifiable<UserSchema>);
