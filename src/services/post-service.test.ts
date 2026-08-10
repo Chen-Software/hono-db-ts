@@ -118,9 +118,7 @@ describe("PostService", () => {
 		it("rejects an invalid author email with 400", async () => {
 			const res = await request(
 				"/",
-				jsonBody(
-					payload({ author: { ...author, email: "not-an-email" } }),
-				),
+				jsonBody(payload({ author: { ...author, email: "not-an-email" } })),
 			);
 			expect(res.status).toBe(400);
 		});

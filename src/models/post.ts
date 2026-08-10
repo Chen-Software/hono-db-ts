@@ -1,13 +1,16 @@
 import type { UUID } from "crypto";
 import typia, { type tags, type Classifiable } from "typia";
-import type { Identifiable } from "../capacities/identifiable";
+import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
+import { Capable, type CapacityConstructor } from "../capacities/capable";
+import { ProtobufEncodable } from "../capacities/protobuf-encodable";
 import { type Versioned } from "../capacities/versioned";
 import {
 	type ContentAddressable,
 	createContentAddressing,
 } from "../capacities/content-addressable";
-import type { User } from "./user";
+import type { UserSchema } from "./user";
+import { defineModel } from "./base";
 import { type Blake3 } from "../tags/format-string-blake3";
 import { isProd } from "@/macros";
 
@@ -22,11 +25,11 @@ import { isProd } from "@/macros";
  * `createUpdate` factory) by wiring in the shared `versionedUpdate` helper,
  * with zero capacity changes.
  */
-interface PostData extends
-	Identifiable<UUID>,
-	Timestamped,
-	Versioned,
-	ContentAddressable<"body"> {
+interface PostData
+	extends IdentifiableSchema<UUID>,
+		Timestamped,
+		Versioned,
+		ContentAddressable<"body"> {
 	/** Post title. */
 	title: string & tags.MinLength<1> & tags.MaxLength<200>;
 
@@ -35,8 +38,8 @@ interface PostData extends
 	 *  here — the intersection accumulates the tags.) */
 	body: string & tags.MinLength<1> & tags.MaxLength<10000>;
 
-	/** Author of the post — a nested `User` (instance or plain data). */
-	author: User;
+	/** Author of the post — a nested `UserSchema` (instance or plain data). */
+	author: UserSchema;
 
 	/** Whether the post is published. */
 	published: boolean;
@@ -52,29 +55,42 @@ const pruneFn = typia.plain.createAssertPrune<PostData>();
  *   `Post.from`, `Post.clone`, `Post.toJSON`, `Post.encode`, ...);
  * - `Post.from` returns a `Post` *instance* with bound methods;
  * - `author` is carried through untouched, so a `User` instance passed in
- *   keeps its own methods (e.g. `post.author.update(...)`).
+ *   keeps its own methods (e.g. `post.author.update(...)`). Typed as
+ *   `UserSchema` (the plain-data contract) so typia can resolve it.
  */
-class Post implements PostData {
-	id!: UUID;
-	title!: string;
+const PostBase = defineModel<PostData>({
+	schemaName: "PostData",
+	schema: typia.json.schema<[PostData]>(),
+	classify: (data) => typia.plain.assertClassify<PostData>(data),
+});
+
+class Post extends PostBase implements PostData {
+	// NOTE: these are declared with `declare` (type-only) rather than `!`,
+	// because `Post` now *extends* the `defineModel` base. Plain `field!`
+	// declarations emit a runtime initializer that runs AFTER `super(data)` and
+	// would clobber the data the base constructor just assigned. `declare`
+	// contributes the fields to the `implements PostData` type check without
+	// emitting any runtime initializer.
+	declare id: UUID;
+	declare title: string;
 	/** Content field — `readonly` because content addressing requires the
 	 *  payload to be immutable (you reconstruct, never mutate). Supplied by the
 	 *  `ContentAddressable<"body">` capacity. */
-	readonly body!: string;
-	author!: User;
-	published!: boolean;
-	created_at!: string;
+	declare readonly body: string;
+	declare author: UserSchema;
+	declare published: boolean;
+	declare created_at: string;
 
 	/** Version timestamp — strictly increases on every update; equals `created_at` on the first version. This field IS the version. */
-	updated_at!: string & tags.Format<"date-time">;
+	declare updated_at: string & tags.Format<"date-time">;
 
 	/** BLAKE3 content address of `body` — `readonly`; always derived from
 	 *  `body` by `createAssertHash` (construction) or `updateHash` (update).
 	 *  Supplied by the `ContentAddressable<"body">` capacity. */
-	readonly hash!: string & Blake3;
+	declare readonly hash: string & Blake3;
 
 	private constructor(data: Classifiable<PostData>) {
-		return Object.assign(this, typia.plain.assertClassify<PostData>(data));
+		super(data);
 	}
 
 	// ---- static factory / creators ------------------------------------------
@@ -134,16 +150,6 @@ class Post implements PostData {
 		return this;
 	}
 
-	/** Protobuf-encode this instance. */
-	encode(): Uint8Array {
-		return Post.encode(this);
-	}
-
-	/** Protobuf-decode a fresh instance from this instance's encoding. */
-	decode(): PostData {
-		return Post.decode(Post.encode(this));
-	}
-
 	// ---- static functions ---------------------------------------------------
 	static random = typia.createRandom<PostData>();
 	static is = typia.createIs<PostData>();
@@ -155,10 +161,6 @@ class Post implements PostData {
 	static prune = typia.plain.createAssertPrune<PostData>();
 	static toJSON = typia.json.createAssertStringify<PostData>();
 	static fromJSON = typia.json.createAssertParse<PostData>();
-	static encode = typia.protobuf.createAssertEncode<PostData>();
-	static decode = typia.protobuf.createAssertDecode<PostData>();
-	static message = typia.protobuf.message<PostData>();
-	static schema = typia.json.schema<[PostData]>();
 	static metaSchema = !isProd ? typia.reflect.schema<PostData>() : undefined;
 }
 
@@ -172,6 +174,20 @@ class Post implements PostData {
 const CA = createContentAddressing("body");
 const assertBodyHash = CA.assertHash; // stamp hash from `body` (→ createAssertHash)
 const updatePost = CA.updateForVersioned(Post); // version bump + re-hash (→ updateHash)
+
+// ---------------------------------------------------------------------------
+// Protobuf (de)serialisation capacity.
+//
+// The encode/decode/message typia transforms are bound to the concrete
+// `PostData` schema *here* (typia cannot resolve a generic transform inside the
+// mixin), then attached to `Post` via the capacity. `Capable` paves the
+// registry first so `ProtobufEncodable` can register itself ("ProtobufEncodable").
+// ---------------------------------------------------------------------------
+ProtobufEncodable(Capable(Post as unknown as CapacityConstructor), {
+	encode: typia.protobuf.createAssertEncode<PostData>(),
+	decode: typia.protobuf.createAssertDecode<PostData>(),
+	message: typia.protobuf.message<PostData>(),
+});
 
 export { type PostData, Post };
 export { Post as PostModel };

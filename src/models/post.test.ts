@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { createVersionedUpdate } from "../capacities/versioned";
-import { hashContent, verifyContentAddress } from "../capacities/content-addressable";
+import {
+	hashContent,
+	verifyContentAddress,
+} from "../capacities/content-addressable";
 import { User } from "./user";
 import { Post } from "./post";
 
@@ -67,9 +70,9 @@ describe("Post.author (nested User)", () => {
 
 	it("rejects a post whose author fails User validation", () => {
 		// author.id is not a uuid -> the nested User validation fails too.
-		expect(
-			Post.is({ ...valid, author: { ...authorData, id: "bad" } }),
-		).toBe(false);
+		expect(Post.is({ ...valid, author: { ...authorData, id: "bad" } })).toBe(
+			false,
+		);
 		// author missing a required field (name) also fails.
 		const { name: _drop, ...badAuthor } = authorData;
 		expect(Post.is({ ...valid, author: badAuthor })).toBe(false);

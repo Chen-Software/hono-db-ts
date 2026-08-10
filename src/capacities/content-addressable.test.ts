@@ -94,9 +94,9 @@ describe("FORMAT-only vs SEMANTIC correctness — the two layers", () => {
 	it("verifyContentAddress REJECTS a content-wrong hash (the semantic layer)", () => {
 		const addressed = withContentHash({ content: "x" }, "content");
 		// addressed has the CORRECT hash for "x"; tamper with content:
-		expect(verifyContentAddress({ ...addressed, content: "y" }, "content")).toBe(
-			false,
-		);
+		expect(
+			verifyContentAddress({ ...addressed, content: "y" }, "content"),
+		).toBe(false);
 	});
 });
 
