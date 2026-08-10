@@ -19,7 +19,7 @@ interface Foo {
 const makeFooModel = () =>
 	class FooModel {
 		constructor(data: Foo) {
-			return Object.assign(this, data);
+			Object.assign(this, data);
 		}
 	};
 
@@ -89,7 +89,9 @@ describe("JsonSerialisable adds toJSON / fromJSON", () => {
 	const C = JsonSerialisable(Capable(makeFooModel()), fooModule);
 
 	it("exposes both as static functions", () => {
-		expect(typeof (C as unknown as { toJSON: unknown }).toJSON).toBe("function");
+		expect(typeof (C as unknown as { toJSON: unknown }).toJSON).toBe(
+			"function",
+		);
 		expect(typeof (C as unknown as { fromJSON: unknown }).fromJSON).toBe(
 			"function",
 		);
@@ -107,17 +109,54 @@ describe("JsonSerialisable adds toJSON / fromJSON", () => {
 		expect(back).toEqual({ name: "x", n: 1 });
 	});
 
-	it("fromJSON throws on malformed JSON", () => {
+	it("fromJSON throws on malformed JSON (parse error, regardless of validator)", () => {
 		expect(() =>
 			(C as unknown as { fromJSON: (j: string) => Foo }).fromJSON("{bad}"),
 		).toThrow();
 	});
+
+	it("fromJSON is LENIENT without Validatable: does NOT validate, permits illegal fields", () => {
+		// No `Validatable` in this composition ⇒ the JSON-override parse falls
+		// back to a bare `JSON.parse`, so schema violations pass through.
+		const back = (C as unknown as { fromJSON: (j: string) => Foo }).fromJSON(
+			JSON.stringify({ name: 123, n: "no" }),
+		);
+		expect(back).toEqual({ name: 123, n: "no" });
+	});
+});
+
+describe("JsonSerialisable fromJSON validates WHEN Validatable is present", () => {
+	// Simulate `Validatable` being declared in the model so the capacity's
+	// `ctx.has("Validatable")` is true and the strict parse is selected.
+	const C = JsonSerialisable(
+		Capable(makeFooModel()),
+		fooModule,
+		{},
+		{
+			has: (name) => name === "Validatable",
+		},
+	);
 
 	it("fromJSON throws when fields violate the schema", () => {
 		expect(() =>
 			(C as unknown as { fromJSON: (j: string) => Foo }).fromJSON(
 				JSON.stringify({ name: 123, n: "no" }),
 			),
+		).toThrow();
+	});
+
+	it("fromJSON still throws on malformed JSON", () => {
+		expect(() =>
+			(C as unknown as { fromJSON: (j: string) => Foo }).fromJSON("{bad}"),
+		).toThrow();
+	});
+
+	it("fromJSON validates the JSON-override constructor too", () => {
+		expect(
+			() =>
+				new (C as unknown as new (d: any) => Foo)(
+					JSON.stringify({ name: 123 }) as any,
+				),
 		).toThrow();
 	});
 });
@@ -135,7 +174,9 @@ describe("JsonSerialisable instance toJSON + JSON-override constructor", () => {
 
 	it("JSON-override constructor: new X(jsonString) parses then constructs", () => {
 		const json = '{"name":"z","n":3}';
-		const inst = new C(json as any) as unknown as Foo & { constructor: unknown };
+		const inst = new C(json as any) as unknown as Foo & {
+			constructor: unknown;
+		};
 		expect(inst.name).toBe("z");
 		expect(inst.n).toBe(3);
 		expect(inst instanceof C).toBe(true);

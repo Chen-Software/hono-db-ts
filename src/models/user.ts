@@ -5,9 +5,11 @@ import { Comparable } from "@/capacities/comparable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Validatable } from "@/capacities/validatable";
+import { Referencible } from "@/capacities/referencible";
 import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
+import { Post } from "./post";
 
 /**
  * User schema — the plain-data contract.
@@ -128,6 +130,17 @@ const UserModel = defineModel<UserSchema>({
 		// Because `Validatable` is also declared, `equals` defaults to the
 		// validator-aware ("validated") mode — it rejects invalid operands.
 		Comparable,
+		// Referencible: `user.getPosts()` scans the Post identity map for
+		// `authorId === user.id`. `onDelete: "cascade"` registers an `onDelete`
+		// hook so deleting a user deletes all its posts first.
+		{
+			capacity: Referencible,
+			options: {
+				relations: [
+					{ name: "posts", target: () => Post, by: "authorId", cardinality: "one-to-many", onDelete: "cascade" },
+				],
+			},
+		},
 	],
 });
 
@@ -148,4 +161,4 @@ class User extends UserModel {
 	}
 }
 
-export { User, type UserSchema };
+export { User, UserModel, type UserSchema };

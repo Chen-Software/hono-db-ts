@@ -116,18 +116,6 @@ export function defineModel<T>(def: ModelDefinition<T>) {
 		static classify = def.schemaModule.classify;
 
 		/**
-		 * Lifecycle-hook registry (shared by the whole composition). Paved by
-		 * `Capable` and populated by every behaviour capacity (Validatable, …)
-		 * with middleware. The constructor / `update` below are the ONLY places
-		 * that read it — capacities never own those methods.
-		 */
-		static hooks: LifecycleHooks = {
-			onInit: [],
-			onConstruct: [],
-			onUpdate: [],
-		};
-
-		/**
 		 * Unified `update` — MUTABLE BY DEFAULT.
 		 *
 		 * The base model is mutable: `udpate` patches `this` IN PLACE and returns
@@ -144,18 +132,46 @@ export function defineModel<T>(def: ModelDefinition<T>) {
 		 * The `Immutable` capacity OVERRIDES this method to reconstruct a
 		 * brand-new frozen instance instead (every change yields a new object).
 		 * Capacities plug in via the `onUpdate` lifecycle hook; none of them
-		 * re-implements `update`.
+		 * re-implements `update`. `beforeUpdate` / `afterUpdate` EVENTS (owned by
+		 * `Triggerable`) fire around the commit so async side-effects (a future
+		 * `Derivable` re-materialising a cached attribute, a future `Persistable`
+		 * writing the row) can subscribe without the model knowing about them.
 		 */
 		update(patch: Record<string, unknown>): any {
 			const Ctor = this.constructor as any;
 			// Validate the MERGED result BEFORE committing in place, so an invalid
 			// patch is rejected without mutating `this`.
 			const merged = { ...this, ...patch };
+			// `beforeUpdate` signal — notification only; cannot reject or mutate.
+			Ctor.emit?.("beforeUpdate", merged);
 			for (const h of (Ctor.hooks?.onUpdate ??
 				[]) as LifecycleHooks["onUpdate"]) {
 				h(merged);
 			}
 			Object.assign(this, patch);
+			// `afterUpdate` signal — subscribers re-materialise derived state here.
+			Ctor.emit?.("afterUpdate", this);
+			return this;
+		}
+
+		/**
+		 * Delete this entity. Runs `onDelete` lifecycle middleware (synchronous;
+		 * can throw to ABORT the delete — e.g. `restrict`, or cascade-delete
+		 * children first), then emits `beforeDelete` / `afterDelete` EVENTS for
+		 * async side-effects (cache invalidation, a future `Persistable` writing
+		 * a tombstone). Actual removal from the identity map is delegated to
+		 * `static __deregister` (wired by `Referencible`). The instance is NOT
+		 * mutated, so this is safe on frozen `Immutable` instances.
+		 */
+		delete(): any {
+			const Ctor = this.constructor as any;
+			for (const h of (Ctor.hooks?.onDelete ??
+				[]) as LifecycleHooks["onDelete"]) {
+				h(this);
+			}
+			Ctor.emit?.("beforeDelete", this);
+			Ctor.__deregister?.(this);
+			Ctor.emit?.("afterDelete", this);
 			return this;
 		}
 

@@ -1,4 +1,5 @@
 import type { CapacityConstructor } from "./capable";
+import type { ComposeContext } from "./compose";
 import type { SchemaModule } from "./schema-module";
 
 /**
@@ -31,6 +32,18 @@ type JsonSerialisableSchema = Record<never, never>;
  * `capacities`, these two functions simply stay unused in the module — that is
  * the "use them, or ignore them" split.
  *
+ * **Validation tracks `Validatable`** — `fromJSON` (and the JSON-override
+ * constructor) validate the parsed data *only* when the model also declares the
+ * `Validatable` capacity. With `Validatable` present, `fromJSON` uses the
+ * module's strict parse (`fromJSON` = `createAssertParse`) so deserialisation
+ * validates in lock-step with the constructor's `classify`. Without it, `fromJSON`
+ * falls back to a LENIENT `JSON.parse` (no validation — illegal values pass
+ * through), exactly mirroring how `Clonable` only validates its clone when the
+ * validator is present. This closes the gap where `fromJSON`'s strictness was
+ * coupled to the model's module binding rather than to the `Validatable` toggle.
+ * Override explicitly with `{ parse: "fromJSON" | "validateParse" | "isParse" |
+ * "lenient" }`.
+ *
  * It also registers itself in the capacity registry (see {@link Capable}) so the
  * class is introspectable as `JsonSerialisable` — but only when `Capable` has
  * already paved the registry (the standard guarded idiom
@@ -51,22 +64,37 @@ type JsonSerialisableSchema = Record<never, never>;
  *   capacities: [JsonSerialisable, ProtobufEncodable],
  * });
  * User.toJSON(valid);   // → JSON string (pulled from the module)
- * User.fromJSON(json);  // → validated data
+ * User.fromJSON(json);  // → validated data (Validatable present ⇒ strict)
  * new User(jsonString); // parses the string, then classifies
  */
 function JsonSerialisable<TBase extends CapacityConstructor>(
 	Base: TBase,
 	mod: SchemaModule<any>,
+	_options: JsonSerialisableOptions = {},
+	ctx?: ComposeContext,
 ) {
-	const { toJSON, fromJSON } = mod;
+	const { toJSON } = mod;
 	Base.prototype.capacities && Base.prototype.addCapacity("JsonSerialisable");
+
+	// Parse variant — validated when the validator capacity is also declared,
+	// lenient (`JSON.parse`, no validation) otherwise. Like `Clonable`, the
+	// validator "switches on" validation; without it deserialisation is
+	// unvalidated and permits illegal values. An explicit option wins.
+	const parseFn: (s: string) => any =
+		_options.parse === "lenient"
+			? (s) => JSON.parse(s)
+			: _options.parse
+				? (mod[_options.parse] as (s: string) => any)
+				: ctx?.has("Validatable")
+					? (mod.fromJSON as (s: string) => any)
+					: (s) => JSON.parse(s);
 
 	return class extends Base {
 		/** Assert + stringify data into a JSON string. */
 		static toJSON = toJSON;
 
-		/** Parse + validate a JSON string back into data (throws on bad input). */
-		static fromJSON = fromJSON;
+		/** Parse (+ validate when Validatable is present) a JSON string. */
+		static fromJSON = parseFn;
 
 		/** Plain data — so `JSON.stringify(instance)` yields the entity object. */
 		toJSON() {
@@ -76,8 +104,10 @@ function JsonSerialisable<TBase extends CapacityConstructor>(
 		constructor(...args: any[]) {
 			const head = args[0];
 			if (typeof head === "string") {
-				// JSON-override: parse the string before classifying/constructing.
-				super(fromJSON(head), ...args.slice(1));
+				// JSON-override: parse the string (via the variant-aware parse)
+				// before classifying/constructing. Validation tracks Validatable:
+				// the strict parse throws on bad input when the validator is on.
+				super(parseFn(head), ...args.slice(1));
 			} else {
 				super(...args);
 			}
@@ -86,3 +116,19 @@ function JsonSerialisable<TBase extends CapacityConstructor>(
 }
 
 export { JsonSerialisable, type JsonSerialisableSchema };
+
+/**
+ * Options for the {@link JsonSerialisable} capacity.
+ *
+ * `parse` — which parse strategy backs `static fromJSON` and the JSON-override
+ * constructor. Defaults to the VALIDATED `fromJSON` (assert parse) when the
+ * model also declares `Validatable`, and to a LENIENT `JSON.parse` (no
+ * validation — allows illegal values) otherwise. This mirrors how `Clonable`
+ * defaults its clone to the validated `assertClone` *only* when the validator
+ * capacity is present: validation is an opt-in governed by `Validatable`, and
+ * without it deserialisation is deliberately unvalidated. An explicit option
+ * always wins.
+ */
+export interface JsonSerialisableOptions {
+	parse?: "fromJSON" | "validateParse" | "isParse" | "lenient";
+}

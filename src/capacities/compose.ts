@@ -6,6 +6,7 @@ import { Validatable } from "./validatable";
 import { Clonable } from "./clonable";
 import { Immutable } from "./immutable";
 import { Comparable } from "./comparable";
+import { Triggerable } from "./triggerable";
 import type { SchemaModule } from "./schema-module";
 
 /**
@@ -113,6 +114,7 @@ export function registerCapacity(name: string, fn: AnyCapacity): void {
 
 for (const [name, fn] of [
 	["Capable", Capable],
+	["Triggerable", Triggerable],
 	["JsonSerialisable", JsonSerialisable],
 	["ProtobufEncodable", ProtobufEncodable],
 	["Immutable", Immutable],
@@ -201,13 +203,17 @@ function normalize(
 			? declaration.map(normalizeEntry)
 			: Object.keys(declaration).map((name) => ({ ref: name as CapacityRef }));
 
-	// Capable must run first and exactly once. Drop any explicit Capable from
-	// the user list (we prepend our own), so ordering is always correct — and
-	// Capable is always applied (even when the model declares no capacities).
-	const withoutCapable = specs.filter((s) => resolveRef(s.ref) !== Capable);
+	// Capable + Triggerable form the foundation and must run first, each
+	// exactly once. `Capable` paves the capacity registry; `Triggerable` paves
+	// the lifecycle/event registries that `Validatable` / `Referencible` push
+	// middleware into. Drop any explicit mention from the user list (we prepend
+	// our own), so ordering is always correct and both are always applied.
+	const foundation = new Set([Capable, Triggerable]);
+	const withoutFoundation = specs.filter((s) => !foundation.has(resolveRef(s.ref)));
 	const all: { ref: CapacityRef; options?: CapacityOptions }[] = [
 		{ ref: Capable },
-		...withoutCapable,
+		{ ref: Triggerable },
+		...withoutFoundation,
 	];
 
 	return all.map((s) => {

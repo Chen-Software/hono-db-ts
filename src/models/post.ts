@@ -5,12 +5,13 @@ import type { Timestamped } from "../capacities/timestamped";
 import { JsonSerialisable } from "../capacities/json-serialisable";
 import { ProtobufEncodable } from "../capacities/protobuf-encodable";
 import { Comparable } from "../capacities/comparable";
+import { Referencible } from "../capacities/referencible";
 import { type Versioned } from "../capacities/versioned";
 import {
 	type ContentAddressable,
 	createContentAddressing,
 } from "../capacities/content-addressable";
-import type { UserSchema } from "./user";
+import { User, type UserSchema } from "./user";
 import { defineModel } from "./base";
 import { type Blake3 } from "../tags/format-string-blake3";
 import { isProd } from "@/macros";
@@ -39,8 +40,14 @@ interface PostData
 	 *  here — the intersection accumulates the tags.) */
 	body: string & tags.MinLength<1> & tags.MaxLength<10000>;
 
-	/** Author of the post — a nested `UserSchema` (instance or plain data). */
+	/** Author of the post — a nested `UserSchema` (instance or plain data).
+	 *  Kept for embedded (de)serialisation convenience; the canonical
+	 *  reference is the foreign key below. */
 	author: UserSchema;
+
+	/** Foreign key to the authoring `User` — the join column for the
+	 *  `getUser` relation. */
+	authorId: UUID;
 
 	/** Whether the post is published. */
 	published: boolean;
@@ -118,7 +125,23 @@ const PostSchemaModule = {
 const PostBase = defineModel<PostData>({
 	schemaName: "PostData",
 	schemaModule: PostSchemaModule,
-	capacities: [JsonSerialisable, ProtobufEncodable, Comparable],
+	capacities: [
+		JsonSerialisable,
+		ProtobufEncodable,
+		Comparable,
+		// Referencible: `post.getUser()` resolves the FK `authorId` to a live
+		// User via the identity map. `by: "authorId"` desugars to
+		// `(near, far) => near.authorId === far.id`, which also serves the
+		// inverse `user.getPosts()` scan.
+		{
+			capacity: Referencible,
+			options: {
+				relations: [
+					{ name: "user", target: () => User, by: "authorId", cardinality: "many-to-one", join: "inner" },
+				],
+			},
+		},
+	],
 });
 
 class Post extends PostBase implements PostData {
@@ -135,6 +158,7 @@ class Post extends PostBase implements PostData {
 	 *  `ContentAddressable<"body">` capacity. */
 	declare readonly body: string;
 	declare author: UserSchema;
+	declare authorId: UUID;
 	declare published: boolean;
 	declare created_at: string;
 

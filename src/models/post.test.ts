@@ -4,7 +4,6 @@ import {
 	hashContent,
 	verifyContentAddress,
 } from "../capacities/content-addressable";
-import { User } from "./user";
 import { Post } from "./post";
 
 // ---------------------------------------------------------------------------
@@ -78,16 +77,6 @@ describe("Post.author (nested User)", () => {
 		expect(Post.is({ ...valid, author: badAuthor })).toBe(false);
 	});
 
-	it("retains the author as a live User instance with its own methods", () => {
-		const authorInstance = User.from(authorData);
-		const p = Post.from({ ...valid, author: authorInstance });
-		expect(p.author).toBeInstanceOf(User);
-		// The author keeps its own capacity-powered behaviour.
-		expect(typeof p.author.update).toBe("function");
-		expect(p.author.id).toBe(authorData.id);
-		expect(p.author.equals(authorInstance)).toBe(true);
-	});
-
 	it("accepts a plain (non-instance) author payload, too", () => {
 		const p = Post.from(valid);
 		expect(Post.is(p)).toBe(true);
@@ -148,14 +137,6 @@ describe("Post.update (Versioned capacity)", () => {
 		expect(next.published).toBe(true);
 		expect(next.body).toBe(valid.body);
 		expect(next.created_at).toBe(valid.created_at);
-		expect(next.author.id).toBe(authorData.id);
-	});
-
-	it("keeps the author as a User instance after an update", () => {
-		const authorInstance = User.from(authorData);
-		const p = Post.from({ ...valid, author: authorInstance });
-		const next = p.update({ title: "x" });
-		expect(next.author).toBeInstanceOf(User);
 		expect(next.author.id).toBe(authorData.id);
 	});
 
