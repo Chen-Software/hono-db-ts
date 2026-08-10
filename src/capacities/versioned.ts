@@ -1,6 +1,6 @@
 import { type tags } from "typia";
 import type { Identifiable } from "./identifiable";
-import type { Immutable } from "./immutable";
+import type { ImmutableSchema } from "./immutable";
 
 /**
  * Versioned marks an entity as an immutable, append-only instance of a logical
@@ -19,7 +19,7 @@ import type { Immutable } from "./immutable";
  * identifier — lexicographic comparison of the ISO strings orders versions
  * chronologically, and equals `created_at` on the very first version.
  */
-interface Versioned extends Immutable {
+interface Versioned extends ImmutableSchema {
 	/** Version timestamp. Strictly increases on every update; equals `created_at` on the first version. */
 	updated_at: string & tags.Format<"date-time">;
 }
@@ -59,10 +59,11 @@ export function nextUpdatedAt(prev?: string): string {
  *   `Identifiable & Versioned`.
  * @typeParam T - the reconstructed instance type (e.g. `User`).
  */
-export function versionedUpdate<
-	D extends Identifiable<string> & Versioned,
-	T,
->(entity: D, patch: Partial<D>, reconstruct: (data: D) => T): T {
+export function versionedUpdate<D extends Identifiable<string> & Versioned, T>(
+	entity: D,
+	patch: Partial<D>,
+	reconstruct: (data: D) => T,
+): T {
 	// Merge, then make `id` and `updated_at` authoritative: any `id`/`updated_at`
 	// in the patch is ignored in favour of the existing id and a freshly
 	// bumped version. `withVersionBump` supplies the strictly-later `updated_at`.
@@ -76,9 +77,9 @@ export function versionedUpdate<
  * strictly-later `updated_at`. `id` is left untouched (callers are
  * responsible for preserving identity; `versionedUpdate` does that for you).
  */
-export function withVersionBump<
-	D extends Identifiable<string> & Versioned,
->(data: D): D {
+export function withVersionBump<D extends Identifiable<string> & Versioned>(
+	data: D,
+): D {
 	return { ...data, updated_at: nextUpdatedAt(data.updated_at) };
 }
 

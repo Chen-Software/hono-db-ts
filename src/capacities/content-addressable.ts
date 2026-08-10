@@ -4,7 +4,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { type Blake3 } from "../tags/format-string-blake3";
 import { type Identifiable } from "./identifiable";
 import { type Versioned, versionedUpdate } from "./versioned";
-import { type Immutable, createUpdate } from "./immutable";
+import { type ImmutableSchema, createUpdate } from "./immutable";
 
 /**
  * ContentField maps the (model-specific) content key to a single `string`
@@ -50,7 +50,7 @@ type ContentField<K extends string> = { readonly [P in K]: string };
  *
  * @typeParam K - the name of the content field. Defaults to `"content"`.
  */
-export type ContentAddressable<K extends string = "content"> = Immutable &
+export type ContentAddressable<K extends string = "content"> = ImmutableSchema &
 	ContentField<K> & {
 		/** BLAKE3 hash (lowercase 64-hex) of the content field — the address. */
 		readonly hash: string & Blake3;
@@ -179,7 +179,7 @@ export function updateHash<
  *
  * - `assertHash`        — stamp the correct hash at construction (`createAssertHash`)
  * - `updateFor`         — RE-DERIVE the hash on every content set, with NO
- *                         version bump. Requires only `Identifiable & Immutable`,
+ *                         version bump. Requires only `Identifiable & ImmutableSchema`,
  *                         so a content-addressable entity does NOT have to be
  *                         versioned (the two capacities are independent).
  * - `updateForVersioned`— RE-DERIVE the hash AND bump the version, for entities
@@ -209,7 +209,7 @@ export function createContentAddressing<K extends string>(key: K) {
 		 * the `Immutable` capacity's base `createUpdate`.
 		 */
 		updateFor: <
-			D extends Identifiable<string> & Immutable & Record<K, string>,
+			D extends Identifiable<string> & ImmutableSchema & Record<K, string>,
 			T,
 		>(ctor: {
 			from(data: D): T;

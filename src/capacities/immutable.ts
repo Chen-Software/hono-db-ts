@@ -1,6 +1,6 @@
 import typia from "typia";
 import { type tags } from "typia";
-import type { CapacityConstructor, Constructor } from "./capable";
+import type { CapacityConstructor } from "./capable";
 
 /**
  * Immutable
@@ -8,11 +8,23 @@ import type { CapacityConstructor, Constructor } from "./capable";
  * @description Every mutation causes the entity to reconstruct.
  *
  */
+/**
+ * `ImmutableSchema` — the type-level MARKER for the capacity.
+ *
+ * It is the empty object (`Record<never, never>`): a no-op in an intersection
+ * at both runtime and the type level, but it reads as a deliberate contract in
+ * `Versioned = ImmutableSchema & …` / `ContentAddressable = ImmutableSchema & …`.
+ * Declared as a `type` rather than an `interface` so it stays a pure marker and
+ * does not trip empty-interface lint. The runtime behaviour (freezing) lives in
+ * the {@link Immutable} mixin function below.
+ */
+type ImmutableSchema = Record<never, never>;
+
 function Immutable<TBase extends CapacityConstructor>(Base: TBase) {
 	Base.prototype.capacities && Base.prototype.addCapacity("Immutable");
 	// const mutable = typia.reflect.schema<Writable<TBase>>();
 	// console.log(mutable);
-	return class extends Base {
+	return class extends Base implements ImmutableSchema {
 		constructor(...args: any[]) {
 			super(...args);
 			Object.freeze(this);
@@ -20,7 +32,7 @@ function Immutable<TBase extends CapacityConstructor>(Base: TBase) {
 	}
 }
 
-export { Immutable };
+export { Immutable, type ImmutableSchema };
 
 /**
  * Immutable — a capacity marking that instances are NEVER mutated in place.
@@ -39,9 +51,10 @@ export { Immutable };
  * `Immutable`. The contract is enforced by the model's constructor/`update`
  * (reconstruction), not by any runtime state declared here.
  *
- * This is a MARKER type (`Record<never, never>` is the empty object, a no-op in
- * an intersection at runtime and at the type level, but reads as a deliberate
- * contract in `Versioned = Immutable & …` / `ContentAddressable = Immutable & …`).
+ * This is a MARKER type (`Record<never, never>`, exported as {@link ImmutableSchema})
+ * is the empty object, a no-op in an intersection at runtime and at the type
+ * level, but reads as a deliberate contract in
+ * `Versioned = ImmutableSchema & …` / `ContentAddressable = ImmutableSchema & …`).
  * Declared as a `type` rather than an `interface` so it stays a pure marker and
  * does not trip empty-interface lint.
  *
