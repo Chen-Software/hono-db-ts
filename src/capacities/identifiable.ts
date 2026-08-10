@@ -6,23 +6,22 @@ import type { CapacityConstructor } from "./capable";
  *
  * @param ID_TYPE the type of the id.
  */
-function Identifiable<TID, TBase extends CapacityConstructor>(Base: TBase) {
+function Identifiable<TID = 'uuid', TBase extends CapacityConstructor>(Base: TBase) {
 	Base.prototype.capacities && Base.prototype.addCapacity("Identifiable");
 
-	return class extends Base implements IdentifiableState<TID> {
+	return class extends Base implements IdentifiableSchema<TID> {
 		readonly id: TID;
 
 		constructor(...args: any[]) {
+			const id = args.pop();
 			super(...args);
-			const states = args[0];
-			const { id } = states;
-			this.id = id;
+			this.id = id || crypto.randomUUID();
 		}
 	};
 }
 
-interface IdentifiableState<ID_TYPE = string & tags.Format<"uuid">> {
-	readonly id: ID_TYPE;
+interface IdentifiableSchema<TID> {
+	readonly id: TID | (string & tags.Format<"uuid">);
 }
 
-export { Identifiable, type IdentifiableState};
+export { Identifiable, type IdentifiableSchema};

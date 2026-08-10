@@ -208,7 +208,6 @@ describe("User#clone (instance)", () => {
 	});
 });
 
-
 // ---------------------------------------------------------------------------
 // assertStrict – returns first arg regardless of input (type-assertion passthrough)
 // ---------------------------------------------------------------------------

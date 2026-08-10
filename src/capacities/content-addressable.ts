@@ -104,10 +104,10 @@ export function verifyContentAddress<K extends string>(
  * @example
  * const post = Post.from(withContentHash({ ...data, body }, "body"));
  */
-export function withContentHash<
-	K extends string,
-	D extends Record<K, string>,
->(payload: D & { hash?: string }, contentKey: K): D & { hash: string } {
+export function withContentHash<K extends string, D extends Record<K, string>>(
+	payload: D & { hash?: string },
+	contentKey: K,
+): D & { hash: string } {
 	const content = payload[contentKey];
 	return { ...payload, hash: hashContent(content) };
 }
@@ -211,9 +211,9 @@ export function createContentAddressing<K extends string>(key: K) {
 		updateFor: <
 			D extends Identifiable<string> & Immutable & Record<K, string>,
 			T,
-		>(
-			ctor: { from(data: D): T },
-		) => createUpdate<D, T>((d) => ctor.from(withContentHash(d, key))),
+		>(ctor: {
+			from(data: D): T;
+		}) => createUpdate<D, T>((d) => ctor.from(withContentHash(d, key))),
 
 		/**
 		 * Bind a model class; returns an update fn that bumps the version AND
@@ -224,9 +224,9 @@ export function createContentAddressing<K extends string>(key: K) {
 		updateForVersioned: <
 			D extends Identifiable<string> & Versioned & Record<K, string>,
 			T,
-		>(
-			ctor: { from(data: D): T },
-		) => updateHash(key, ctor),
+		>(ctor: {
+			from(data: D): T;
+		}) => updateHash(key, ctor),
 	};
 }
 
@@ -234,4 +234,5 @@ export function createContentAddressing<K extends string>(key: K) {
 // Concrete validators for the default "content" key (mirrors identifiable.ts)
 // ---------------------------------------------------------------------------
 export const isContentAddressable = typia.createIs<ContentAddressable>();
-export const validateContentAddressable = typia.createValidate<ContentAddressable>();
+export const validateContentAddressable =
+	typia.createValidate<ContentAddressable>();

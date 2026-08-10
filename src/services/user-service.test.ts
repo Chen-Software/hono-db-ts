@@ -25,11 +25,11 @@ const payload = (overrides?: Record<string, unknown>) => ({
 	name: "Alice",
 	email: "alice@example.com",
 	role: "member",
-		age: 25,
-		created_at: "2026-08-09T12:00:00.000Z",
-		updated_at: "2026-08-09T12:00:00.000Z",
-		...overrides,
-	});
+	age: 25,
+	created_at: "2026-08-09T12:00:00.000Z",
+	updated_at: "2026-08-09T12:00:00.000Z",
+	...overrides,
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
