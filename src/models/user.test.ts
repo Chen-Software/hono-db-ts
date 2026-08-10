@@ -491,58 +491,49 @@ describe("User.from", () => {
 });
 
 // ---------------------------------------------------------------------------
-// update — immutable modify: new instance, same id, strictly-later updated_at
+// update — MUTABLE in-place (User does NOT wear the `Immutable` capacity, so
+// the base default applies: `update` patches `this` in place and returns the
+// same instance). Validation on update runs via the `onUpdate` lifecycle hook
+// (Validatable). Version-bumping is a SEPARATE `Versioned` concern — see
+// `createVersionedUpdate(User)` below — and is intentionally NOT enforced here.
 // ---------------------------------------------------------------------------
 describe("User.update", () => {
-	// ISO-8601 strings of fixed length sort chronologically as text.
-	const isLater = (a: string, b: string) => a > b;
-
-	it("returns a new object reference (does not mutate the receiver)", () => {
+	it("returns the SAME instance and mutates the receiver in place", () => {
 		const u = User.from(valid);
 		const next = u.update({ name: "Alicia" });
-		expect(next).not.toBe(u);
-		expect(u.name).toBe("Alice"); // original must stay untouched
+		expect(next).toBe(u); // in-place, same reference
+		expect(u.name).toBe("Alicia"); // receiver mutated
 	});
 
 	it("retains the same id", () => {
 		const u = User.from(valid);
-		const next = u.update({ age: 30 });
-		expect(next.id).toBe(u.id);
-	});
-
-	it("stamps a strictly-later updated_at (the version)", () => {
-		const u = User.from(valid); // updated_at == created_at
-		const next = u.update({ name: "Alicia" });
-		expect(next.updated_at).not.toBe(u.updated_at);
-		expect(isLater(next.updated_at, u.updated_at)).toBe(true);
+		u.update({ age: 30 });
+		expect(u.id).toBe(valid.id);
 	});
 
 	it("applies the patched fields and preserves the rest", () => {
 		const u = User.from(valid);
-		const next = u.update({ name: "Alicia", email: "alicia@example.com" });
-		expect(next.name).toBe("Alicia");
-		expect(next.email).toBe("alicia@example.com");
-		expect(next.age).toBe(valid.age);
-		expect(next.created_at).toBe(valid.created_at);
-		expect(next.updated_at).not.toBe(u.updated_at);
+		u.update({ name: "Alicia", email: "alicia@example.com" });
+		expect(u.name).toBe("Alicia");
+		expect(u.email).toBe("alicia@example.com");
+		expect(u.age).toBe(valid.age);
+		expect(u.created_at).toBe(valid.created_at);
 	});
 
-	it("ignores any id/updated_at supplied in the patch", () => {
-		const u = User.from(valid);
-		const patched = u.update({
-			id: crypto.randomUUID(),
-			updated_at: "1970-01-01T00:00:00.000Z",
-			name: "X",
-		});
-		expect(patched.id).toBe(u.id);
-		expect(patched.updated_at).not.toBe("1970-01-01T00:00:00.000Z");
-		expect(isLater(patched.updated_at, u.updated_at)).toBe(true);
-		expect(patched.name).toBe("X");
+	it("does NOT bump updated_at — that requires the Versioned capacity", () => {
+		// User wears Validatable + the mutable base `update`, not Versioned, so a
+		// plain update does not mint a new version timestamp. Bumping is the
+		// separate `Versioned` capacity (see `createVersionedUpdate(User)`).
+		const u = User.from(valid); // updated_at == created_at
+		const before = u.updated_at;
+		u.update({ name: "Alicia" });
+		expect(u.updated_at).toBe(before);
 	});
 
-	it("throws when the patched result is invalid", () => {
+	it("throws when the patched result is invalid (onUpdate validation)", () => {
 		const u = User.from(valid);
 		expect(() => u.update({ age: 16 })).toThrow();
+		expect(u.age).toBe(valid.age); // rejected before commit
 	});
 });
 

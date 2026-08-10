@@ -1,10 +1,11 @@
-import typia from "typia";
-import { type tags } from "typia";
+import type typia from "typia";
+import type { tags } from "typia";
 import type { CapacityConstructor } from "./capable";
+import { UPDATE_PHASE } from "./capable";
 
 /**
  * Immutable
- * 
+ *
  * @description Every mutation causes the entity to reconstruct.
  *
  */
@@ -22,14 +23,72 @@ type ImmutableSchema = Record<never, never>;
 
 function Immutable<TBase extends CapacityConstructor>(Base: TBase) {
 	Base.prototype.capacities && Base.prototype.addCapacity("Immutable");
-	// const mutable = typia.reflect.schema<Writable<TBase>>();
-	// console.log(mutable);
+
 	return class extends Base implements ImmutableSchema {
 		constructor(...args: any[]) {
 			super(...args);
+
+			// Rewrite EVERY own enumerable data property into an IMMUTABLE
+			// accessor. The getter returns the (classified) value; the setter
+			// NEVER mutates `this` in place — it rebuilds the entity through the
+			// unified constructor (which re-runs classify, every lifecycle hook,
+			// and this same transform + freeze) and RETURNS the brand-new frozen
+			// instance carrying the patched value.
+			//
+			// Why own-enumerable accessors (not prototype accessors, not a
+			// backing WeakMap): the rest of the system — JsonSerialisable's
+			// `instance.toJSON()` returning `this`, Clonable's `clone(this)`,
+			// content-addressing hashing `this.body`, `{...this}` spreads, and
+			// `typia`'s (de)serialisers — all rely on the instance being a
+			// plain-enough object whose fields are OWN + ENUMERABLE. Inherited
+			// getters are NOT serialised by `JSON.stringify`, so the accessors
+			// MUST live on the instance itself. Capturing the value in a closure
+			// keeps the getter allocation-free and freeze-safe.
+			const keys = Object.keys(this);
+			for (const k of keys) {
+				const value = (this as any)[k];
+				Object.defineProperty(this, k, {
+					enumerable: true,
+					configurable: true,
+					get(this: any) {
+						return value;
+					},
+					set(this: any, v: any) {
+						const Ctor = this.constructor as any;
+						return new Ctor({ ...this, [k]: v });
+					},
+				});
+			}
+
+			// Freeze so the object is observably immutable (Object.isFrozen) and
+			// no stray assignment can add/reconfigure props. The accessor
+			// transform above guarantees the setter never mutates; freeze adds
+			// the "you cannot even try to mutate" guarantee.
 			Object.freeze(this);
 		}
-	}
+
+		/**
+		 * Override the base MUTABLE `update` with IMMUTABLE reconstruction.
+		 *
+		 * Every patch produces a BRAND-NEW frozen instance through the unified
+		 * constructor — which re-runs `classify`, every lifecycle hook (including
+		 * the `onUpdate` validation hook), and this same accessor-transform +
+		 * freeze. The current instance is never mutated. So for an Immutable
+		 * model:
+		 *
+		 *   user.update({ age: 42 })      // returns a NEW frozen instance
+		 *   user.update({ ...user, name }) // partial or full patch, both fine
+		 *
+		 * The base model stays mutable-by-default; `Immutable` is the ONLY thing
+		 * that flips `update` to "produce a new object". (Immutable instances
+		 * also rewrite their property SETTERS to return a new object — see the
+		 * constructor above — so even `inst.name = x` cannot mutate in place.)
+		 */
+		update(patch: Record<string, unknown>): any {
+			const Ctor = this.constructor as any;
+			return new Ctor({ ...this, ...patch, [UPDATE_PHASE]: true });
+		}
+	};
 }
 
 export { Immutable, type ImmutableSchema };
@@ -64,7 +123,6 @@ export { Immutable, type ImmutableSchema };
  * marker, every entity wearing either capacity inherits the same
  * immutable-update machinery (composed with their own policy steps).
  */
-
 
 // ---------------------------------------------------------------------------
 // Type-level "is every member readonly?" introspection

@@ -1,10 +1,12 @@
 import type { UUID } from "crypto";
-import typia, { type tags, type Classifiable } from "typia";
-import { type IdentifiableSchema } from "../capacities/identifiable";
-import type { Timestamped } from "../capacities/timestamped";
+import typia, { type Classifiable, type tags } from "typia";
+import { Clonable } from "@/capacities/clonable";
+import { Comparable } from "@/capacities/comparable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Validatable } from "@/capacities/validatable";
+import type { IdentifiableSchema } from "../capacities/identifiable";
+import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
 
 /**
@@ -40,22 +42,52 @@ interface UserSchema extends IdentifiableSchema<UUID>, Timestamped {
  * `encode`/`decode`/`message`) and ignores the rest. The base model itself
  * consumes `schema` and `classify`.
  */
+// compare family (typia.compare.*) — bound once, consumed by the Comparable capacity
+const userEquals = typia.compare.createEquals<UserSchema>();
+const userLess = typia.compare.createLess<UserSchema>();
+
 const UserSchemaModule = {
 	schema: typia.reflect.schema<UserSchema>(),
-	classify: (data: Classifiable<UserSchema>) =>
-		typia.plain.assertClassify<UserSchema>(data),
-	toJSON: typia.json.createAssertStringify<UserSchema>(),
-	fromJSON: typia.json.createAssertParse<UserSchema>(),
-	encode: typia.protobuf.createAssertEncode<UserSchema>(),
-	decode: typia.protobuf.createAssertDecode<UserSchema>(),
-	message: typia.protobuf.message<UserSchema>(),
-	// validators — consumed by the `Validatable` capacity
-	validate: typia.createValidate<UserSchema>(),
+	// classify family (plain default; Validatable upgrades construction to assertClassify)
+	classify: typia.plain.createClassify<UserSchema>(),
+	assertClassify: typia.plain.createAssertClassify<UserSchema>(),
+	validateClassify: typia.plain.createValidateClassify<UserSchema>(),
+	// clone family
+	clone: typia.plain.createClone<UserSchema>(),
+	assertClone: typia.plain.createAssertClone<UserSchema>(),
+	isClone: typia.plain.createIsClone<UserSchema>(),
+	validateClone: typia.plain.createValidateClone<UserSchema>(),
+	// validators
+	is: typia.createIs<UserSchema>(),
 	assert: typia.createAssert<UserSchema>(),
 	assertGuard: typia.createAssertGuard<UserSchema>(),
-	"validate-equals": typia.createValidateEquals<UserSchema>(),
+	validate: typia.createValidate<UserSchema>(),
 	"assert-equals": typia.createAssertEquals<UserSchema>(),
+	"validate-equals": typia.createValidateEquals<UserSchema>(),
+	"assert-guard-equals": typia.createAssertGuardEquals<UserSchema>(),
 	"assert-guard-validate": typia.createAssertGuard<UserSchema>(),
+	// json family
+	stringify: typia.json.createStringify<UserSchema>(),
+	toJSON: typia.json.createAssertStringify<UserSchema>(),
+	isStringify: typia.json.createIsStringify<UserSchema>(),
+	validateStringify: typia.json.createValidateStringify<UserSchema>(),
+	fromJSON: typia.json.createAssertParse<UserSchema>(),
+	isParse: typia.json.createIsParse<UserSchema>(),
+	validateParse: typia.json.createValidateParse<UserSchema>(),
+	// protobuf family
+	message: typia.protobuf.message<UserSchema>(),
+	encode: typia.protobuf.createAssertEncode<UserSchema>(),
+	decode: typia.protobuf.createAssertDecode<UserSchema>(),
+	isEncode: typia.protobuf.createIsEncode<UserSchema>(),
+	validateEncode: typia.protobuf.createValidateEncode<UserSchema>(),
+	isDecode: typia.protobuf.createIsDecode<UserSchema>(),
+	validateDecode: typia.protobuf.createValidateDecode<UserSchema>(),
+	// compare family (typia.compare.*)
+	equals: userEquals,
+	less: userLess,
+	more: (x: any, y: any) => userLess(y, x),
+	// random
+	random: typia.createRandom<UserSchema>(),
 };
 
 /**
@@ -79,11 +111,23 @@ const UserModel = defineModel<UserSchema>({
 		JsonSerialisable,
 		ProtobufEncodable,
 		// Validatable pulls its validators from `UserSchemaModule`; here we
-		// demonstrate the `onNew` lifecycle hook (assert on construction). The
-		// `validate` / `assert` / `assertGuard` overrides default to the
-		// structural module functions — swap any to a `*-equals` / `*-guard`
-		// variant to tighten them (see src/capacities/validatable.test.ts).
-		{ capacity: Validatable, options: { onNew: "assert" } },
+		// demonstrate BOTH lifecycle hooks: `onNew` (assert on construction) and
+		// `onUpdate` (assert on the mutable `update`). The `validate` / `assert`
+		// / `assertGuard` overrides default to the structural module functions —
+		// swap any to a `*-equals` / `*-guard` variant to tighten them (see
+		// src/capacities/validatable.test.ts). User does NOT wear `Immutable`, so
+		// its `update` is IN-PLACE (the base default); immutability is an
+		// opt-in capacity. Version-bumping on update is a separate `Versioned`
+		// concern (see `createVersionedUpdate(User)`), not enforced here.
+		{ capacity: Validatable, options: { onNew: "assert", onUpdate: "assert" } },
+		// Clonable defaults to the validated `assertClone` because Validatable is
+		// present; set `{ capacity: Clonable, options: { clone: "clone" } }` to
+		// opt out of validation on clone.
+		Clonable,
+		// Comparable pulls `equals` / `less` / `more` from `UserSchemaModule`.
+		// Because `Validatable` is also declared, `equals` defaults to the
+		// validator-aware ("validated") mode — it rejects invalid operands.
+		Comparable,
 	],
 });
 
@@ -104,4 +148,4 @@ class User extends UserModel {
 	}
 }
 
-export { type UserSchema, User };
+export { User, type UserSchema };

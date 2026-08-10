@@ -1,7 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { defineModel } from "./base";
 import typia from "typia";
-import type { Classifiable } from "typia";
 
 interface Point {
 	x: number;
@@ -11,12 +10,39 @@ interface Point {
 // The fixed bundle of typia bindings, bound concretely at the model site.
 const PointSchemaModule = {
 	schema: typia.json.schema<[Point]>(),
-	classify: (d: Classifiable<Point>) => typia.plain.assertClassify<Point>(d),
+	classify: typia.plain.createAssertClassify<Point>(),
+	assertClassify: typia.plain.createAssertClassify<Point>(),
+	validateClassify: typia.plain.createValidateClassify<Point>(),
+	clone: typia.plain.createClone<Point>(),
+	assertClone: typia.plain.createAssertClone<Point>(),
+	isClone: typia.plain.createIsClone<Point>(),
+	validateClone: typia.plain.createValidateClone<Point>(),
+	is: typia.createIs<Point>(),
+	assert: typia.createAssert<Point>(),
+	assertGuard: typia.createAssertGuard<Point>(),
+	validate: typia.createValidate<Point>(),
+	"assert-equals": typia.createAssertEquals<Point>(),
+	"validate-equals": typia.createValidateEquals<Point>(),
+	"assert-guard-equals": typia.createAssertGuardEquals<Point>(),
+	"assert-guard-validate": typia.createAssertGuard<Point>(),
+	stringify: typia.json.createStringify<Point>(),
 	toJSON: typia.json.createAssertStringify<Point>(),
+	isStringify: typia.json.createIsStringify<Point>(),
+	validateStringify: typia.json.createValidateStringify<Point>(),
 	fromJSON: typia.json.createAssertParse<Point>(),
+	isParse: typia.json.createIsParse<Point>(),
+	validateParse: typia.json.createValidateParse<Point>(),
+	message: typia.protobuf.message<Point>(),
 	encode: typia.protobuf.createAssertEncode<Point>(),
 	decode: typia.protobuf.createAssertDecode<Point>(),
-	message: typia.protobuf.message<Point>(),
+	isEncode: typia.protobuf.createIsEncode<Point>(),
+	validateEncode: typia.protobuf.createValidateEncode<Point>(),
+	isDecode: typia.protobuf.createIsDecode<Point>(),
+	validateDecode: typia.protobuf.createValidateDecode<Point>(),
+	equals: typia.compare.createEquals<Point>(),
+	less: typia.compare.createLess<Point>(),
+	more: (x: any, y: any) => typia.compare.createLess<Point>()(y, x),
+	random: typia.createRandom<Point>(),
 };
 
 describe("defineModel (shared base model)", () => {

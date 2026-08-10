@@ -1,4 +1,5 @@
 import type { CapacityConstructor } from "./capable";
+import { addLifecycleHook } from "./capable";
 import type { SchemaModule } from "./schema-module";
 
 /**
@@ -14,10 +15,22 @@ export type ValidatorKey =
 	| "assertGuard"
 	| "validate-equals"
 	| "assert-equals"
+	| "assert-guard-equals"
 	| "assert-guard-validate";
 
 /** Which validator the lifecycle hooks (`onNew` / `onUpdate`) run. */
 export type ValidationHookMode = "assert" | "validate" | "assertGuard";
+
+/**
+ * Which `classify` variant backs the model's construction-time classify.
+ * - `"classify"`        — plain `createClassify` (no validation at all)
+ * - `"assertClassify"`  — `createAssertClassify` (DEFAULT when Validatable is on; throws on invalid)
+ * - `"validateClassify"`— `createValidateClassify` (collects errors, throws if any)
+ */
+export type ClassifyStrategy =
+	| "classify"
+	| "assertClassify"
+	| "validateClassify";
 
 /**
  * Options for the {@link Validatable} capacity.
@@ -26,9 +39,14 @@ export type ValidationHookMode = "assert" | "validate" | "assertGuard";
  *   each capacity method. Defaults map 1:1 to `"validate"` / `"assert"` /
  *   `"assertGuard"`. Override to a STRICTER variant, e.g.
  *   `{ validate: "validate-equals", assert: "assert-equals",
- *      assertGuard: "assert-guard-validate" }` to swap in the deep-equal
+ *      assertGuard: "assert-guard-equals" }` to swap in the deep-equal
  *   checks. The SchemaModule must carry those keys (it does — see
  *   {@link SchemaModule}).
+ * - `classify` — which `classify` variant the model's constructor uses. When
+ *   Validatable is enabled this DEFAULTS to `"assertClassify"` (so construction
+ *   validates), overriding the base model's plain `classify`. Set it to
+ *   `"classify"` to explicitly DISABLE construction-time validation, or
+ *   `"validateClassify"` to collect errors instead of throwing immediately.
  * - `onNew` — validator to run in the constructor on every `new X(data)`.
  * - `onUpdate` — validator to run on the update path (exposed as
  *   `static validateUpdate` / `assertUpdate` / `assertGuardUpdate` for the
@@ -38,6 +56,7 @@ export interface ValidatableOptions {
 	validate?: ValidatorKey;
 	assert?: ValidatorKey;
 	assertGuard?: ValidatorKey;
+	classify?: ClassifyStrategy;
 	onNew?: ValidationHookMode;
 	onUpdate?: ValidationHookMode;
 }
@@ -59,15 +78,26 @@ export interface ValidatableOptions {
  * **Custom function overrides** — the options map lets a model pick a stricter
  * or different module validator for any method, e.g.
  *   `{ validate: "validate-equals", assert: "assert-equals",
- *      assertGuard: "assert-guard-validate" }`
+ *      assertGuard: "assert-guard-equals" }`
  * binds the deep-equal variants instead of the default structural ones. The
  * SchemaModule must carry those keys (it does).
  *
+ * **Construction-time classify** — `classify` selects which `classify` variant
+ * the model's constructor uses. When Validatable is enabled it DEFAULTS to
+ * `"assertClassify"` (so `new X(data)` validates), overriding the base model's
+ * plain `classify`. Set `classify: "classify"` to disable construction
+ * validation, or `"validateClassify"` to collect errors instead. This is the
+ * "validator overrides an unvalidated classify when enabled" behaviour — unless
+ * explicitly disabled or changed via this option.
+ *
  * **Lifecycle hooks** — `onNew` selects which validator runs on construction
- * (enforced in the constructor; throws on invalid data), and `onUpdate` selects
- * which validator runs on the model's update path via the `*Update` statics.
- * Each is one of `"assert" | "validate" | "assertGuard"`. So the SAME
- * declarative config governs both lifecycle events.
+ * and `onUpdate` selects which runs on the update path. Validatable does NOT
+ * own the constructor or `update`; instead it registers an `onConstruct`
+ * (for `onNew`) and/or `onUpdate` lifecycle hook — middleware that the unified
+ * constructor / `update` (in `defineModel`) invokes automatically. Each is one
+ * of `"assert" | "validate" | "assertGuard"`. So the SAME declarative config
+ * governs both lifecycle events, with no capacity fighting over who controls
+ * construction/update.
  *
  * @example
  * // In the model:
@@ -95,17 +125,42 @@ function Validatable<TBase extends CapacityConstructor>(
 ) {
 	const validateKey = (options.validate ?? "validate") as keyof typeof mod;
 	const assertKey = (options.assert ?? "assert") as keyof typeof mod;
-	const assertGuardKey = (options.assertGuard ?? "assertGuard") as keyof typeof mod;
+	const assertGuardKey = (options.assertGuard ??
+		"assertGuard") as keyof typeof mod;
 
 	const validateFn = mod[validateKey] as (input: unknown) => any;
 	const assertFn = mod[assertKey] as (input: unknown) => any;
 	const assertGuardFn = mod[assertGuardKey] as (input: unknown) => any;
 
+	// Construction-time classify. When Validatable is enabled, the base model's
+	// plain `classify` is OVERWRITTEN with the configured variant (default
+	// `assertClassify`), so `new X(data)` validates by default unless the model
+	// opts out via `classify: "classify"`. `validateClassify` returns an
+	// `IValidation`, so we unwrap it (throw on failure, return the data).
+	const classifyKey = (options.classify ??
+		"assertClassify") as keyof typeof mod;
+	const classifyRaw = mod[classifyKey] as (input: unknown) => any;
+	const classifyFn = (input: unknown): any => {
+		const r = classifyRaw(input);
+		if (r && typeof r === "object" && "success" in r) {
+			if (!r.success) {
+				const msgs = (r.errors ?? []).map(
+					(e: any) => `${e?.path ?? "$"}: expected ${e?.expected ?? "?"}`,
+				);
+				throw new Error(`Validatable.classify failed — ${msgs.join("; ")}`);
+			}
+			return r.data;
+		}
+		return r;
+	};
+
 	Base.prototype.capacities && Base.prototype.addCapacity("Validatable");
 
 	// Resolve a hook's validator function from the module by mode name.
 	const hookFn = (mode: ValidationHookMode | undefined) =>
-		mode ? (mod[mode as keyof typeof mod] as (input: unknown) => any) : undefined;
+		mode
+			? (mod[mode as keyof typeof mod] as (input: unknown) => any)
+			: undefined;
 
 	const onNew = hookFn(options.onNew);
 	const onUpdate = hookFn(options.onUpdate);
@@ -137,7 +192,29 @@ function Validatable<TBase extends CapacityConstructor>(
 		}
 	};
 
+	// -----------------------------------------------------------------------
+	// Lifecycle hooks — Validatable does NOT wrap the constructor or implement
+	// `update`. It contributes VALIDATION MIDDLEWARE that the unified
+	// constructor / `update` (in `defineModel`) invoke. This is what stops the
+	// validator capacity from conflicting with Immutable's constructor transform
+	// or with any other capacity: there is one constructor and one `update`,
+	// and each capacity only registers a hook.
+	// -----------------------------------------------------------------------
+	// `onNew`    → onConstruct hook (runs at construction time).
+	// `onUpdate` → onUpdate hook (runs only when `update()` is the entry point).
+	addLifecycleHook(Base, "onConstruct", (inst: any) => enforce(onNew, inst));
+	if (onUpdate) {
+		addLifecycleHook(Base, "onUpdate", (inst: any) => enforce(onUpdate, inst));
+	}
+
 	return class extends Base {
+		/**
+		 * Construction-time classify — overrides the base model's plain
+		 * `classify` with the configured variant (default `assertClassify`),
+		 * so the constructor validates by default while Validatable is on.
+		 */
+		static classify = classifyFn;
+
 		/** Validate — returns `{ success, data | errors }` (non-throwing). */
 		static validate = validateFn;
 
@@ -160,7 +237,12 @@ function Validatable<TBase extends CapacityConstructor>(
 			}
 		};
 
-		/** Update-guard (runs the configured `onUpdate` validator; no-op if unset). */
+		/**
+		 * Update-guard statics — kept for API compatibility / direct use. They
+		 * run the configured `onUpdate` validator (no-op if unset). The unified
+		 * `update()` now runs the same validator automatically via the
+		 * `onUpdate` lifecycle hook; these statics are a thin explicit surface.
+		 */
 		static validateUpdate = (data: unknown) => enforce(onUpdate, data);
 		static assertUpdate = (data: unknown) => enforce(onUpdate, data);
 		static assertGuardUpdate = (data: unknown) => enforce(onUpdate, data);
@@ -175,15 +257,6 @@ function Validatable<TBase extends CapacityConstructor>(
 		}
 		assertGuard(): boolean {
 			return (this.constructor as any).assertGuard(this);
-		}
-
-		constructor(...args: any[]) {
-			super(...args);
-			// `onNew` guard — enforces validity on every construction call.
-			// Validate `this` (the classified instance) rather than `args[0]`,
-			// so a JSON-string constructor (handled upstream by JsonSerialisable)
-			// is validated against its parsed form, not the raw string.
-			enforce(onNew, this);
 		}
 	};
 }

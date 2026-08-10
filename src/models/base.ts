@@ -1,8 +1,13 @@
 import type { Classifiable } from "typia";
-import type { CapacityConstructor } from "../capacities/capable";
+import type {
+	CapacityConstructor,
+	LifecycleHooks,
+	LifecyclePhase,
+} from "../capacities/capable";
+import { UPDATE_PHASE } from "../capacities/capable";
 import {
-	composeCapabilities,
 	type CapacityDeclaration,
+	composeCapabilities,
 } from "../capacities/compose";
 import type { SchemaModule } from "../capacities/schema-module";
 
@@ -100,8 +105,93 @@ export function defineModel<T>(def: ModelDefinition<T>) {
 		/** Concrete typia schema object (reflect/json), exposed at runtime. */
 		static schema = def.schemaModule.schema;
 
+		/**
+		 * Construction-time classify. Defaults to the model's plain `classify` from
+		 * the schema module; the `Validatable` capacity OVERRIDES this with a
+		 * validated variant (`assertClassify` by default) when it is enabled — so
+		 * construction validates unless the model opts out. The constructor reads
+		 * `this.constructor.classify` (not `def.schemaModule.classify`) precisely so
+		 * that overridden static is picked up at instantiation time.
+		 */
+		static classify = def.schemaModule.classify;
+
+		/**
+		 * Lifecycle-hook registry (shared by the whole composition). Paved by
+		 * `Capable` and populated by every behaviour capacity (Validatable, …)
+		 * with middleware. The constructor / `update` below are the ONLY places
+		 * that read it — capacities never own those methods.
+		 */
+		static hooks: LifecycleHooks = {
+			onInit: [],
+			onConstruct: [],
+			onUpdate: [],
+		};
+
+		/**
+		 * Unified `update` — MUTABLE BY DEFAULT.
+		 *
+		 * The base model is mutable: `udpate` patches `this` IN PLACE and returns
+		 * the same instance. Validation (if any) runs FIRST, via the `onUpdate`
+		 * lifecycle hook, so a rejected patch never leaves `this` half-mutated.
+		 * This is deliberate — immutability is an OPT-IN capacity (`Immutable`),
+		 * not the default, because you can always ADD a "produce a new object"
+		 * behaviour on top of a mutable base, but you cannot reverse an "always
+		 * new object" base back to in-place. So:
+		 *
+		 *   user.update({ age: 42 })        // mutates `user`, returns `user`
+		 *   user.update({ ...user, name })   // partial or full patch, both fine
+		 *
+		 * The `Immutable` capacity OVERRIDES this method to reconstruct a
+		 * brand-new frozen instance instead (every change yields a new object).
+		 * Capacities plug in via the `onUpdate` lifecycle hook; none of them
+		 * re-implements `update`.
+		 */
+		update(patch: Record<string, unknown>): any {
+			const Ctor = this.constructor as any;
+			// Validate the MERGED result BEFORE committing in place, so an invalid
+			// patch is rejected without mutating `this`.
+			const merged = { ...this, ...patch };
+			for (const h of (Ctor.hooks?.onUpdate ??
+				[]) as LifecycleHooks["onUpdate"]) {
+				h(merged);
+			}
+			Object.assign(this, patch);
+			return this;
+		}
+
 		constructor(data: Classifiable<T>) {
-			return Object.assign(this, def.schemaModule.classify(data));
+			const Ctor = this.constructor as any;
+			const raw = data as any;
+
+			// Detect + strip the update phase BEFORE classify (which would drop
+			// the symbol when it rebuilds the object).
+			const isUpdate = !!(raw && raw[UPDATE_PHASE]);
+			if (isUpdate) delete raw[UPDATE_PHASE];
+
+			// 1. onInit hooks — transform / normalise RAW input before classify.
+			//    Runs on both construction and update.
+			let d = raw;
+			for (const h of (Ctor.hooks?.onInit ?? []) as LifecycleHooks["onInit"]) {
+				d = h(d) ?? d;
+			}
+
+			// 2. classify (may be overridden — e.g. Validatable → assertClassify).
+			d = (Ctor.classify as (x: any) => any)(d);
+
+			// 3. assign plain data props. The Immutable capacity later rewrites
+			//    these into immutable accessors + freezes the instance (its
+			//    constructor wrap runs AFTER this one returns). Models without
+			//    Immutable keep plain mutable props.
+			Object.assign(this, d);
+
+			// 4. phase-appropriate validation hooks — the middleware contributed by
+			//    capacities such as Validatable (`onNew` → onConstruct, `onUpdate`
+			//    → onUpdate). Never mutates; may throw to reject.
+			const phase: LifecyclePhase = isUpdate ? "onUpdate" : "onConstruct";
+			for (const h of (Ctor.hooks?.[phase] ??
+				[]) as LifecycleHooks[LifecyclePhase]) {
+				h(this);
+			}
 		}
 	}
 

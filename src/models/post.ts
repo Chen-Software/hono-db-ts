@@ -4,6 +4,7 @@ import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { JsonSerialisable } from "../capacities/json-serialisable";
 import { ProtobufEncodable } from "../capacities/protobuf-encodable";
+import { Comparable } from "../capacities/comparable";
 import { type Versioned } from "../capacities/versioned";
 import {
 	type ContentAddressable,
@@ -49,6 +50,10 @@ interface PostData
 const cloneFn = typia.plain.createAssertClone<PostData>();
 const pruneFn = typia.plain.createAssertPrune<PostData>();
 
+// compare family (typia.compare.*) — bound once, consumed by the Comparable capacity
+const postEquals = typia.compare.createEquals<PostData>();
+const postLess = typia.compare.createLess<PostData>();
+
 /**
  * PostSchemaModule — the FIXED bundle of every typia function `Post` needs,
  * bound ONCE and concretely here (where `PostData` is real). Fed to every
@@ -58,21 +63,47 @@ const pruneFn = typia.plain.createAssertPrune<PostData>();
  */
 const PostSchemaModule = {
 	schema: typia.json.schema<[PostData]>(),
-	classify: (data: Classifiable<PostData>) =>
-		typia.plain.assertClassify<PostData>(data),
-	toJSON: typia.json.createAssertStringify<PostData>(),
-	fromJSON: typia.json.createAssertParse<PostData>(),
-	encode: typia.protobuf.createAssertEncode<PostData>(),
-	decode: typia.protobuf.createAssertDecode<PostData>(),
-	message: typia.protobuf.message<PostData>(),
-	// validators — consumed by the `Validatable` capacity (Post currently binds
-	// these directly as statics; kept here so the module contract is complete).
-	validate: typia.createValidate<PostData>(),
+	// Post keeps the validating `assertClassify` as its construction classify
+	// (it has no `Validatable` capacity to upgrade it), plus the other variants.
+	classify: typia.plain.createAssertClassify<PostData>(),
+	assertClassify: typia.plain.createAssertClassify<PostData>(),
+	validateClassify: typia.plain.createValidateClassify<PostData>(),
+	// clone family
+	clone: typia.plain.createClone<PostData>(),
+	assertClone: typia.plain.createAssertClone<PostData>(),
+	isClone: typia.plain.createIsClone<PostData>(),
+	validateClone: typia.plain.createValidateClone<PostData>(),
+	// validators
+	is: typia.createIs<PostData>(),
 	assert: typia.createAssert<PostData>(),
 	assertGuard: typia.createAssertGuard<PostData>(),
-	"validate-equals": typia.createValidateEquals<PostData>(),
+	validate: typia.createValidate<PostData>(),
 	"assert-equals": typia.createAssertEquals<PostData>(),
+	"validate-equals": typia.createValidateEquals<PostData>(),
+	"assert-guard-equals": typia.createAssertGuardEquals<PostData>(),
 	"assert-guard-validate": typia.createAssertGuard<PostData>(),
+	// json family
+	stringify: typia.json.createStringify<PostData>(),
+	toJSON: typia.json.createAssertStringify<PostData>(),
+	isStringify: typia.json.createIsStringify<PostData>(),
+	validateStringify: typia.json.createValidateStringify<PostData>(),
+	fromJSON: typia.json.createAssertParse<PostData>(),
+	isParse: typia.json.createIsParse<PostData>(),
+	validateParse: typia.json.createValidateParse<PostData>(),
+	// protobuf family
+	message: typia.protobuf.message<PostData>(),
+	encode: typia.protobuf.createAssertEncode<PostData>(),
+	decode: typia.protobuf.createAssertDecode<PostData>(),
+	isEncode: typia.protobuf.createIsEncode<PostData>(),
+	validateEncode: typia.protobuf.createValidateEncode<PostData>(),
+	isDecode: typia.protobuf.createIsDecode<PostData>(),
+	validateDecode: typia.protobuf.createValidateDecode<PostData>(),
+	// compare family (typia.compare.*)
+	equals: postEquals,
+	less: postLess,
+	more: (x: any, y: any) => postLess(y, x),
+	// random
+	random: typia.createRandom<PostData>(),
 };
 
 /**
@@ -87,7 +118,7 @@ const PostSchemaModule = {
 const PostBase = defineModel<PostData>({
 	schemaName: "PostData",
 	schemaModule: PostSchemaModule,
-	capacities: [JsonSerialisable, ProtobufEncodable],
+	capacities: [JsonSerialisable, ProtobufEncodable, Comparable],
 });
 
 class Post extends PostBase implements PostData {
@@ -128,11 +159,6 @@ class Post extends PostBase implements PostData {
 	}
 
 	// ---- instance methods (prototype) ---------------------------------------
-	/** Structural equality against another post or post instance. */
-	equals(other: PostData | Post): boolean {
-		return Post.equals(this, other);
-	}
-
 	/** Assert this instance is a valid post (throws otherwise). */
 	assert(): PostData {
 		return Post.assert(this);
@@ -185,7 +211,6 @@ class Post extends PostBase implements PostData {
 	// during composition — no manual JSON statics needed here.
 	static random = typia.createRandom<PostData>();
 	static is = typia.createIs<PostData>();
-	static equals = typia.compare.createEquals<PostData>();
 	static assert = typia.createAssert<PostData>();
 	static validate = typia.createValidate<PostData>();
 	static validatePartial = typia.createValidate<Partial<PostData>>();

@@ -1,4 +1,4 @@
-import typia, { type Classifiable } from "typia";
+import typia from "typia";
 import { describe, expect, it } from "bun:test";
 import { defineModel } from "../models/base";
 import type { SchemaModule } from "./schema-module";
@@ -10,23 +10,44 @@ interface Mini {
 }
 
 /** Build the FIXED schema module for `Mini` — every typia binding concretely
- *  bound here (where `Mini` is real), including all validator variants. */
+ *  bound here (where `Mini` is real), including all variant families. */
 function miniModule(): SchemaModule<Mini> {
 	return {
 		schema: typia.reflect.schema<Mini>(),
-		classify: (d: Classifiable<Mini>) => typia.plain.assertClassify<Mini>(d),
-		toJSON: typia.json.createAssertStringify<Mini>(),
-		fromJSON: typia.json.createAssertParse<Mini>(),
-		encode: typia.protobuf.createAssertEncode<Mini>(),
-		decode: typia.protobuf.createAssertDecode<Mini>(),
-		message: typia.protobuf.message<Mini>(),
-		// validators
-		validate: typia.createValidate<Mini>(),
+		// plain `classify`; Validatable overrides it to `assertClassify` by default.
+		classify: typia.plain.createClassify<Mini>(),
+		assertClassify: typia.plain.createAssertClassify<Mini>(),
+		validateClassify: typia.plain.createValidateClassify<Mini>(),
+		clone: typia.plain.createClone<Mini>(),
+		assertClone: typia.plain.createAssertClone<Mini>(),
+		isClone: typia.plain.createIsClone<Mini>(),
+		validateClone: typia.plain.createValidateClone<Mini>(),
+		is: typia.createIs<Mini>(),
 		assert: typia.createAssert<Mini>(),
 		assertGuard: typia.createAssertGuard<Mini>(),
-		"validate-equals": typia.createValidateEquals<Mini>(),
+		validate: typia.createValidate<Mini>(),
 		"assert-equals": typia.createAssertEquals<Mini>(),
+		"validate-equals": typia.createValidateEquals<Mini>(),
+		"assert-guard-equals": typia.createAssertGuardEquals<Mini>(),
 		"assert-guard-validate": typia.createAssertGuard<Mini>(),
+		stringify: typia.json.createStringify<Mini>(),
+		toJSON: typia.json.createAssertStringify<Mini>(),
+		isStringify: typia.json.createIsStringify<Mini>(),
+		validateStringify: typia.json.createValidateStringify<Mini>(),
+		fromJSON: typia.json.createAssertParse<Mini>(),
+		isParse: typia.json.createIsParse<Mini>(),
+		validateParse: typia.json.createValidateParse<Mini>(),
+		message: typia.protobuf.message<Mini>(),
+		encode: typia.protobuf.createAssertEncode<Mini>(),
+		decode: typia.protobuf.createAssertDecode<Mini>(),
+		isEncode: typia.protobuf.createIsEncode<Mini>(),
+		validateEncode: typia.protobuf.createValidateEncode<Mini>(),
+		isDecode: typia.protobuf.createIsDecode<Mini>(),
+		validateDecode: typia.protobuf.createValidateDecode<Mini>(),
+		equals: typia.compare.createEquals<Mini>(),
+		less: typia.compare.createLess<Mini>(),
+		more: (x: any, y: any) => typia.compare.createLess<Mini>()(y, x),
+		random: typia.createRandom<Mini>(),
 	};
 }
 
@@ -159,5 +180,45 @@ describe("Validatable — onNew lifecycle hook", () => {
 	it("still rejects invalid construction (base classify asserts; hook reinforces)", () => {
 		const C = makeModel({ onNew: "validate" });
 		expect(() => new C(invalid)).toThrow();
+	});
+});
+
+describe("Validatable — construction-time classify override", () => {
+	it("defaults to assertClassify: construction validates WITHOUT an onNew hook", () => {
+		const C = makeModel(); // no onNew, but Validatable present
+		expect(() => new C(invalid)).toThrow(); // assertClassify throws
+		const inst = new C(valid);
+		expect(inst.age).toBe(3);
+	});
+
+	it("exposes the overridden static classify (assertClassify by default)", () => {
+		const C = makeModel();
+		expect(() => (C as any).classify(invalid)).toThrow();
+		expect((C as any).classify(valid)).toEqual(valid);
+	});
+
+	it("honours classify:'classify' to DISABLE construction validation", () => {
+		const C = makeModel({ classify: "classify" });
+		// plain createClassify does not throw, so invalid data slips through.
+		expect(() => new C(invalid)).not.toThrow();
+		expect((C as any).classify(valid)).toEqual(valid);
+	});
+
+	it("honours classify:'validateClassify' (collects errors, unwrapped for construction)", () => {
+		const C = makeModel({ classify: "validateClassify" });
+		// validateClassify is unwrapped by Validatable: returns the data on
+		// success, throws on failure (so the constructor can use it directly).
+		expect((C as any).classify(valid)).toEqual(valid);
+		expect(() => (C as any).classify(invalid)).toThrow();
+		// and construction still rejects via the thrown aggregation
+		expect(() => new C(invalid)).toThrow();
+	});
+});
+
+describe("Validatable — assert-guard-equals variant", () => {
+	it("swaps assertGuard to the strict-equal guard (rejects extra props)", () => {
+		const C = makeModel({ assertGuard: "assert-guard-equals" });
+		expect(C.assertGuard(valid)).toBe(true);
+		expect(C.assertGuard(extra)).toBe(false); // extra prop rejected by -equals
 	});
 });

@@ -3,7 +3,9 @@ import { Capable } from "./capable";
 import { JsonSerialisable } from "./json-serialisable";
 import { ProtobufEncodable } from "./protobuf-encodable";
 import { Validatable } from "./validatable";
+import { Clonable } from "./clonable";
 import { Immutable } from "./immutable";
+import { Comparable } from "./comparable";
 import type { SchemaModule } from "./schema-module";
 
 /**
@@ -41,14 +43,28 @@ import type { SchemaModule } from "./schema-module";
  */
 
 /**
- * The uniform capacity shape: `(base, schemaModule, options?) => adornedClass`.
- * `schemaModule` is the fixed bundle of already-bound typia functions the model
- * hands in (typia can't be invoked generically inside a mixin, so the model
- * binds it and the capacity merely consumes its slice). `options` is an
- * optional per-capacity config bag (e.g. {@link ValidatableOptions}) forwarded
- * from the declarative entry — capacities that don't take options ignore it.
+ * The uniform capacity shape: `(base, schemaModule, options?, ctx?) =>
+ * adornedClass`. `schemaModule` is the fixed bundle of already-bound typia
+ * functions the model hands in (typia can't be invoked generically inside a
+ * mixin, so the model binds it and the capacity merely consumes its slice).
+ * `options` is an optional per-capacity config bag (e.g.
+ * {@link ValidatableOptions}) forwarded from the declarative entry. `ctx` is
+ * the {@link ComposeContext} describing the WHOLE declaration (every capacity
+ * the model named), so a capacity can react to the presence of *another*
+ * capacity — e.g. `Clonable` defaults its clone to the validated `assertClone`
+ * variant when `Validatable` is also declared.
  */
-type AnyCapacity = (base: any, schemaModule?: any, options?: any) => any;
+type AnyCapacity = (base: any, schemaModule?: any, options?: any, ctx?: ComposeContext) => any;
+
+/**
+ * Context handed to every capacity during composition. `has(name)` reports
+ * whether a capacity (by its registered name) is part of the model's
+ * declaration — letting one capacity adapt to another without a hard
+ * dependency between them.
+ */
+export interface ComposeContext {
+	has(name: string): boolean;
+}
 
 /** A bare capacity reference: the constructor itself, or its exported name. */
 export type CapacityRef = AnyCapacity | string;
@@ -101,6 +117,8 @@ for (const [name, fn] of [
 	["ProtobufEncodable", ProtobufEncodable],
 	["Immutable", Immutable],
 	["Validatable", Validatable],
+	["Clonable", Clonable],
+	["Comparable", Comparable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
@@ -145,6 +163,12 @@ function resolveRef(ref: CapacityRef): AnyCapacity {
 	return ref as AnyCapacity;
 }
 
+/** Reverse-lookup a capacity's registered name from its function reference. */
+function nameOf(fn: AnyCapacity): string | undefined {
+	for (const [n, f] of REGISTRY) if (f === fn) return n;
+	return undefined;
+}
+
 /**
  * Normalise the declaration into an ordered list of `[fn, schemaModule]`
  * tuples ready to fold. `Capable` is always prepended (and de-duplicated) so it
@@ -170,7 +194,7 @@ function normalizeEntry(item: unknown): {
 function normalize(
 	declaration: CapacityDeclaration | undefined,
 	schemaModule: SchemaModule<any>,
-): [AnyCapacity, SchemaModule<any>, CapacityOptions?][] {
+): [AnyCapacity, SchemaModule<any>, CapacityOptions?, string?][] {
 	const specs: { ref: CapacityRef; options?: CapacityOptions }[] = !declaration
 		? []
 		: Array.isArray(declaration)
@@ -186,14 +210,15 @@ function normalize(
 		...withoutCapable,
 	];
 
-	return all.map(
-		(s) =>
-			[resolveRef(s.ref), schemaModule, s.options] as [
-				AnyCapacity,
-				SchemaModule<any>,
-				CapacityOptions?,
-			],
-	);
+	return all.map((s) => {
+		const fn = resolveRef(s.ref);
+		return [fn, schemaModule, s.options, nameOf(fn)] as [
+			AnyCapacity,
+			SchemaModule<any>,
+			CapacityOptions?,
+			string?,
+		];
+	});
 }
 
 export function composeCapabilities<
@@ -216,7 +241,15 @@ export function composeCapabilities<B extends CapacityConstructor>(
 	specs: CapacityDeclaration | undefined,
 	schemaModule: SchemaModule<any>,
 ): B {
-	return normalize(specs, schemaModule).reduce<B>((acc, [fn, mod, options]) => {
-		return fn(acc, mod, options) as B;
+	const entries = normalize(specs, schemaModule);
+	// Build the declaration-wide context ONCE so every capacity can see which
+	// other capacities are present (e.g. Clonable adapting to Validatable).
+	const declaredNames = entries
+		.map((e) => e[3])
+		.filter((n): n is string => typeof n === "string");
+	const ctx: ComposeContext = { has: (name) => declaredNames.includes(name) };
+
+	return entries.reduce<B>((acc, [fn, mod, options]) => {
+		return fn(acc, mod, options, ctx) as B;
 	}, base);
 }
