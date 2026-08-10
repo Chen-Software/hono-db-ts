@@ -1,0 +1,41 @@
+{
+	"$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+
+	// ---- Worker metadata --------------------------------------------------
+	"name": "artefact",
+	"main": "dist/cf-worker.js",
+	// Tell wrangler to upload the pre-built file as-is (we already ran ttsc
+	// transforms via the Bun.build script; re-bundling would lose them).
+	"no_bundle": true,
+
+	// ---- Compatibility ---------------------------------------------------
+	"compatibility_date": "2025-08-11",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+
+	// ---- D1 bindings -----------------------------------------------------
+	// The D1 database MUST be created before the first deploy:
+	//   npx wrangler d1 create artefact-db
+	// Then copy the returned `database_id` into the `database_id` field below.
+	//
+	// For first-time setup, set the id to a placeholder; wrangler will
+	// complain but you update it after creation.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "artefact-db",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		}
+	],
+
+	// ---- Migrations ------------------------------------------------------
+	// D1 migrations are applied with:
+	//   npx wrangler d1 migrations apply artefact-db
+	"migrations_dir": "migrations",
+
+	// ---- Observability (optional) ----------------------------------------
+	"observability": {
+		"enabled": false
+	}
+}

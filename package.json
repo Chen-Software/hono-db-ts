@@ -9,15 +9,23 @@
 		"format": "bun x @biomejs/biome format --fix .",
 		"lint": "bun x @biomejs/biome lint --fix .",
 		"build": "bun run scripts/build.ts",
+		"cf-build": "bun run scripts/build-cf.ts",
 		"start": "bun run src/main.ts",
-		"dev": "bun --hot run src/main.ts"
+		"dev": "bun --hot run src/main.ts",
+		"cf-dev": "bun run cf-build && wrangler dev",
+		"cf-deploy": "bun run cf-build && wrangler deploy",
+		"db:create": "wrangler d1 create artefact-db",
+		"db:migrate": "wrangler d1 migrations apply artefact-db",
+		"db:migrate:local": "wrangler d1 migrations apply artefact-db --local"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
+		"@cloudflare/workers-types": "^4.20250808.0",
 		"@ttsc/unplugin": "^0.25.0",
 		"@types/bun": "latest",
 		"ttsc": "^0.25.0",
-		"vite": "^8.2.1"
+		"vite": "^8.2.1",
+		"wrangler": "^4.22.0"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.2"

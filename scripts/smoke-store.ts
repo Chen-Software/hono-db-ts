@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { drizzle as drizzleD1 } from "drizzle-orm/d1";
+import { LocalD1Database } from "../src/providers/d1-client";
 import {
 	UserSchemaModule,
 	type UserSchema,
@@ -105,7 +107,35 @@ for (const [label, blob] of blobBackends) {
 	assert((await sp.load(id)) === undefined, "sqlite: delete");
 }
 
-// 1c. Postgres REMOTE driver — NOT run here (would need a real server / the
+// 1c. Cloudflare D1 — the SAME derived `sql` projection, driven through the
+// real D1 driver (`drizzle-orm/d1`) backed by a LOCAL D1 emulation over
+// bun:sqlite. In production, swap `new LocalD1Database(...)` for the `D1Database`
+// binding and nothing else moves — D1 is SQLite dialect.
+{
+	const d1 = new LocalD1Database(join(tmp, "d1.sqlite"));
+	await d1.exec(USERS_DDL);
+	// cast at the adapter boundary: drizzle-orm/d1 types the client as the
+	// miniflare `D1Database` class; ours is the same API subset, see d1-client.ts
+	const d1Db = drizzleD1(d1 as any, { logger: true });
+	const sp = new StoreProvider<UserSchema>({
+		schema: UserSchemaModule,
+		namespace: NS,
+		backend: new SqlBackend(d1Db, UserSchemaModule.sql!),
+	});
+	const { id } = await sp.insert(sample);
+	const loaded = await sp.load(id);
+	assert(loaded && loaded.email === "ada@example.com", "d1: load round-trip");
+	assert(loaded && loaded.age === 36, "d1: age column typed (number)");
+	const adults = await sp.find({ query: { age: { op: "gte", value: 30 } } });
+	assert(adults.length === 1, "d1: query op -> WHERE (age >= 30)");
+	await sp.update(id, { name: "Ada D." });
+	assert((await sp.load(id))?.name === "Ada D.", "d1: column update");
+	await sp.delete(id);
+	assert((await sp.load(id)) === undefined, "d1: delete");
+	console.log("  d1 (local emulation over bun:sqlite) OK");
+}
+
+// 1d. Postgres REMOTE driver — NOT run here (would need a real server / the
 // removed `@electric-sql/pglite`). The same `SqlBackend` targets it unchanged:
 // swap the driver + use `UserRepo.overSql("users", pgDb, "pg")` (reads the
 // model's DERIVED `sqlPg` projection) and nothing else moves.
@@ -138,6 +168,24 @@ bus.subscribe("user.created", () => {
 });
 await svc.createUser({ name: "Cleo", email: "cleo@example.com", role: "viewer", age: 30 });
 assert(createdEvents === 1, "bus published user.created");
+
+// 2b. The same UserRepo + UserService over D1 (overD1 factory) — the port
+// boundary means swapping bun:sqlite → D1 changes ZERO service code.
+{
+	const d1 = new LocalD1Database(join(tmp, "svc-d1.sqlite"));
+	await d1.exec(USERS_DDL);
+	const d1Repo = UserRepo.overD1("users", drizzleD1(d1 as any));
+	const d1Svc = new UserService({ repo: d1Repo, bus });
+	const createdD1 = await d1Svc.createUser(sample);
+	assert(!!createdD1.id, "d1 service.createUser assigns id");
+	const gotD1 = await d1Svc.getUser(createdD1.id);
+	assert(gotD1 && gotD1.email === "ada@example.com", "d1 service.getUser");
+	const adminsD1 = await d1Svc.listUsersByRole("admin");
+	assert(adminsD1.length === 1, "d1 service.listUsersByRole(admin) -> WHERE");
+	await d1Svc.deleteUser(createdD1.id);
+	assert((await d1Svc.getUser(createdD1.id)) === undefined, "d1 service.deleteUser");
+	console.log("  d1 UserService (overD1) OK");
+}
 
 // 3. Hono REST adapter (in-memory request — no listening socket) ------------
 const app = userServiceApp(svc);

@@ -95,4 +95,21 @@ export class UserRepo
 			}),
 		);
 	}
+
+	/**
+	 * Unified repo over a D1 drizzle instance (local dev / Cloudflare D1).
+	 *
+	 * D1 uses the SQLite dialect, so this is a thin alias for `overSql` with
+	 * `dialect: "sqlite"`.  The method exists as an explicit API so callers
+	 * (smoke tests, CF Worker wiring) express the intent clearly.
+	 *
+	 *   // local dev (LocalD1Database over bun:sqlite)
+	 *   UserRepo.overD1("users", drizzle(new LocalD1Database("./dev.sqlite")))
+	 *
+	 *   // production (Cloudflare Workers binding)
+	 *   UserRepo.overD1("users", drizzle(env.DB))
+	 */
+	static overD1(namespace: string, d1Db: DrizzleRunner): UserRepo {
+		return UserRepo.overSql(namespace, d1Db, "sqlite");
+	}
 }
