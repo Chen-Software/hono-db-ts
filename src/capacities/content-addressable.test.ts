@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import typia from "typia";
 
-import { type Blake3 } from "../tags/format-string-blake3";
+import type { Blake3 } from "../tags/format-string-blake3";
 import {
-	ContentAddressable,
+	type ContentAddressable,
 	createAssertHash,
 	createContentAddressing,
 	hashContent,

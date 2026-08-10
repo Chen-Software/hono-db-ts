@@ -29,7 +29,7 @@ import type { PostAssetStore } from "./ports/asset-store";
 // Bindings declared in wrangler.jsonc must match these keys.
 // ---------------------------------------------------------------------------
 
-export interface Env {
+interface Env {
 	/** D1 database binding (wrangler.jsonc → `d1_databases[].binding`). */
 	DB: D1Database;
 	// Future bindings (R2, KV, Queues, …) are added here.

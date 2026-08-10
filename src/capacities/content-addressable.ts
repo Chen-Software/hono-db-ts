@@ -1,8 +1,8 @@
 import typia from "typia";
 import { blake3 } from "@noble/hashes/blake3.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { type Blake3 } from "../tags/format-string-blake3";
-import { type Identifiable } from "./identifiable";
+import type { Blake3 } from "../tags/format-string-blake3";
+import type { Identifiable } from "./identifiable";
 import { type Versioned, versionedUpdate } from "./versioned";
 import { type ImmutableSchema, createUpdate } from "./immutable";
 

@@ -1,105 +1,17 @@
 import { Database } from "bun:sqlite";
 
 // ---------------------------------------------------------------------------
-// Minimal D1 types — a structural subset of `@cloudflare/workers-types`
-// `D1Database` / `D1PreparedStatement`.  Only the shape drizzle-orm/d1
-// actually calls is represented; the rest can be ignored.
+// Internal types (non-exported — must precede exports for biome useExportsLast)
 // ---------------------------------------------------------------------------
 
-export interface D1ResultMeta {
-	duration: number;
-	last_row_id: number;
-	rows_read: number;
-	rows_written: number;
-}
-
-export interface D1Result<T = Record<string, unknown>> {
-	results: T[];
-	success: boolean;
-	meta: D1ResultMeta;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 // Co-variant flip: we accept the wider stream as the return.
-// biome-ignore lint/suspicious/noEmptyInterface: derive structural match
 interface RawD1Response extends Array<unknown> {}
-
-export interface D1PreparedStatement {
-	bind(...values: unknown[]): D1PreparedStatement;
-	all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
-	run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
-	raw<T = RawD1Response>(): Promise<T>;
-	first<T = Record<string, unknown>>(col?: string): Promise<T | null>;
-}
-
-/**
- * `LocalD1Database` — local D1 emulation over `bun:sqlite`.
- *
- * Implements the subset of the Cloudflare D1 API surface that `drizzle-orm/d1`
- * actually calls: `prepare` → (`bind` →) `all` / `run` / `raw` / `first`,
- * plus `batch` and `exec`.
- *
- * In production a real `D1Database` is injected by the Workers runtime via
- * `env.DB`.  For local dev and smoke tests, instantiate this adapter and pass
- * it straight into `drizzle(d1Db)` from `drizzle-orm/d1` — the API surface is
- * identical.
- *
- * Usage:
- *   const d1 = new LocalD1Database(":memory:");  // or pass a file path
- *   await d1.exec("CREATE TABLE ...");
- *   const db = drizzle(d1);
- */
-export class LocalD1Database {
-	private db: Database;
-
-	constructor(path: string | ":memory:") {
-		this.db = new Database(path === ":memory:" ? ":memory:" : path, {
-			create: true,
-		});
-		// WAL gives better concurrency when multiple handles touch the same file.
-		this.db.run("PRAGMA journal_mode=WAL");
-		this.db.run("PRAGMA foreign_keys=ON");
-	}
-
-	// ---- Statement API (used by drizzle) ----------------------------------
-
-	prepare(sql: string): D1PreparedStatement {
-		return new LocalD1PreparedStatement(this.db, sql);
-	}
-
-	// ---- Batch API --------------------------------------------------------
-
-	async batch<T = Record<string, unknown>>(
-		stmts: D1PreparedStatement[],
-	): Promise<D1Result<T>[]> {
-		const txn = this.db.transaction(() =>
-			stmts.map((s) => {
-				// LocalD1PreparedStatement stores the sql + bound params
-				// in internal state.  Cast to access them.
-				const inner = s as unknown as LocalD1PreparedStatement;
-				return inner.execSync() as D1Result<T>;
-			}),
-		);
-		return txn();
-	}
-
-	// ---- Exec (raw DDL / PRAGMAs) -----------------------------------------
-
-	async exec(sql: string): Promise<D1Result> {
-		this.db.run(sql);
-		return {
-			results: [],
-			success: true,
-			meta: { duration: 0, last_row_id: 0, rows_read: 0, rows_written: 0 },
-		};
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Internal prepared-statement wrapper
 // ---------------------------------------------------------------------------
 
-class LocalD1PreparedStatement implements D1PreparedStatement {
+class LocalD1PreparedStatement {
 	private sql: string;
 	private params: unknown[];
 	private db: Database;
@@ -165,8 +77,6 @@ class LocalD1PreparedStatement implements D1PreparedStatement {
 		return row;
 	}
 
-	// ---- helpers ----------------------------------------------------------
-
 	/**
 	 * Called by `LocalD1Database.batch` when wrapped in a transaction.
 	 * Synchronous version — bun:sqlite runs are sync inside a transaction.
@@ -205,6 +115,94 @@ class LocalD1PreparedStatement implements D1PreparedStatement {
 				rows_read: rows.length,
 				rows_written: written,
 			},
+		};
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Minimal D1 types — a structural subset of `@cloudflare/workers-types`
+// `D1Database` / `D1PreparedStatement`.  Only the shape drizzle-orm/d1
+// actually calls is represented; the rest can be ignored.
+// ---------------------------------------------------------------------------
+
+export interface D1ResultMeta {
+	duration: number;
+	last_row_id: number;
+	rows_read: number;
+	rows_written: number;
+}
+
+export interface D1Result<T = Record<string, unknown>> {
+	results: T[];
+	success: boolean;
+	meta: D1ResultMeta;
+}
+
+export interface D1PreparedStatement {
+	bind(...values: unknown[]): D1PreparedStatement;
+	all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
+	run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
+	raw<T = RawD1Response>(): Promise<T>;
+	first<T = Record<string, unknown>>(col?: string): Promise<T | null>;
+}
+
+/**
+ * `LocalD1Database` — local D1 emulation over `bun:sqlite`.
+ *
+ * Implements the subset of the Cloudflare D1 API surface that `drizzle-orm/d1`
+ * actually calls: `prepare` → (`bind` →) `all` / `run` / `raw` / `first`,
+ * plus `batch` and `exec`.
+ *
+ * In production a real `D1Database` is injected by the Workers runtime via
+ * `env.DB`.  For local dev and smoke tests, instantiate this adapter and pass
+ * it straight into `drizzle(d1Db)` from `drizzle-orm/d1` — the API surface is
+ * identical.
+ *
+ * Usage:
+ *   const d1 = new LocalD1Database(":memory:");  // or pass a file path
+ *   await d1.exec("CREATE TABLE ...");
+ *   const db = drizzle(d1);
+ */
+export class LocalD1Database {
+	private db: Database;
+
+	constructor(path: string | ":memory:") {
+		this.db = new Database(path === ":memory:" ? ":memory:" : path, {
+			create: true,
+		});
+		// WAL gives better concurrency when multiple handles touch the same file.
+		this.db.run("PRAGMA journal_mode=WAL");
+		this.db.run("PRAGMA foreign_keys=ON");
+	}
+
+	// ---- Statement API (used by drizzle) ----------------------------------
+
+	prepare(sql: string): D1PreparedStatement {
+		return new LocalD1PreparedStatement(this.db, sql);
+	}
+
+	// ---- Batch API --------------------------------------------------------
+
+	async batch<T = Record<string, unknown>>(
+		stmts: D1PreparedStatement[],
+	): Promise<D1Result<T>[]> {
+		const txn = this.db.transaction(() =>
+			stmts.map((s) => {
+				const inner = s as unknown as LocalD1PreparedStatement;
+				return inner.execSync() as D1Result<T>;
+			}),
+		);
+		return txn();
+	}
+
+	// ---- Exec (raw DDL / PRAGMAs) -----------------------------------------
+
+	async exec(sql: string): Promise<D1Result> {
+		this.db.run(sql);
+		return {
+			results: [],
+			success: true,
+			meta: { duration: 0, last_row_id: 0, rows_read: 0, rows_written: 0 },
 		};
 	}
 }

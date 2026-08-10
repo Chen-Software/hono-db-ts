@@ -1,4 +1,4 @@
-import { type tags } from "typia";
+import type { tags } from "typia";
 import type { CapacityConstructor } from "./capable";
 
 /**

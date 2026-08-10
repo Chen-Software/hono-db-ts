@@ -1,4 +1,4 @@
-import { type tags } from "typia";
+import type { tags } from "typia";
 
 /**
  * Blake3 — FORMAT-ONLY custom tag (the practical stand-in for

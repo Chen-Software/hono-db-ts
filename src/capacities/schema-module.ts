@@ -27,6 +27,39 @@ export interface SqlSchemaDef<T, Tbl extends Table = Table> {
 	table: Tbl;
 	toRow: (e: T) => Record<string, unknown>;
 	fromRow: (row: Record<string, unknown>) => T;
+	/**
+	 * Foreign-key relations on this table. Declared (not inferred) because the
+	 * reflected schema alone cannot name the TARGET table/column. The
+	 * `SqlSerialisable` capacity applies `.references()` to the FK column at
+	 * derive time and surfaces these on the def; `SqlBackend` reads them for
+	 * joinable querying. Absent for models with no relations.
+	 */
+	relations?: SqlRelationDef[];
+}
+
+/**
+ * `SqlRelationDef` — one foreign-key relation on a model's SQL table.
+ *
+ * `column` is the FK column ON THIS table (e.g. `"authorId"`); `targetTable`
+ * is a thunk (so two models can reference each other without a circular-import
+ * failure at module load, mirroring `Referencible`'s `target: () => Class`),
+ * and `targetColumn` defaults to `"id"`. `cardinality` / `onDelete` mirror the
+ * `Referencible` vocabulary so the in-memory relation and the SQL constraint
+ * stay consistent.
+ */
+export interface SqlRelationDef {
+	/** Relation name (e.g. `"user"`, `"posts"`). */
+	name: string;
+	/** FK column ON THIS table, e.g. `"authorId"`. */
+	column: string;
+	/** Thunk to the referenced table (circular-safe). */
+	targetTable: () => Table;
+	/** Referenced column on the target. Default `"id"`. */
+	targetColumn?: string;
+	/** Cardinality — mirrors `Referencible`. Default `"many-to-one"`. */
+	cardinality?: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+	/** Referential action on delete. Default `"noAction"`. */
+	onDelete?: "cascade" | "setNull" | "restrict" | "noAction";
 }
 
 /**

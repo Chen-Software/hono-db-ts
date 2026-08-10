@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { hashContent } from "../capacities/content-addressable";
-import { type User } from "../models/user";
+import type { User } from "../models/user";
 import { type Post, PostModel } from "../models/post";
 import { PostRepo } from "../repository/post-repo";
 import { LocalPostAssetStore } from "../providers/local-post-asset-store";

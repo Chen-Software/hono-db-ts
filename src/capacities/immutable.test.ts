@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import typia from "typia";
+import type typia from "typia";
 import {
 	assertImmutable,
 	createAssertUpdate,

@@ -1,4 +1,4 @@
-import { type tags } from "typia";
+import type { tags } from "typia";
 import type { Identifiable } from "./identifiable";
 import type { ImmutableSchema } from "./immutable";
 
@@ -109,4 +109,4 @@ export function createVersionedUpdate<
 	return (entity, patch) => versionedUpdate(entity, patch, ctor.from);
 }
 
-export { type Versioned };
+export type { Versioned };
