@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { SchemaModule } from "./schema-module";
 import type { Table } from "drizzle-orm";
+import type { RelationCardinality, OnDelete } from "../tags/reference";
 
 /**
  * `sql-tablisable` — the model → Drizzle bridge.
@@ -86,9 +87,9 @@ export interface SqlRelationDef {
 	/** Referenced column on the target. Default `"id"`. */
 	targetColumn?: string;
 	/** Cardinality — mirrors `Referencible`. Default `"many-to-one"`. */
-	cardinality?: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+	cardinality?: RelationCardinality;
 	/** Referential action on delete. Default `"noAction"`. */
-	onDelete?: "cascade" | "setNull" | "restrict" | "noAction";
+	onDelete?: OnDelete;
 }
 
 /**

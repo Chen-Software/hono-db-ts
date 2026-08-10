@@ -2,11 +2,10 @@ import type { CapacityConstructor } from "./capable";
 import { Registry } from "./registry";
 import { addLifecycleHook } from "./triggerable";
 
-export type RelationCardinality =
-	| "one-to-one"
-	| "one-to-many"
-	| "many-to-one"
-	| "many-to-many";
+// Relation vocabulary is defined next to the `Reference` typia tag (the single
+// source of truth shared by this in-memory resolver, the SQL FK projection, and
+// the tag itself).
+import type { RelationCardinality, OnDelete } from "../tags/reference";
 
 /**
  * Join mode — controls behaviour when the reference is MISSING.
@@ -19,16 +18,9 @@ export type RelationCardinality =
  */
 export type JoinMode = "inner" | "left" | "right" | "full";
 
-/**
- * Referential action when THIS entity is deleted, applied to the RELATED
- * entities reached through the relation.
- *   - `cascade`  — delete every related entity.
- *   - `setNull`  — null the FK on every related entity (requires `fk` or infers
- *                  it from `by`).
- *   - `restrict` — throw if any related entity still references this one.
- *   - `noAction` (default) — do nothing.
- */
-export type OnDelete = "cascade" | "setNull" | "restrict" | "noAction";
+// `OnDelete` is imported from `../tags/reference` (see above) — it is the SAME
+// vocabulary used by the SQL FK constraint, so the in-memory delete behaviour
+// and the DB constraint stay in sync.
 
 export interface RelationSpec {
 	/**

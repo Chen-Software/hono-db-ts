@@ -10,9 +10,13 @@ import type { IdentifiableSchema } from "../capacities/identifiable";
 import { JsonSerialisable } from "../capacities/json-serialisable";
 import { ProtobufEncodable } from "../capacities/protobuf-encodable";
 import { Referencible } from "../capacities/referencible";
+import { SqlSerialisable } from "../capacities/sql-serialisable";
 import type { Timestamped } from "../capacities/timestamped";
 import type { Versioned } from "../capacities/versioned";
 import type { Blake3 } from "../tags/format-string-blake3";
+import type { Reference } from "../tags/reference";
+import type { SqlSchemaModule } from "../capacities/sql-tablisable";
+import { Table } from "drizzle-orm";
 import { defineModel } from "./base";
 import { User, type UserSchema } from "./user";
 
@@ -168,6 +172,9 @@ const PostBase = defineModel<PostData>({
 		JsonSerialisable,
 		ProtobufEncodable,
 		Comparable,
+		// SqlSerialisable: derives the drizzle `posts` table + row mappers from the
+		// schema, and wires the `authorId` FK via the `Reference<"UserSchema">` tag.
+		{ capacity: SqlSerialisable, options: { name: "posts", dialect: "sqlite" } },
 		// Referencible: `post.getUser()` resolves the FK `authorId` to a live
 		// User via the identity map. `by: "authorId"` desugars to
 		// `(near, far) => near.authorId === far.id`, which also serves the
@@ -294,6 +301,13 @@ class Post extends PostBase implements PostData {
 	// (conflicting) runtime initializer.
 	declare static toJSON: (input: PostData) => string;
 	declare static fromJSON: (input: string) => PostData;
+
+	// `SqlSerialisable` lifts these statics onto the class at compose time — they
+	// exist ONLY because the capacity is enabled. `table` is the drizzle `Table`;
+	// `toRow` / `fromRow` map between the entity and a SQL row.
+	declare static table: Table;
+	declare static toRow: (e: PostData) => Record<string, unknown>;
+	declare static fromRow: (row: Record<string, unknown>) => PostData;
 
 	// ---- static functions ---------------------------------------------------
 	// NOTE: `toJSON` / `fromJSON` (and JSON-override construction) are provided
