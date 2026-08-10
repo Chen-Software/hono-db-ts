@@ -10,6 +10,8 @@ import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
 import { Post } from "./post";
+import { sqliteTable, text as sText, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text as pText, integer as pInt } from "drizzle-orm/pg-core";
 
 /**
  * User schema — the plain-data contract.
@@ -35,6 +37,49 @@ interface UserSchema extends IdentifiableSchema<UUID>, Timestamped {
 		tags.ExclusiveMinimum<19> &
 		tags.Maximum<100>;
 }
+
+/**
+ * Drizzle table projections of `UserSchema`. The SAME `toRow` / `fromRow`
+ * mappers serve both dialects — they only read/write column NAME strings, not
+ * the column-builder objects — so a `SqlBackend` over either driver works. The
+ * role enum is stored as `text` in both (sqlite has no enum; pg avoids a
+ * migration for the demonstration) and re-typed on the way out.
+ */
+export const UserSqliteTable = sqliteTable("users", {
+	id: sText("id").primaryKey(),
+	name: sText("name").notNull(),
+	email: sText("email").notNull(),
+	role: sText("role").notNull(),
+	age: integer("age").notNull(),
+	created_at: sText("created_at").notNull(),
+});
+
+export const UserPgTable = pgTable("users", {
+	id: pText("id").primaryKey(),
+	name: pText("name").notNull(),
+	email: pText("email").notNull(),
+	role: pText("role").notNull(),
+	age: pInt("age").notNull(),
+	created_at: pText("created_at").notNull(),
+});
+
+const userToRow = (u: UserSchema) => ({
+	id: u.id,
+	name: u.name,
+	email: u.email,
+	role: u.role,
+	age: u.age,
+	created_at: u.created_at,
+});
+
+const userFromRow = (r: Record<string, unknown>): UserSchema => ({
+	id: r.id as string,
+	name: r.name as string,
+	email: r.email as string,
+	role: r.role as "admin" | "member" | "viewer",
+	age: Number(r.age),
+	created_at: r.created_at as string,
+});
 
 /**
  * UserSchemaModule — the FIXED bundle of every typia function `User` needs,
@@ -90,6 +135,9 @@ const UserSchemaModule = {
 	more: (x: any, y: any) => userLess(y, x),
 	// random
 	random: typia.createRandom<UserSchema>(),
+	// sql (drizzle) projection — default LOCAL sqlite table; the remote (pg)
+	// table is `UserPgTable`, used by `SqlBackend` for the postgres driver.
+	sql: { table: UserSqliteTable, toRow: userToRow, fromRow: userFromRow },
 };
 
 /**
@@ -161,4 +209,11 @@ class User extends UserModel {
 	}
 }
 
-export { User, UserModel, type UserSchema };
+export {
+	User,
+	UserModel,
+	UserSchemaModule,
+	userToRow,
+	userFromRow,
+	type UserSchema,
+};

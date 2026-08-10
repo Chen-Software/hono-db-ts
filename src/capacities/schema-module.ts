@@ -1,10 +1,101 @@
+// `IValidation` / `AssertionGuard` / `IReadableURLSearchParams` are typia's
+// exact return/param types, defined in `@typia/interface` (typia's own
+// dependency). Importing them keeps `SchemaModule` precisely aligned with what
+// `typia.createValidate*` / `http.*` actually return, so a model's bound module
+// object is assignable here verbatim.
+import type {
+	AssertionGuard,
+	IReadableURLSearchParams,
+	IValidation,
+} from "@typia/interface";
 import type { Classifiable } from "typia";
-// `IValidation` / `AssertionGuard` are typia's exact validator return types,
-// defined in `@typia/interface` (typia's own dependency). Importing them keeps
-// `SchemaModule` precisely aligned with what `typia.createValidate*` /
-// `createAssertGuard*` actually return, so a model's bound module object is
-// assignable here verbatim.
-import type { AssertionGuard, IValidation } from "@typia/interface";
+import type { Table } from "drizzle-orm";
+
+/**
+ * `SqlSchemaDef<T>` — the SQL (drizzle) projection a model may optionally bind.
+ *
+ * `toRow` / `fromRow` translate between the domain entity and a drizzle table
+ * row; `table` is the concrete drizzle `Table` (sqlite-core OR pg-core — the
+ * same mappers work for both because they only touch column NAME strings, not
+ * the column-builder objects). A model that is never stored relationally simply
+ * does not bind `sql`, exactly like the optional `http` slice. The `SqlBackend`
+ * capacity/provider consumes this; everything else ignores it.
+ */
+export interface SqlSchemaDef<T, Tbl extends Table = Table> {
+	table: Tbl;
+	toRow: (e: T) => Record<string, unknown>;
+	fromRow: (row: Record<string, unknown>) => T;
+}
+
+/**
+ * `HttpSchemaModule` — the HTTP-shaped *decode* slice a model may optionally
+ * bind. These are PURE functions (no network): they turn HTTP-shaped inputs
+ * (a query string, a headers object, a path-parameter string, `FormData`)
+ * into typed objects, with automatic string→number / string→boolean coercion.
+ *
+ * They are the *request-ingest* counterpart of the JSON / protobuf families
+ * already in {@link SchemaModule}: `fromJSON` decodes a body, these decode the
+ * *rest* of an HTTP exchange (query / headers / param / form). typia backs
+ * them (`typia.http.*` — ships in typia core, no `@nestia` needed) and emits
+ * the concrete decoder at compile time exactly like `createAssertParse`.
+ *
+ * The decoded DTO type (`PostQuery`, `PostHeaders`, …) is model-specific and
+ * therefore erased to `unknown` here — the model binds the CONCRETE function
+ * (`typia.http.createQuery<PostQuery>()`) at its own site, so the runtime type
+ * is exact; only the interface boundary is loose. This slice is OPTIONAL: a
+ * model that never receives HTTP inputs simply does not bind it, and the
+ * `Connectable` capacity tolerates its absence.
+ *
+ * Restrictions (enforced by typia at compile time, documented in
+ * `node_modules/typia/lib/http.d.ts`): object types only, no dynamic keys,
+ * scalar leaves (`boolean | bigint | number | string` (+ `Blob`/`File` for
+ * form), arrays thereof), no unions, lowercase header keys, single-valued
+ * forbidden headers (`content-type`, `user-agent`, …). `parameter` decodes a
+ * single atomic (assert-only). Constraint *tags* (`Format`, `Minimum`, …) are
+ * NOT checked — use the `assert*` / `validate*` variants (or the model's own
+ * `validate`) for that.
+ */
+export interface HttpSchemaModule {
+	// --- QUERY (typia.http.*Query) ------------------------------------------
+	/** `createQuery` — decode, no validation. */
+	query: (input: string | IReadableURLSearchParams) => unknown;
+	/** `createAssertQuery` — throws on type mismatch. */
+	assertQuery: (input: string | IReadableURLSearchParams) => unknown;
+	/** `createIsQuery` — `null` on mismatch. */
+	isQuery: (input: string | IReadableURLSearchParams) => unknown | null;
+	/** `createValidateQuery` — `IValidation` with all errors. */
+	validateQuery: (input: string | IReadableURLSearchParams) => IValidation<any>;
+
+	// --- HEADERS (typia.http.*Headers) --------------------------------------
+	/** `createHeaders` — decode, no validation. */
+	headers: (input: Record<string, string | string[] | undefined>) => unknown;
+	/** `createAssertHeaders` — throws on type mismatch. */
+	assertHeaders: (
+		input: Record<string, string | string[] | undefined>,
+	) => unknown;
+	/** `createIsHeaders` — `null` on mismatch. */
+	isHeaders: (
+		input: Record<string, string | string[] | undefined>,
+	) => unknown | null;
+	/** `createValidateHeaders` — `IValidation` with all errors. */
+	validateHeaders: (
+		input: Record<string, string | string[] | undefined>,
+	) => IValidation<any>;
+
+	// --- PARAMETER (typia.http.createParameter, atomic, assert-only) --------
+	/** `createParameter` — decode ONE path parameter (asserts). */
+	parameter: (input: string) => unknown;
+
+	// --- FORM DATA (typia.http.*FormData) -----------------------------------
+	/** `createFormData` — decode, no validation. */
+	formData: (input: FormData) => unknown;
+	/** `createAssertFormData` — throws on type mismatch. */
+	assertFormData: (input: FormData) => unknown;
+	/** `createIsFormData` — `null` on mismatch. */
+	isFormData: (input: FormData) => unknown | null;
+	/** `createValidateFormData` — `IValidation` with all errors. */
+	validateFormData: (input: FormData) => IValidation<any>;
+}
 
 /**
  * `SchemaModule<T>` — the FIXED, complete set of typia bindings a model
@@ -152,4 +243,24 @@ export interface SchemaModule<T = unknown> {
 	// --- RANDOM (typia.createRandom) ----------------------------------------
 	/** `createRandom` — generate a random valid instance. */
 	random: () => T;
+
+	// --- HTTP INGEST (typia.http.*) -----------------------------------------
+	/**
+	 * OPTIONAL HTTP-shaped *decode* slice (see {@link HttpSchemaModule}). Binds
+	 * the query / headers / param / formData decoders for this model's HTTP
+	 * DTOs. Absent when the model has no HTTP inputs. The `Connectable`
+	 * capacity and any handler that ingests requests consume this; it carries
+	 * NO network code — decoding only.
+	 */
+	http?: HttpSchemaModule;
+
+	// --- SQL (drizzle) PROJECTION -------------------------------------------
+	/**
+	 * OPTIONAL SQL-shaped projection (see {@link SqlSchemaDef}). Binds the
+	 * drizzle table + row mappers for this model so the `SqlBackend` provider
+	 * can map entities to real relational columns. Absent when the model is
+	 * only ever stored as a blob. Mirrors the optional `http` slice: a model
+	 * that is never persisted relationally simply does not bind it.
+	 */
+	sql?: SqlSchemaDef<T>;
 }

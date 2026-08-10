@@ -2,6 +2,7 @@ import type { CapacityConstructor } from "./capable";
 import { Capable } from "./capable";
 import { Clonable } from "./clonable";
 import { Comparable } from "./comparable";
+import { Connectable } from "./connectable";
 import { Derivable } from "./derivable";
 import { Immutable } from "./immutable";
 import { JsonSerialisable } from "./json-serialisable";
@@ -134,6 +135,7 @@ for (const [name, fn] of [
 	["Persistable", Persistable],
 	["Reactive", Reactive],
 	["Derivable", Derivable],
+	["Connectable", Connectable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }

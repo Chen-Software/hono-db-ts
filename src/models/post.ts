@@ -1,20 +1,20 @@
 import type { UUID } from "crypto";
-import typia, { type tags, type Classifiable } from "typia";
-import type { IdentifiableSchema } from "../capacities/identifiable";
-import type { Timestamped } from "../capacities/timestamped";
-import { JsonSerialisable } from "../capacities/json-serialisable";
-import { ProtobufEncodable } from "../capacities/protobuf-encodable";
+import typia, { type Classifiable, type tags } from "typia";
+import { isProd } from "@/macros";
 import { Comparable } from "../capacities/comparable";
-import { Referencible } from "../capacities/referencible";
-import { type Versioned } from "../capacities/versioned";
 import {
 	type ContentAddressable,
 	createContentAddressing,
 } from "../capacities/content-addressable";
-import { User, type UserSchema } from "./user";
+import type { IdentifiableSchema } from "../capacities/identifiable";
+import { JsonSerialisable } from "../capacities/json-serialisable";
+import { ProtobufEncodable } from "../capacities/protobuf-encodable";
+import { Referencible } from "../capacities/referencible";
+import type { Timestamped } from "../capacities/timestamped";
+import type { Versioned } from "../capacities/versioned";
+import type { Blake3 } from "../tags/format-string-blake3";
 import { defineModel } from "./base";
-import { type Blake3 } from "../tags/format-string-blake3";
-import { isProd } from "@/macros";
+import { User, type UserSchema } from "./user";
 
 /**
  * Post data model.
@@ -51,6 +51,25 @@ interface PostData
 
 	/** Whether the post is published. */
 	published: boolean;
+}
+
+/**
+ * HTTP ingest DTOs — the *shapes* a `Post` accepts off the wire. These are
+ * deliberately separate from `PostData` (the persisted shape): a query string
+ * is not a post. typia's `http` decoder coerces strings → number/boolean and
+ * validates the structural shape; the model's own validators still gate the
+ * *body*. Bound into `PostSchemaModule.http` (see below) so handlers can decode
+ * requests purely, with zero hand-rolled parsing.
+ */
+/** `GET /posts?limit=…&published=…&tags=…` */
+interface PostQuery {
+	limit?: number;
+	published?: boolean;
+	tags?: string[];
+}
+/** `GET /posts` with `x-locale: en|de` (lowercase — typia normalises). */
+interface PostHeaders {
+	"x-locale": "en" | "de";
 }
 
 // static reusable functions
@@ -111,6 +130,26 @@ const PostSchemaModule = {
 	more: (x: any, y: any) => postLess(y, x),
 	// random
 	random: typia.createRandom<PostData>(),
+	// http ingest slice (typia.http.* — pure decode, no network). Lets handlers
+	// turn a raw query string / headers object / path param into typed DTOs
+	// with automatic string→number|boolean coercion.
+	http: {
+		query: typia.http.createQuery<PostQuery>(),
+		assertQuery: typia.http.createAssertQuery<PostQuery>(),
+		isQuery: typia.http.createIsQuery<PostQuery>(),
+		validateQuery: typia.http.createValidateQuery<PostQuery>(),
+		headers: typia.http.createHeaders<PostHeaders>(),
+		assertHeaders: typia.http.createAssertHeaders<PostHeaders>(),
+		isHeaders: typia.http.createIsHeaders<PostHeaders>(),
+		validateHeaders: typia.http.createValidateHeaders<PostHeaders>(),
+		parameter: typia.http.createParameter<number>(),
+		// NOTE: `formData` is intentionally NOT bound here — `PostData` carries a
+		// nested `UserSchema` (`author`), and typia's `http.formData` only allows
+		// scalar leaves (boolean | number | string | Blob/File + arrays). A model
+		// that accepts multipart form would bind `formData` to a SCALAR-ONLY DTO
+		// (e.g. `PostForm`), not to its persisted shape. The `HttpSchemaModule`
+		// interface still declares the `formData` family for those models.
+	},
 };
 
 /**
@@ -137,7 +176,13 @@ const PostBase = defineModel<PostData>({
 			capacity: Referencible,
 			options: {
 				relations: [
-					{ name: "user", target: () => User, by: "authorId", cardinality: "many-to-one", join: "inner" },
+					{
+						name: "user",
+						target: () => User,
+						by: "authorId",
+						cardinality: "many-to-one",
+						join: "inner",
+					},
 				],
 			},
 		},
@@ -254,5 +299,4 @@ const CA = createContentAddressing("body");
 const assertBodyHash = CA.assertHash; // stamp hash from `body` (→ createAssertHash)
 const updatePost = CA.updateForVersioned(Post); // version bump + re-hash (→ updateHash)
 
-export { type PostData, Post };
-export { Post as PostModel };
+export { Post, Post as PostModel, type PostData, PostSchemaModule };

@@ -1,18 +1,34 @@
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
-import { UserService } from "./user-service";
 
-const AppService = new Hono();
+import { PostService } from "../application/post-service";
+import { UserService } from "../application/user-service";
+import { PostRepo } from "../repository/post-repo";
+import { UserRepo } from "../repository/user-repo";
+import { LocalPostAssetStore } from "../providers/local-post-asset-store";
+import { InMemoryBus } from "../services/event-bus";
+import { MemoryStore } from "../storage/store";
+import { postServiceApp } from "../transport/post-controller";
+import { userServiceApp } from "../transport/user-controller";
 
-AppService.get("/", (c) => c.json({ status: "ok" }));
-AppService.route("/users", UserService);
+/**
+ * Legacy composition entry — the canonical composition root is `../main.ts`.
+ * This mirrors its wiring so `AppService` (an exported Hono app) keeps
+ * working for old entry points. Delete once `main.ts` is the only entry.
+ */
+export function createApp(): Hono {
+	const bus = new InMemoryBus("app");
+	const userRepo = UserRepo.overBlob("users", new MemoryStore());
+	const postRepo = new PostRepo();
+	const assetStore = new LocalPostAssetStore(new MemoryStore());
 
-AppService.onError((err, c) => {
-	console.error(err);
-	if (err instanceof HTTPException) {
-		return c.json({ status: "error", message: err.message }, err.status);
-	}
-	return c.json({ status: "error", message: err.message }, 500);
-});
+	const userService = new UserService({ repo: userRepo, bus });
+	const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
 
-export { AppService };
+	const app = new Hono();
+	app.get("/", (c) => c.json({ status: "ok" }));
+	app.route("/users", userServiceApp(userService));
+	app.route("/posts", postServiceApp(postService));
+	return app;
+}
+
+export const AppService = createApp();
