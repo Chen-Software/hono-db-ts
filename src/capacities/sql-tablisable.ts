@@ -11,7 +11,8 @@ import {
 	doublePrecision as pDouble,
 	boolean as pBool,
 } from "drizzle-orm/pg-core";
-import type { SqlSchemaDef } from "./schema-module";
+import type { SchemaModule } from "./schema-module";
+import type { Table } from "drizzle-orm";
 
 /**
  * `sql-tablisable` — the model → Drizzle bridge.
@@ -63,6 +64,68 @@ export interface SqlTablisableOptions {
 	name: string;
 	/** Dialect to build columns for. Default `"sqlite"`. */
 	dialect?: SqlDialect;
+}
+
+/**
+ * `SqlRelationDef` — one foreign-key relation on a model's SQL table.
+ *
+ * `column` is the FK column ON THIS table (e.g. `"authorId"`); `targetTable`
+ * is a thunk (so two models can reference each other without a circular-import
+ * failure at module load, mirroring `Referencible`'s `target: () => Class`),
+ * and `targetColumn` defaults to `"id"`. `cardinality` / `onDelete` mirror the
+ * `Referencible` vocabulary so the in-memory relation and the SQL constraint
+ * stay consistent.
+ */
+export interface SqlRelationDef {
+	/** Relation name (e.g. `"user"`, `"posts"`). */
+	name: string;
+	/** FK column ON THIS table, e.g. `"authorId"`. */
+	column: string;
+	/** Thunk to the referenced table (circular-safe). */
+	targetTable: () => Table;
+	/** Referenced column on the target. Default `"id"`. */
+	targetColumn?: string;
+	/** Cardinality — mirrors `Referencible`. Default `"many-to-one"`. */
+	cardinality?: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+	/** Referential action on delete. Default `"noAction"`. */
+	onDelete?: "cascade" | "setNull" | "restrict" | "noAction";
+}
+
+/**
+ * `SqlSchemaDef<T>` — the SQL (drizzle) projection a model may optionally bind.
+ *
+ * `toRow` / `fromRow` translate between the domain entity and a drizzle table
+ * row; `table` is the concrete drizzle `Table` (sqlite-core OR pg-core — the
+ * same mappers work for both because they only touch column NAME strings, not
+ * the column-builder objects). It is produced by {@link toDrizzleTable} (the
+ * `sql-tablisable` bridge) and consumed by the `SqlSerialisable` capacity
+ * (which lifts `table` / `toRow` / `fromRow` onto the MODEL class) and the
+ * `SqlBackend` provider (storage side). `relations` carries the foreign keys.
+ */
+export interface SqlSchemaDef<T, Tbl extends Table = Table> {
+	table: Tbl;
+	toRow: (e: T) => Record<string, unknown>;
+	fromRow: (row: Record<string, unknown>) => T;
+	/**
+	 * Foreign-key relations on this table. Declared (not inferred) because the
+	 * reflected schema alone cannot name the TARGET table/column. The
+	 * `SqlSerialisable` capacity applies `.references()` to the FK column at
+	 * derive time and surfaces these on the def; `SqlBackend` reads them for
+	 * joinable querying. Absent for models with no relations.
+	 */
+	relations?: SqlRelationDef[];
+}
+
+/**
+ * `SqlSchemaModule<T>` — a {@link SchemaModule} augmented with the optional
+ * SQL projection slices (`sql`, `sqlPg`). Lives here (not on the core
+ * `SchemaModule`) because SQL is a capacity concern, not part of the neutral
+ * typia bundle. A model that composes `SqlSerialisable` is typed as this.
+ */
+export interface SqlSchemaModule<T, Tbl extends Table = Table>
+	extends SchemaModule<T> {
+	sql?: SqlSchemaDef<T, Tbl>;
+	sqlPg?: SqlSchemaDef<T, Tbl>;
 }
 
 /** How a property is stored. Drives both the column builder and the mappers. */

@@ -9,58 +9,6 @@ import type {
 	IValidation,
 } from "@typia/interface";
 import type { Classifiable } from "typia";
-import type { Table } from "drizzle-orm";
-
-/**
- * `SqlSchemaDef<T>` — the SQL (drizzle) projection a model may optionally bind.
- *
- * `toRow` / `fromRow` translate between the domain entity and a drizzle table
- * row; `table` is the concrete drizzle `Table` (sqlite-core OR pg-core — the
- * same mappers work for both because they only touch column NAME strings, not
- * the column-builder objects). A model that is never stored relationally simply
- * does not bind `sql`, exactly like the optional `http` slice. Two consumers
- * read this slice and everything else ignores it: the `SqlSerialisable`
- * capacity lifts it onto the MODEL class (`static table` / `toRow` / `fromRow`),
- * and the `SqlBackend` provider consumes it on the STORAGE side.
- */
-export interface SqlSchemaDef<T, Tbl extends Table = Table> {
-	table: Tbl;
-	toRow: (e: T) => Record<string, unknown>;
-	fromRow: (row: Record<string, unknown>) => T;
-	/**
-	 * Foreign-key relations on this table. Declared (not inferred) because the
-	 * reflected schema alone cannot name the TARGET table/column. The
-	 * `SqlSerialisable` capacity applies `.references()` to the FK column at
-	 * derive time and surfaces these on the def; `SqlBackend` reads them for
-	 * joinable querying. Absent for models with no relations.
-	 */
-	relations?: SqlRelationDef[];
-}
-
-/**
- * `SqlRelationDef` — one foreign-key relation on a model's SQL table.
- *
- * `column` is the FK column ON THIS table (e.g. `"authorId"`); `targetTable`
- * is a thunk (so two models can reference each other without a circular-import
- * failure at module load, mirroring `Referencible`'s `target: () => Class`),
- * and `targetColumn` defaults to `"id"`. `cardinality` / `onDelete` mirror the
- * `Referencible` vocabulary so the in-memory relation and the SQL constraint
- * stay consistent.
- */
-export interface SqlRelationDef {
-	/** Relation name (e.g. `"user"`, `"posts"`). */
-	name: string;
-	/** FK column ON THIS table, e.g. `"authorId"`. */
-	column: string;
-	/** Thunk to the referenced table (circular-safe). */
-	targetTable: () => Table;
-	/** Referenced column on the target. Default `"id"`. */
-	targetColumn?: string;
-	/** Cardinality — mirrors `Referencible`. Default `"many-to-one"`. */
-	cardinality?: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
-	/** Referential action on delete. Default `"noAction"`. */
-	onDelete?: "cascade" | "setNull" | "restrict" | "noAction";
-}
 
 /**
  * `HttpSchemaModule` — the HTTP-shaped *decode* slice a model may optionally
@@ -289,26 +237,4 @@ export interface SchemaModule<T = unknown> {
 	 */
 	http?: HttpSchemaModule;
 
-	// --- SQL (drizzle) PROJECTION -------------------------------------------
-	/**
-	 * OPTIONAL SQL-shaped projection (see {@link SqlSchemaDef}). Binds the
-	 * drizzle table + row mappers for this model so the `SqlBackend` provider
-	 * can map entities to real relational columns. Absent when the model is
-	 * only ever stored as a blob. Mirrors the optional `http` slice: a model
-	 * that is never persisted relationally simply does not bind it.
-	 *
-	 * In the manual world the model bind this by hand (`table: UserPgTable,
-	 * toRow, fromRow`). With the `SqlSerialisable` capacity, this slice is
-	 * DERIVED from `schema` (typia's reflected JSON schema) at compose time —
-	 * the model just declares the capacity and a table name.
-	 */
-	sql?: SqlSchemaDef<T>;
-
-	/**
-	 * The SAME projection for the OPPOSITE dialect. When `SqlSerialisable`
-	 * runs with `dialect: "sqlite"`, it derives `sql` (sqlite) here AND `sqlPg`
-	 * (postgres), so a multi-dialect app can pick the right table per
-	 * deployment (local sqlite vs remote pg) without a second model binding.
-	 */
-	sqlPg?: SqlSchemaDef<T>;
 }

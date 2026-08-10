@@ -23,7 +23,18 @@ import type { Versioned } from "../capacities/versioned";
  * Every `id` maps to an array of immutable instances ordered oldest -> newest.
  * Swap the in-memory `Map` for a real DB/ORM (with a `(id, updated_at)`
  * uniqueness constraint) when ready — the call sites stay identical.
+ *
+ * The store is ALSO the outbox. `onChange` surfaces a domain event atomically
+ * with each write, so the application never performs a second, uncoordinated
+ * event publish (which would be a dual-write with no transaction boundary).
+ * For a git/SQL backend, the version row and the event row land in one commit /
+ * transaction; the event is the same fact as the version, surfaced here.
  */
+export type StoreChangeHandler<T> = (
+	entity: T | undefined,
+	event?: { topic: string; payload: unknown },
+) => void;
+
 export interface VersionHistoryStore<
 	T extends Identifiable<string> & Versioned,
 > {
@@ -37,22 +48,38 @@ export interface VersionHistoryStore<
 	historyOf(id: string): T[] | undefined;
 
 	/** Seed the history for a NEW id with its first (immutable) instance. */
-	create(entity: T): void;
+	create(entity: T, event?: { topic: string; payload: unknown }): void;
 
 	/** Append a NEW version onto an existing id's history. */
-	append(entity: T): void;
+	append(entity: T, event?: { topic: string; payload: unknown }): void;
 
 	/** Remove an id and its entire history. Returns true if it existed. */
-	remove(id: string): boolean;
+	remove(id: string, event?: { topic: string; payload: unknown }): boolean;
 
 	/** The latest instance of every tracked id. */
 	listLatest(): T[];
+
+	/**
+	 * Subscribe to every write (create/append/remove), receiving the entity
+	 * (or `undefined` for a remove) and the optional event. Returns an
+	 * unsubscribe function. This is the outbox seam: the repository forwards
+	 * these events to the domain-event bus, atomically with the write.
+	 */
+	onChange(handler: StoreChangeHandler<T>): () => void;
 }
 
 export function createVersionHistoryStore<
 	T extends Identifiable<string> & Versioned,
 >(): VersionHistoryStore<T> {
 	const histories = new Map<string, T[]>();
+	const handlers = new Set<StoreChangeHandler<T>>();
+
+	const notify = (
+		entity: T | undefined,
+		event?: { topic: string; payload: unknown },
+	) => {
+		for (const h of [...handlers]) h(entity, event);
+	};
 
 	return {
 		has: (id) => histories.has(id),
@@ -65,11 +92,12 @@ export function createVersionHistoryStore<
 
 		historyOf: (id) => histories.get(id),
 
-		create: (entity) => {
+		create: (entity, event) => {
 			histories.set(entity.id, [entity]);
+			notify(entity, event);
 		},
 
-		append: (entity) => {
+		append: (entity, event) => {
 			const history = histories.get(entity.id);
 			if (!history) {
 				throw new Error(
@@ -77,11 +105,23 @@ export function createVersionHistoryStore<
 				);
 			}
 			history.push(entity);
+			notify(entity, event);
 		},
 
-		remove: (id) => histories.delete(id),
+		remove: (id, event) => {
+			const existed = histories.delete(id);
+			if (existed) notify(undefined, event);
+			return existed;
+		},
 
 		listLatest: () =>
 			Array.from(histories.values()).map((h) => h[h.length - 1]!),
+
+		onChange: (handler) => {
+			handlers.add(handler);
+			return () => {
+				handlers.delete(handler);
+			};
+		},
 	};
 }

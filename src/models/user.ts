@@ -7,7 +7,7 @@ import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Validatable } from "@/capacities/validatable";
 import { Referencible } from "@/capacities/referencible";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
-import type { SchemaModule } from "../capacities/schema-module";
+import type { SqlSchemaModule } from "../capacities/sql-tablisable";
 import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
@@ -60,7 +60,7 @@ interface UserSchema extends IdentifiableSchema<UUID>, Timestamped {
 const userEquals = typia.compare.createEquals<UserSchema>();
 const userLess = typia.compare.createLess<UserSchema>();
 
-const UserSchemaModule: SchemaModule<UserSchema> = {
+const UserSchemaModule: SqlSchemaModule<UserSchema> = {
 	schema: typia.reflect.schema<UserSchema>(),
 	// classify family (plain default; Validatable upgrades construction to assertClassify)
 	classify: typia.plain.createClassify<UserSchema>(),

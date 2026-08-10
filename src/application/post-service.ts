@@ -84,8 +84,10 @@ export class PostService {
 			throw new PostAlreadyExistsError(input.id);
 		}
 		const post = Post.from({ ...input, updated_at: input.created_at });
-		await this.opts.repo.create(post);
-		this.opts.bus?.publish("post.created", { id: post.id });
+		await this.opts.repo.create(post, {
+			topic: "post.created",
+			payload: { id: post.id },
+		});
 		return post;
 	}
 
@@ -123,8 +125,10 @@ export class PostService {
 			}
 		}
 		const updated = existing.update(patch);
-		await this.opts.repo.append(updated);
-		this.opts.bus?.publish("post.updated", { id });
+		await this.opts.repo.append(updated, {
+			topic: "post.updated",
+			payload: { id },
+		});
 		return updated;
 	}
 
@@ -132,17 +136,18 @@ export class PostService {
 	async publish(id: string): Promise<Post> {
 		const existing = await this.opts.repo.findById(id);
 		if (!existing) throw new PostNotFoundError(id);
-		const published = existing.update({ published: true });
-		await this.opts.repo.append(published);
-		this.opts.bus?.publish("post.published", { id });
+		const published = existing.publish();
+		await this.opts.repo.append(published, {
+			topic: "post.published",
+			payload: { id },
+		});
 		return published;
 	}
 
 	/** Delete a post and its full version history. */
 	async delete(id: string): Promise<void> {
 		if (!(await this.opts.repo.findById(id))) throw new PostNotFoundError(id);
-		await this.opts.repo.delete(id);
-		this.opts.bus?.publish("post.deleted", { id });
+		await this.opts.repo.delete(id, { topic: "post.deleted", payload: { id } });
 	}
 
 	/** Store an image for a post (delegated to the `PostAssetStore` port). */

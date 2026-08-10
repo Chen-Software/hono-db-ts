@@ -5,6 +5,8 @@ import {
 	PostNotFoundError,
 	type PostService,
 } from "../application/post-service";
+import { InvalidStateError } from "../models/post";
+import type { PostQueries } from "../ports/post-queries";
 
 /**
  * `postServiceApp` — the REST TRANSPORT ADAPTER for `PostService`.
@@ -27,8 +29,10 @@ import {
 export function postServiceApp(postService: PostService): Hono {
 	const app = new Hono();
 
-	// GET / — list the latest version of every post (projected response shape).
+	// GET / — list the latest version of every post. Prefer the read-side
+	// port (CQRS projection) when wired; fall back to the service otherwise.
 	app.get("/", async (c) => {
+		if (queries) return c.json(await queries.latest());
 		const list = await postService.list();
 		return c.json(
 			list.map(({ id, title, published, author, created_at, updated_at, hash }) => ({
@@ -60,10 +64,12 @@ export function postServiceApp(postService: PostService): Hono {
 		}
 	});
 
-	// GET /:id — fetch the latest version of a post.
+	// GET /:id — fetch the latest version of a post (read-side port when wired).
 	app.get("/:id", async (c) => {
 		try {
-			const post = await postService.get(c.req.param("id"));
+			const id = c.req.param("id");
+			const post = queries ? await queries.byId(id) : await postService.get(id);
+			if (!post) throw new PostNotFoundError(id);
 			return c.json(post);
 		} catch (e) {
 			if (e instanceof PostNotFoundError) {
@@ -111,6 +117,9 @@ export function postServiceApp(postService: PostService): Hono {
 		} catch (e) {
 			if (e instanceof PostNotFoundError) {
 				return c.json({ status: "error", message: e.message }, 404);
+			}
+			if (e instanceof InvalidStateError) {
+				return c.json({ status: "error", message: e.message }, 409);
 			}
 			throw e;
 		}

@@ -189,6 +189,14 @@ const PostBase = defineModel<PostData>({
 	],
 });
 
+/** Domain invariant violation — e.g. publishing an already-published post. */
+export class InvalidStateError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "InvalidStateError";
+	}
+}
+
 class Post extends PostBase implements PostData {
 	// NOTE: these are declared with `declare` (type-only) rather than `!`,
 	// because `Post` now *extends* the `defineModel` base. Plain `field!`
@@ -259,6 +267,19 @@ class Post extends PostBase implements PostData {
 		// `updatePost` bumps the version (Versioned) AND recomputes the content
 		// address from `body` — the hash can never drift from the content.
 		return updatePost(this, patch);
+	}
+
+	/**
+	 * Publish this post. The invariant (publish exactly once) lives on the
+	 * AGGREGATE, not the service: returns a new published instance, or throws
+	 * `InvalidStateError` if already published. The service just calls this and
+	 * writes the result — the rule is testable without any ports.
+	 */
+	publish(): Post {
+		if (this.published) {
+			throw new InvalidStateError("Post is already published");
+		}
+		return this.update({ published: true });
 	}
 
 	/** JSON string representation. */

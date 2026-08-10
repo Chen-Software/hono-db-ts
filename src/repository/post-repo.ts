@@ -1,5 +1,6 @@
 import type { Post } from "../models/post";
-import type { PostRepository } from "../ports/post-repository";
+import type { DomainEvent, PostRepository } from "../ports/post-repository";
+import type { EventPublisher } from "../ports/event-publisher";
 import {
 	createVersionHistoryStore,
 	type VersionHistoryStore,
@@ -15,15 +16,25 @@ import {
  * (e.g. a SQL table with a `(id, updated_at)` uniqueness constraint) and every
  * use case keeps working unchanged.
  *
- * The `create`/`append` distinction mirrors the versioned model contract:
- * `create` seeds the first version of a logical post, `append` records a
- * strictly-later version.
+ * Outbox: the store is the single source of truth for both the post version
+ * AND its lifecycle event. `PostRepo` subscribes to `store.onChange` once and
+ * forwards the event to the domain-event `bus` as part of the same write. The
+ * application service therefore makes exactly ONE call per use case
+ * (`repo.create` / `repo.append` / `repo.delete`) and never calls the bus
+ * directly for post events — eliminating the dual-write/transaction-boundary
+ * gap. For a relational backend this becomes "insert version row + insert
+ * outbox row in one transaction, then dispatch".
  */
 export class PostRepo implements PostRepository {
 	private store: VersionHistoryStore<Post>;
+	private bus?: EventPublisher;
 
-	constructor(store?: VersionHistoryStore<Post>) {
+	constructor(bus?: EventPublisher, store?: VersionHistoryStore<Post>) {
+		this.bus = bus;
 		this.store = store ?? createVersionHistoryStore<Post>();
+		this.store.onChange((_entity, event) => {
+			if (event) this.bus?.publish(event.topic, event.payload);
+		});
 	}
 
 	async findById(id: string): Promise<Post | null> {
@@ -42,23 +53,23 @@ export class PostRepo implements PostRepository {
 		return this.store.historyOf(id) ?? null;
 	}
 
-	async create(post: Post): Promise<void> {
+	async create(post: Post, event?: DomainEvent): Promise<void> {
 		if (this.store.has(post.id)) {
 			throw new Error(`PostRepo.create: post already exists: ${post.id}`);
 		}
-		this.store.create(post);
+		this.store.create(post, event);
 	}
 
-	async append(post: Post): Promise<void> {
+	async append(post: Post, event?: DomainEvent): Promise<void> {
 		if (!this.store.has(post.id)) {
 			throw new Error(
 				`PostRepo.append: no history for "${post.id}" — call create() first`,
 			);
 		}
-		this.store.append(post);
+		this.store.append(post, event);
 	}
 
-	async delete(id: string): Promise<void> {
-		this.store.remove(id);
+	async delete(id: string, event?: DomainEvent): Promise<void> {
+		this.store.remove(id, event);
 	}
 }

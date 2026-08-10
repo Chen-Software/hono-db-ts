@@ -12,7 +12,7 @@ import {
 	ne,
 	type Table,
 } from "drizzle-orm";
-import type { SqlSchemaDef } from "../capacities/schema-module";
+import type { SqlSchemaDef } from "../capacities/sql-tablisable";
 import type { EntityFilter, FieldQuery, StoreBackend } from "./store-backend";
 
 /**

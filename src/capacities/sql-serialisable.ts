@@ -1,6 +1,6 @@
 import type { CapacityConstructor } from "./capable";
 import type { ComposeContext } from "./compose";
-import type { SchemaModule } from "./schema-module";
+import type { SqlSchemaModule } from "./sql-tablisable";
 import {
 	toDrizzleTable,
 	type SqlDialect,
@@ -76,7 +76,7 @@ export interface SqlSerialisableOptions extends SqlTablisableOptions {
  */
 function SqlSerialisable<TBase extends CapacityConstructor>(
 	Base: TBase,
-	mod: SchemaModule<any>,
+	mod: SqlSchemaModule<any>,
 	options?: SqlSerialisableOptions,
 	_ctx?: ComposeContext,
 ): TBase {
