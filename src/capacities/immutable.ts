@@ -1,4 +1,26 @@
 import typia from "typia";
+import { type tags } from "typia";
+import type { CapacityConstructor, Constructor } from "./capable";
+
+/**
+ * Immutable
+ * 
+ * @description Every mutation causes the entity to reconstruct.
+ *
+ */
+function Immutable<TBase extends CapacityConstructor>(Base: TBase) {
+	Base.prototype.capacities && Base.prototype.addCapacity("Immutable");
+	// const mutable = typia.reflect.schema<Writable<TBase>>();
+	// console.log(mutable);
+	return class extends Base {
+		constructor(...args: any[]) {
+			super(...args);
+			Object.freeze(this);
+		}
+	}
+}
+
+export { Immutable };
 
 /**
  * Immutable — a capacity marking that instances are NEVER mutated in place.
@@ -29,7 +51,7 @@ import typia from "typia";
  * marker, every entity wearing either capacity inherits the same
  * immutable-update machinery (composed with their own policy steps).
  */
-export type Immutable = Record<never, never>;
+
 
 // ---------------------------------------------------------------------------
 // Type-level "is every member readonly?" introspection
@@ -46,7 +68,7 @@ export type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 /** Structural equality that distinguishes `readonly` (assignability ignores it). */
 export type Equal<X, Y> =
-	(<T>() => T extends X ? 1 : 2) extends (<T>() => T extends Y ? 1 : 2)
+	(<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
 		? true
 		: false;
 
@@ -59,9 +81,6 @@ export type ReadonlyKeys<T> = {
 
 /** The set of keys whose property is NOT declared `readonly`. */
 export type MutableKeys<T> = Exclude<keyof T, ReadonlyKeys<T>>;
-
-/** `true` iff EVERY property of `T` is `readonly`. */
-export type IsImmutable<T> = [MutableKeys<T>] extends [never] ? true : false;
 
 /**
  * Constraint helper: yields `T` when `T` is fully readonly, otherwise `never`
