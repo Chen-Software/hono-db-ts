@@ -61,7 +61,7 @@ const userEquals = typia.compare.createEquals<UserSchema>();
 const userLess = typia.compare.createLess<UserSchema>();
 
 const UserSchemaModule: SqlSchemaModule<UserSchema> = {
-	schema: typia.reflect.schema<UserSchema>(),
+	schema: typia.json.schema<UserSchema>(),
 	// classify family (plain default; Validatable upgrades construction to assertClassify)
 	classify: typia.plain.createClassify<UserSchema>(),
 	assertClassify: typia.plain.createAssertClassify<UserSchema>(),

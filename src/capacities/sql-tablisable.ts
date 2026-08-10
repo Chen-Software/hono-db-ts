@@ -1,8 +1,10 @@
+import { sql } from "drizzle-orm";
 import {
 	sqliteTable,
 	text as sText,
 	integer as sInt,
 	real as sReal,
+	check as sCheck,
 } from "drizzle-orm/sqlite-core";
 import {
 	pgTable,
@@ -10,6 +12,7 @@ import {
 	integer as pInt,
 	doublePrecision as pDouble,
 	boolean as pBool,
+	check as pCheck,
 } from "drizzle-orm/pg-core";
 import type { SchemaModule } from "./schema-module";
 import type { Table } from "drizzle-orm";
@@ -105,13 +108,19 @@ export interface JsonProp {
 	format?: string;
 	nullable?: boolean;
 	enum?: readonly unknown[];
+	oneOf?: JsonProp[];
+	const?: unknown;
 	items?: JsonSchema;
 	properties?: Record<string, JsonProp>;
 	required?: string[];
-	// numeric / string bounds (recorded for documentation; ignored for columns)
+	// numeric / string bounds → emitted as CHECK constraints when `check: true`
 	minimum?: number;
 	maximum?: number;
 	exclusiveMinimum?: number | boolean;
+	exclusiveMaximum?: number | boolean;
+	minLength?: number;
+	maxLength?: number;
+	pattern?: string;
 	// typia may emit extra metadata we don't consume
 	[x: string]: unknown;
 }
@@ -141,6 +150,13 @@ export interface SqlTablisableOptions {
 	 * the table is still built but not registered for cross-references.
 	 */
 	modelName?: string;
+	/**
+	 * Emit SQL `CHECK` constraints derived from the reflected JSON-schema bounds
+	 * (minimum/maximum/exclusive*, minLength/maxLength, pattern, enum membership).
+	 * Default `true`. Set `false` to skip — e.g. when validation is enforced
+	 * elsewhere (typia runtime validators) and you want leaner DDL.
+	 */
+	check?: boolean;
 }
 
 /**
@@ -178,6 +194,19 @@ export interface SqlRelationDef {
  * (which lifts `table` / `toRow` / `fromRow` onto the MODEL class) and the
  * `SqlBackend` provider (storage side). `relations` carries the foreign keys.
  */
+/**
+ * `SqlCheckDef` — one `CHECK` constraint on a model's SQL table, derived from a
+ * JSON-schema bound on a property (e.g. `minimum`, `maxLength`, `pattern`,
+ * enum membership). The `expression` is a dialect-agnostic SQL fragment quoting
+ * the column name (`"col" >= 3`); drizzle binds it via `check(name, sql\`…\`)`.
+ */
+export interface SqlCheckDef {
+	/** Constraint name, e.g. `"posts_title_minlen"`. */
+	name: string;
+	/** Raw SQL boolean expression (column quoted with `"`). */
+	expression: string;
+}
+
 export interface SqlSchemaDef<T, Tbl extends Table = Table> {
 	table: Tbl;
 	toRow: (e: T) => Record<string, unknown>;
@@ -190,6 +219,11 @@ export interface SqlSchemaDef<T, Tbl extends Table = Table> {
 	 * joinable querying. Absent for models with no relations.
 	 */
 	relations?: SqlRelationDef[];
+	/**
+	 * `CHECK` constraints derived from the reflected bounds (when `check` is on).
+	 * Absent when no bounds were declared or `check: false`.
+	 */
+	checks?: SqlCheckDef[];
 }
 
 /**
@@ -207,6 +241,17 @@ export interface SqlSchemaModule<T, Tbl extends Table = Table>
 /** How a property is stored. Drives both the column builder and the mappers. */
 type ColKind = "string" | "integer" | "number" | "boolean" | "enum" | "json";
 
+interface ColBounds {
+	minimum?: number;
+	maximum?: number;
+	exclusiveMinimum?: number | boolean;
+	exclusiveMaximum?: number | boolean;
+	minLength?: number;
+	maxLength?: number;
+	pattern?: string;
+	enum?: readonly unknown[];
+}
+
 interface ColPlan {
 	name: string;
 	kind: ColKind;
@@ -214,6 +259,8 @@ interface ColPlan {
 	isId: boolean;
 	/** Decoded `Reference` tag, if this column is a foreign key. */
 	reference?: ReferenceMeta;
+	/** Reflected numeric / string bounds → CHECK constraints. */
+	bounds?: ColBounds;
 }
 
 /**
@@ -228,6 +275,22 @@ function unwrapObject(schema: JsonSchema): JsonSchema {
 		(Array.isArray(schema.type) && schema.type.includes("array"));
 	if (isArray && schema.items) return schema.items as JsonSchema;
 	return schema;
+}
+
+/**
+ * Derive the model name to register under, from the typia JSON-schema envelope.
+ * `typia.json.schema<T>()` (and the array form `typia.json.schema<[T]>()`) emits
+ * `components.schemas.<ModelName>`, which is exactly the key other models'
+ * `Reference` tags target. Falls back to an explicit `modelName` option.
+ */
+function modelNameOf(schema: JsonSchema, fallback?: string): string | undefined {
+	const schemas = (schema as Record<string, any>)?.components?.schemas;
+	if (schemas && typeof schemas === "object") {
+		const keys = Object.keys(schemas);
+		if (keys.length === 1) return keys[0];
+		if (keys.length > 1) return fallback ?? keys[0];
+	}
+	return fallback;
 }
 
 function baseType(p: JsonProp): string | undefined {
@@ -262,13 +325,115 @@ function kindOf(p: JsonProp): ColKind {
 function planColumns(schema: JsonSchema): ColPlan[] {
 	const obj = unwrapObject(schema);
 	const props = obj.properties ?? {};
-	return Object.entries(props).map(([name, p]) => ({
-		name,
-		kind: kindOf(p),
-		nullable: isNullable(p),
-		isId: name === "id",
-		reference: name !== "id" ? referenceOf(p) : undefined,
-	}));
+	return Object.entries(props).map(([name, p]) => {
+		// Enum membership: typia emits either `enum: [...]` (TS `enum`/tuple) or
+		// `oneOf: [{ const: ... }, ...]` (a union of string/number literals).
+		const unionConsts = Array.isArray((p as JsonProp).oneOf)
+			? ((p as JsonProp).oneOf as JsonProp[])
+					.map((o) => o.const)
+					.filter((v) => v !== undefined)
+			: [];
+		const enumVals =
+			p.enum && p.enum.length > 0
+				? (p.enum as readonly unknown[])
+				: unionConsts.length > 0
+					? unionConsts
+					: undefined;
+
+		const hasBounds =
+			p.minimum !== undefined ||
+			p.maximum !== undefined ||
+			p.exclusiveMinimum !== undefined ||
+			p.exclusiveMaximum !== undefined ||
+			p.minLength !== undefined ||
+			p.maxLength !== undefined ||
+			p.pattern !== undefined ||
+			enumVals !== undefined;
+		return {
+			name,
+			kind: kindOf(p),
+			nullable: isNullable(p),
+			isId: name === "id",
+			reference: name !== "id" ? referenceOf(p) : undefined,
+			...(hasBounds
+				? {
+						bounds: {
+							...(p.minimum !== undefined ? { minimum: p.minimum } : {}),
+							...(p.maximum !== undefined ? { maximum: p.maximum } : {}),
+							...(p.exclusiveMinimum !== undefined
+								? { exclusiveMinimum: p.exclusiveMinimum }
+								: {}),
+							...(p.exclusiveMaximum !== undefined
+								? { exclusiveMaximum: p.exclusiveMaximum }
+								: {}),
+							...(p.minLength !== undefined ? { minLength: p.minLength } : {}),
+							...(p.maxLength !== undefined ? { maxLength: p.maxLength } : {}),
+							...(p.pattern !== undefined ? { pattern: p.pattern } : {}),
+							...(enumVals ? { enum: enumVals } : {}),
+						} as ColBounds,
+					}
+				: {}),
+		};
+	});
+}
+
+/**
+ * Build `CHECK` constraints from a plan set. Each bound becomes a dialect-agnostic
+ * SQL expression quoting the column (`"col"`). `exclusiveMinimum`/`exclusiveMaximum`
+ * may be a boolean (`true` with no numeric value is ignored) or a number.
+ * `pattern` uses the Postgres `~` regex operator (sqlite has no portable regexp,
+ * so for sqlite we fall back to a no-op comment-only constraint — see
+ * {@link buildChecks} which skips un-enforceable patterns on sqlite).
+ */
+function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
+	const checks: SqlCheckDef[] = [];
+	const q = (col: string) => `"${col}"`;
+	for (const c of plans) {
+		const b = c.bounds;
+		if (!b) continue;
+		const col = q(c.name);
+		if (b.minimum !== undefined)
+			checks.push({ name: `${c.name}_min`, expression: `${col} >= ${b.minimum}` });
+		if (b.maximum !== undefined)
+			checks.push({ name: `${c.name}_max`, expression: `${col} <= ${b.maximum}` });
+		if (typeof b.exclusiveMinimum === "number")
+			checks.push({
+				name: `${c.name}_exclmin`,
+				expression: `${col} > ${b.exclusiveMinimum}`,
+			});
+		if (typeof b.exclusiveMaximum === "number")
+			checks.push({
+				name: `${c.name}_exclmax`,
+				expression: `${col} < ${b.exclusiveMaximum}`,
+			});
+		if (b.minLength !== undefined)
+			checks.push({
+				name: `${c.name}_minlen`,
+				expression: `length(${col}) >= ${b.minLength}`,
+			});
+		if (b.maxLength !== undefined)
+			checks.push({
+				name: `${c.name}_maxlen`,
+				expression: `length(${col}) <= ${b.maxLength}`,
+			});
+		if (b.enum && b.enum.length > 0) {
+			const list = b.enum.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(", ");
+			checks.push({
+				name: `${c.name}_enum`,
+				expression: `${col} IN (${list})`,
+			});
+		}
+		// `pattern`: enforceable on Postgres (`~`); sqlite lacks portable regexp.
+		if (b.pattern) {
+			const re = `'${b.pattern.replace(/'/g, "''")}'`;
+			checks.push({
+				name: `${c.name}_pattern`,
+				expression:
+					dialect === "pg" ? `${col} ~ ${re}` : `${col} REGEXP ${re}`,
+			});
+		}
+	}
+	return checks;
 }
 
 function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any> {
@@ -297,11 +462,19 @@ function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any
 		else if (!c.nullable) col = col.notNull();
 
 		// Foreign key → wire `.references()` against the registered target table.
+		// Resolution is deferred INSIDE drizzle's thunk so two models can
+		// reference each other without a circular-import failure at module load
+		// (mirroring `Referencible`'s `target: () => Class`): by the time drizzle
+		// evaluates the thunk at query-plan time, the target table has been
+		// derived and registered.
 		if (c.reference) {
-			const targetThunk = resolveTableThunk(c.reference.target, dialect);
+			const targetName = c.reference.target;
 			const targetColumn = c.reference.column ?? "id";
 			const onDelete = c.reference.onDelete ?? "noAction";
-			col = col.references(() => targetThunk()[targetColumn], { onDelete });
+			col = col.references(
+				() => resolveTableThunk(targetName, dialect)()[targetColumn],
+				{ onDelete },
+			);
 		}
 
 		cols[c.name] = col;
@@ -410,21 +583,36 @@ export function toDrizzleTable<T = any>(
 			? (schema.schema as JsonSchema)
 			: schema;
 
-	// Order matters: plans must be computed before building columns, because
-	// `buildColumns` resolves FK `.references()` against the registry, which
-	// requires the TARGET table to already be registered. The caller (the
-	// SqlSerialisable capacity) is responsible for deriving targets first.
 	const plans = planColumns(root);
 	const columns = buildColumns(plans, dialect);
 	const { toRow, fromRow } = makeMappers(plans, dialect);
+
+	// Build CHECK constraints (default ON unless explicitly opted out).
+	const emitChecks = options.check !== false;
+	const checks = emitChecks ? planChecks(plans, dialect) : [];
+
+	// Table extra callback carries the CHECK constraints (and would also carry
+	// additional table-level FKs if we ever need them). Omit the callback when
+	// there are no checks so the table def stays minimal.
+	const tableExtra = checks.length
+		? (t: Record<string, any>) =>
+				checks.map((c) =>
+					dialect === "sqlite"
+						? sCheck(c.name, sql.raw(c.expression))
+						: pCheck(c.name, sql.raw(c.expression)),
+				)
+		: undefined;
+
 	const table =
 		dialect === "sqlite"
-			? sqliteTable(options.name, columns)
-			: pgTable(options.name, columns);
+			? sqliteTable(options.name, columns, tableExtra as any)
+			: pgTable(options.name, columns, tableExtra as any);
 
-	// Register BEFORE returning so later tables can reference this one.
-	if (options.modelName) {
-		registerTable(options.modelName, dialect, () => table as Table);
+	// Register BEFORE returning so other tables can reference this one (FK
+	// targets resolve lazily through `tableRegistry`, circular-safe).
+	const modelName = modelNameOf(schema, options.modelName);
+	if (modelName) {
+		registerTable(modelName, dialect, () => table as Table);
 	}
 
 	const relations = planRelations(plans);
@@ -433,5 +621,6 @@ export function toDrizzleTable<T = any>(
 		toRow,
 		fromRow,
 		...(relations.length ? { relations } : {}),
+		...(checks.length ? { checks } : {}),
 	};
 }

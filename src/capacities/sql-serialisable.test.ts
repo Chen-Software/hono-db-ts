@@ -33,8 +33,11 @@ function Guarded<TBase extends CapacityConstructor>(Base: TBase) {
 
 // The fixed schema module — bound once, handed to the capacity. NOTE: `sql` /
 // `sqlPg` are NOT bound here; `SqlSerialisable` DERIVES them from `schema`.
+// We use `typia.json.schema` (JSON-Schema format) — `toDrizzleTable` parses that
+// shape, and only the JSON-Schema output carries custom-tag metadata (e.g. the
+// `Reference` tag's `x-reference`), so it is the right input for the SQL path.
 const fooModule: SchemaModule<Foo> = {
-	schema: typia.reflect.schema<Foo>(),
+	schema: typia.json.schema<Foo>(),
 	classify: (d: any) => d,
 	assertClassify: (d: any) => d,
 	validateClassify: (d: any) => ({ success: true, data: d }),

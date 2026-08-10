@@ -50,8 +50,10 @@ interface PostData
 	author: UserSchema;
 
 	/** Foreign key to the authoring `User` — the join column for the
-	 *  `getUser` relation. */
-	authorId: UUID;
+	 *  `getUser` relation. The `Reference` tag is read by `sql-tablisable`
+	 *  (from the reflected JSON schema) to wire the drizzle `.references()`
+	 *  FK constraint; `Referencible` handles the in-memory side. */
+	authorId: UUID & Reference<"UserSchema", "id", "many-to-one", "cascade">;
 
 	/** Whether the post is published. */
 	published: boolean;
@@ -92,7 +94,10 @@ const postLess = typia.compare.createLess<PostData>();
  * and `classify`.
  */
 const PostSchemaModule = {
-	schema: typia.json.schema<[PostData]>(),
+	// Single-type JSON-Schema (NOT the array form): it inlines `PostData`'s
+	// `properties` directly on `schema` and carries each `Reference` tag's
+	// `x-reference` metadata — exactly what `sql-tablisable` parses to wire FKs.
+	schema: typia.json.schema<PostData>(),
 	// Post keeps the validating `assertClassify` as its construction classify
 	// (it has no `Validatable` capacity to upgrade it), plus the other variants.
 	classify: typia.plain.createAssertClassify<PostData>(),
