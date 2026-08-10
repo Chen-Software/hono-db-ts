@@ -141,14 +141,19 @@ export function defineModel<T>(def: ModelDefinition<T>) {
 			const Ctor = this.constructor as any;
 			// Validate the MERGED result BEFORE committing in place, so an invalid
 			// patch is rejected without mutating `this`.
-			const merged = { ...this, ...patch };
+			let merged = { ...this, ...patch };
 			// `beforeUpdate` signal — notification only; cannot reject or mutate.
 			Ctor.emit?.("beforeUpdate", merged);
 			for (const h of (Ctor.hooks?.onUpdate ??
 				[]) as LifecycleHooks["onUpdate"]) {
-				h(merged);
+				// Hooks may transform/validate the merged target and RETURN it
+				// (e.g. `Derivable` recomputing a derived attribute). A hook that
+				// returns nothing leaves `merged` untouched. `patch` is forwarded
+				// so hooks can tell which fields actually changed.
+				const r = h(merged, patch);
+				if (r !== undefined) merged = r;
 			}
-			Object.assign(this, patch);
+			Object.assign(this, merged);
 			// `afterUpdate` signal — subscribers re-materialise derived state here.
 			Ctor.emit?.("afterUpdate", this);
 			return this;

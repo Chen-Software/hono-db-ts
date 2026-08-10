@@ -2,10 +2,12 @@ import type { CapacityConstructor } from "./capable";
 import { Capable } from "./capable";
 import { Clonable } from "./clonable";
 import { Comparable } from "./comparable";
+import { Derivable } from "./derivable";
 import { Immutable } from "./immutable";
 import { JsonSerialisable } from "./json-serialisable";
 import { Persistable } from "./persistable";
 import { ProtobufEncodable } from "./protobuf-encodable";
+import { Reactive } from "./reactive";
 import type { SchemaModule } from "./schema-module";
 import { Triggerable } from "./triggerable";
 import { Validatable } from "./validatable";
@@ -130,6 +132,8 @@ for (const [name, fn] of [
 	["Clonable", Clonable],
 	["Comparable", Comparable],
 	["Persistable", Persistable],
+	["Reactive", Reactive],
+	["Derivable", Derivable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
