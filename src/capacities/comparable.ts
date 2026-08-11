@@ -83,8 +83,7 @@ function Comparable<TBase extends CapacityConstructor>(
 	// Validator-aware comparison: default the `validated` mode ON when the
 	// validator capacity is also declared (mirrors Clonable's validator-driven
 	// default); an explicit option always wins.
-	const validated =
-		options.validated ?? (ctx?.has("Validatable") ?? false);
+	const validated = options.validated ?? ctx?.has("Validatable") ?? false;
 	const validateFn = validated ? mod.validate : undefined;
 
 	// Wrap a structural compare fn so invalid operands short-circuit to

@@ -6,7 +6,9 @@ import type { CapacityConstructor } from "./capable";
  *
  * @param ID_TYPE the type of the id.
  */
-function Identifiable<TID = 'uuid', TBase extends CapacityConstructor>(Base: TBase) {
+function Identifiable<TID = "uuid", TBase extends CapacityConstructor>(
+	Base: TBase,
+) {
 	Base.prototype.capacities && Base.prototype.addCapacity("Identifiable");
 
 	return class extends Base implements IdentifiableSchema<TID> {
@@ -24,4 +26,4 @@ interface IdentifiableSchema<TID> {
 	readonly id: TID | (string & tags.Format<"uuid">);
 }
 
-export { Identifiable, type IdentifiableSchema};
+export { Identifiable, type IdentifiableSchema };

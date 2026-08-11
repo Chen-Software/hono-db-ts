@@ -178,7 +178,10 @@ const PostBase = defineModel<PostData>({
 		Comparable,
 		// SqlSerialisable: derives the drizzle `posts` table + row mappers from the
 		// schema, and wires the `authorId` FK via the `Reference<"UserSchema">` tag.
-		{ capacity: SqlSerialisable, options: { name: "posts", dialect: "sqlite" } },
+		{
+			capacity: SqlSerialisable,
+			options: { name: "posts", dialect: "sqlite" },
+		},
 		// Referencible: `post.getUser()` resolves the FK `authorId` to a live
 		// User via the identity map. `by: "authorId"` desugars to
 		// `(near, far) => near.authorId === far.id`, which also serves the
@@ -330,7 +333,9 @@ class Post extends PostBase implements PostData {
 		a: T,
 		b: T,
 	) => number;
-	declare static nextUpdatedAt: <T extends IdentifiableSchema<UUID> & Versioned>(
+	declare static nextUpdatedAt: <
+		T extends IdentifiableSchema<UUID> & Versioned,
+	>(
 		data: T,
 	) => number;
 	declare static withVersionBump: <

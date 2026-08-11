@@ -132,7 +132,10 @@ const UserModel = defineModel<UserSchema>({
 	capacities: [
 		JsonSerialisable,
 		ProtobufEncodable,
-		{ capacity: SqlSerialisable, options: { name: "users", dialect: "sqlite" } },
+		{
+			capacity: SqlSerialisable,
+			options: { name: "users", dialect: "sqlite" },
+		},
 		// Validatable pulls its validators from `UserSchemaModule`; here we
 		// demonstrate BOTH lifecycle hooks: `onNew` (assert on construction) and
 		// `onUpdate` (assert on the mutable `update`). The `validate` / `assert`
@@ -158,7 +161,13 @@ const UserModel = defineModel<UserSchema>({
 			capacity: Referencible,
 			options: {
 				relations: [
-					{ name: "posts", target: () => Post, by: "authorId", cardinality: "one-to-many", onDelete: "cascade" },
+					{
+						name: "posts",
+						target: () => Post,
+						by: "authorId",
+						cardinality: "one-to-many",
+						onDelete: "cascade",
+					},
 				],
 			},
 		},

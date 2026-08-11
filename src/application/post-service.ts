@@ -1,10 +1,6 @@
 import { Post, type PostData } from "../models/post";
 import { User } from "../models/user";
-import type {
-	ImageUpload,
-	PostAsset,
-	PostAssetStore,
-} from "../ports/asset-store";
+import type { ImageUpload, PostAsset, PostAssetStore } from "../ports/asset-store";
 import type { EventPublisher } from "../ports/event-publisher";
 import type { PostRepository } from "../ports/post-repository";
 

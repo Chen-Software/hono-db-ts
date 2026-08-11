@@ -56,7 +56,10 @@ export function registerTable(
 }
 
 /** Resolve a registered table (throws if the target was never derived). */
-export function resolveTableThunk(modelName: string, dialect: SqlDialect): () => Table {
+export function resolveTableThunk(
+	modelName: string,
+	dialect: SqlDialect,
+): () => Table {
 	const thunk = tableRegistry.get(regKey(modelName, dialect));
 	if (!thunk) {
 		throw new Error(
@@ -283,7 +286,10 @@ function unwrapObject(schema: JsonSchema): JsonSchema {
  * `components.schemas.<ModelName>`, which is exactly the key other models'
  * `Reference` tags target. Falls back to an explicit `modelName` option.
  */
-function modelNameOf(schema: JsonSchema, fallback?: string): string | undefined {
+function modelNameOf(
+	schema: JsonSchema,
+	fallback?: string,
+): string | undefined {
 	const schemas = (schema as Record<string, any>)?.components?.schemas;
 	if (schemas && typeof schemas === "object") {
 		const keys = Object.keys(schemas);
@@ -313,11 +319,30 @@ function isDate(p: JsonProp): boolean {
 function kindOf(p: JsonProp): ColKind {
 	if (p.enum && p.enum.length > 0) return "enum";
 	if (isDate(p)) return "string"; // ISO strings round-trip as text
+
+	if (p.oneOf && Array.isArray(p.oneOf)) {
+		const first = p.oneOf[0];
+		if (first && (first.type === "string" || first.const !== undefined)) {
+			return "string";
+		}
+	}
+	if (p.anyOf && Array.isArray(p.anyOf)) {
+		const first = p.anyOf[0];
+		if (first && (first.type === "string" || first.const !== undefined)) {
+			return "string";
+		}
+	}
+
 	const t = baseType(p);
 	if (t === "string") return "string";
 	if (t === "integer") return "integer";
 	if (t === "number") return "number";
 	if (t === "boolean") return "boolean";
+
+	if (p.format === "uuid" || p.pattern !== undefined) {
+		return "string";
+	}
+
 	// object / array / unknown → JSON-encoded text column
 	return "json";
 }
@@ -393,9 +418,15 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 		if (!b) continue;
 		const col = q(c.name);
 		if (b.minimum !== undefined)
-			checks.push({ name: `${c.name}_min`, expression: `${col} >= ${b.minimum}` });
+			checks.push({
+				name: `${c.name}_min`,
+				expression: `${col} >= ${b.minimum}`,
+			});
 		if (b.maximum !== undefined)
-			checks.push({ name: `${c.name}_max`, expression: `${col} <= ${b.maximum}` });
+			checks.push({
+				name: `${c.name}_max`,
+				expression: `${col} <= ${b.maximum}`,
+			});
 		if (typeof b.exclusiveMinimum === "number")
 			checks.push({
 				name: `${c.name}_exclmin`,
@@ -417,7 +448,9 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 				expression: `length(${col}) <= ${b.maxLength}`,
 			});
 		if (b.enum && b.enum.length > 0) {
-			const list = b.enum.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(", ");
+			const list = b.enum
+				.map((v) => `'${String(v).replace(/'/g, "''")}'`)
+				.join(", ");
 			checks.push({
 				name: `${c.name}_enum`,
 				expression: `${col} IN (${list})`,
@@ -428,15 +461,17 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 			const re = `'${b.pattern.replace(/'/g, "''")}'`;
 			checks.push({
 				name: `${c.name}_pattern`,
-				expression:
-					dialect === "pg" ? `${col} ~ ${re}` : `${col} REGEXP ${re}`,
+				expression: dialect === "pg" ? `${col} ~ ${re}` : `${col} REGEXP ${re}`,
 			});
 		}
 	}
 	return checks;
 }
 
-function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any> {
+function buildColumns(
+	plans: ColPlan[],
+	dialect: SqlDialect,
+): Record<string, any> {
 	const cols: Record<string, any> = {};
 	for (const c of plans) {
 		// Default keeps the column non-nullable-safe if a kind is somehow missed.
@@ -547,7 +582,7 @@ function makeMappers(plans: ColPlan[], dialect: SqlDialect) {
 					out[name] = typeof v === "string" ? JSON.parse(v) : v;
 					break;
 				case "boolean":
-					out[name] = dialect === "sqlite" ? (v === 1 || v === true) : !!v;
+					out[name] = dialect === "sqlite" ? v === 1 || v === true : !!v;
 					break;
 				case "string":
 					out[name] = v instanceof Date ? v.toISOString() : v;

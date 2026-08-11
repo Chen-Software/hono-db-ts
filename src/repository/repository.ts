@@ -34,7 +34,9 @@ export interface RepositoryOptions<E extends { id: string }, M = E> {
 	/** The entity-facing store (already bound to a backend + schema). */
 	store: StoreProvider<E>;
 	/** The model class used to rehydrate stored data into live instances. */
-	Model: new (data: any) => M;
+	Model: new (
+		data: any,
+	) => M;
 	/** Optional entity-level authorization hook. Throw to deny. */
 	authorize?: (op: AuthOp, id: string | null, principal?: unknown) => void;
 	/**

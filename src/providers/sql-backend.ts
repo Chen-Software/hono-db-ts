@@ -65,13 +65,18 @@ export class SqlBackend<E, T extends Table> implements StoreBackend<E> {
 			.from(this.def.table)
 			.where(eq(cols.id, id))
 			.limit(1);
-		return rows[0] ? this.def.fromRow(rows[0] as Record<string, unknown>) : null;
+		return rows[0]
+			? this.def.fromRow(rows[0] as Record<string, unknown>)
+			: null;
 	}
 
 	async update(_ns: string, id: string, patch: Partial<E>): Promise<void> {
 		const cols = this.def.table as Record<string, any>;
 		const row = this.def.toRow(patch as E);
-		await this.db.update(this.def.table).set(row as any).where(eq(cols.id, id));
+		await this.db
+			.update(this.def.table)
+			.set(row as any)
+			.where(eq(cols.id, id));
 	}
 
 	async delete(_ns: string, id: string): Promise<void> {

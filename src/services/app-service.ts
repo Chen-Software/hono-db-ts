@@ -22,7 +22,11 @@ export function createApp(): Hono {
 	const assetStore = new LocalPostAssetStore(new MemoryStore());
 
 	const userService = new UserService({ repo: userRepo, bus });
-	const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
+	const postService = new PostService({
+		repo: postRepo,
+		bus,
+		assets: assetStore,
+	});
 
 	const app = new Hono();
 	app.get("/", (c) => c.json({ status: "ok" }));

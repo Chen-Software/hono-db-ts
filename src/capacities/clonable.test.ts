@@ -102,12 +102,17 @@ describe("Clonable — validator-driven default (assertClone)", () => {
 
 describe("Clonable — explicit variant override", () => {
 	it("honours { clone: 'clone' } even when Validatable is present", () => {
-		const M = makeModel([Validatable, { capacity: Clonable, options: { clone: "clone" } }]);
+		const M = makeModel([
+			Validatable,
+			{ capacity: Clonable, options: { clone: "clone" } },
+		]);
 		expect(() => M.clone(invalid)).not.toThrow(); // opted out of validation
 	});
 
 	it("honours { clone: 'validateClone' } → returns IValidation", () => {
-		const M = makeModel([{ capacity: Clonable, options: { clone: "validateClone" } }]);
+		const M = makeModel([
+			{ capacity: Clonable, options: { clone: "validateClone" } },
+		]);
 		expect(M.clone(data).success).toBe(true);
 		expect(M.clone(invalid).success).toBe(false);
 		// instance clone returns the raw IValidation for this variant
@@ -115,7 +120,9 @@ describe("Clonable — explicit variant override", () => {
 	});
 
 	it("honours { clone: 'isClone' } → returns null on invalid", () => {
-		const M = makeModel([{ capacity: Clonable, options: { clone: "isClone" } }]);
+		const M = makeModel([
+			{ capacity: Clonable, options: { clone: "isClone" } },
+		]);
 		expect(M.clone(data)).not.toBeNull();
 		expect(M.clone(invalid)).toBeNull();
 	});

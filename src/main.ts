@@ -33,7 +33,18 @@ const assetStore = new LocalPostAssetStore(new MemoryStore()); // e.g. swap → 
 
 // 2. Application services: depend ONLY on ports.
 const userService = new UserService({ repo: userRepo, bus });
-const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
+const postService = new PostService({
+	repo: postRepo,
+	bus,
+	assets: assetStore,
+});
+
+// Seed 50 users and 1000 posts for local development if the database is empty
+const existingUsers = await userService.listUsers();
+if (existingUsers.length === 0) {
+	const { seedData } = await import("./seed");
+	await seedData(userService, postService);
+}
 
 // 3. Transport: controllers translate HTTP requests into commands.
 const app = new Hono();

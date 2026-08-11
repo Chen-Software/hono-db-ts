@@ -78,7 +78,9 @@ describe("ProtobufEncodable — registration (Capable gatekeeper)", () => {
 	it("does NOT register when Capable is absent (guard short-circuits)", () => {
 		const Model = ProtobufEncodable(makeModel(), pingModule);
 		// No registry was ever created, so `capacities` stays undefined.
-		expect((Model as unknown as WithCapacities).prototype.capacities).toBeUndefined();
+		expect(
+			(Model as unknown as WithCapacities).prototype.capacities,
+		).toBeUndefined();
 	});
 
 	it("still attaches the codec even without Capable", () => {

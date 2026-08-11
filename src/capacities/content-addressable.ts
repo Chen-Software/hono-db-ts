@@ -86,11 +86,12 @@ export function updateHash<
 	D extends Identifiable<string> & Versioned & Record<K, string>,
 	T,
 >(key: K, ctor: { from(data: D): T }) {
-	return withVersionBump((entity: D, patch: Partial<D>): T =>
-		versionedUpdate(
-			(d) => ctor.from(withContentHash(d, key)),
-			(e) => e.id,
-		)(entity, patch),
+	return withVersionBump(
+		(entity: D, patch: Partial<D>): T =>
+			versionedUpdate(
+				(d) => ctor.from(withContentHash(d, key)),
+				(e) => e.id,
+			)(entity, patch),
 	);
 }
 

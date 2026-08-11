@@ -75,40 +75,49 @@ function miniModule(): SchemaModule<Mini> {
 
 describe("composeCapabilities — array form", () => {
 	it("auto-prepends Capable and registers declared capacities in order", () => {
-		const composed = composeCapabilities(makeModel() as any, [
-			JsonSerialisable,
-			Tag,
-		], miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			[JsonSerialisable, Tag],
+			miniModule(),
+		);
 		expect(capsOf(composed)).toEqual(["Capable", "JsonSerialisable", "Tag"]);
 	});
 
 	it("de-duplicates an explicit Capable (keeps it first, once)", () => {
-		const composed = composeCapabilities(makeModel() as any, [
-			Capable,
-			JsonSerialisable,
-		], miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			[Capable, JsonSerialisable],
+			miniModule(),
+		);
 		expect(capsOf(composed)).toEqual(["Capable", "JsonSerialisable"]);
 	});
 
 	it("applies Capable even when no capacity is declared", () => {
-		const composed = composeCapabilities(makeModel() as any, undefined, miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			undefined,
+			miniModule(),
+		);
 		expect(capsOf(composed)).toEqual(["Capable"]);
 	});
 
 	it("threads the schema module into the capacity (JsonSerialisable round-trips)", () => {
-		const composed = composeCapabilities(makeModel() as any, [
-			JsonSerialisable,
-		], miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			[JsonSerialisable],
+			miniModule(),
+		);
 		const json = (composed as any).toJSON({ name: "ada" });
 		expect(typeof json).toBe("string");
 		expect((composed as any).fromJSON(json)).toEqual({ name: "ada" });
 	});
 
 	it("produces a class a model can `extend` (the processed 'caps')", () => {
-		const composed = composeCapabilities(makeModel() as any, [
-			JsonSerialisable,
-			Immutable,
-		], miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			[JsonSerialisable, Immutable],
+			miniModule(),
+		);
 		class MiniModel extends composed {
 			static from(d: Mini) {
 				return new MiniModel(d);
@@ -127,28 +136,42 @@ describe("composeCapabilities — array form", () => {
 
 describe("composeCapabilities — object form", () => {
 	it("resolves capacity names via the registry", () => {
-		const composed = composeCapabilities(makeModel() as any, {
-			JsonSerialisable: true,
-			Tag: true,
-		}, miniModule());
+		const composed = composeCapabilities(
+			makeModel() as any,
+			{
+				JsonSerialisable: true,
+				Tag: true,
+			},
+			miniModule(),
+		);
 		expect(capsOf(composed)).toEqual(["Capable", "JsonSerialisable", "Tag"]);
 	});
 
 	it("is equivalent to the array form for the same declaration", () => {
-		const arr = composeCapabilities(makeModel() as any, [
-			JsonSerialisable,
-		], miniModule());
-		const obj = composeCapabilities(makeModel() as any, {
-			JsonSerialisable: true,
-		}, miniModule());
+		const arr = composeCapabilities(
+			makeModel() as any,
+			[JsonSerialisable],
+			miniModule(),
+		);
+		const obj = composeCapabilities(
+			makeModel() as any,
+			{
+				JsonSerialisable: true,
+			},
+			miniModule(),
+		);
 		expect(capsOf(arr)).toEqual(capsOf(obj));
 	});
 
 	it("throws on an unknown capacity name", () => {
 		expect(() =>
-			composeCapabilities(makeModel() as any, {
-				DoesNotExist: true,
-			}, miniModule()),
+			composeCapabilities(
+				makeModel() as any,
+				{
+					DoesNotExist: true,
+				},
+				miniModule(),
+			),
 		).toThrow(/unknown capacity "DoesNotExist"/);
 	});
 });

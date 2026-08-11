@@ -94,18 +94,20 @@ describe("SqlSerialisable registers itself (via Capable gatekeeper)", () => {
 		const C2 = Guarded(
 			SqlSerialisable(makeFooModel(), freshModule(), { name: "foos" }),
 		);
-		const caps = (C2 as unknown as {
-			prototype: { capacities?: Set<string> };
-		}).prototype.capacities;
+		const caps = (
+			C2 as unknown as {
+				prototype: { capacities?: Set<string> };
+			}
+		).prototype.capacities;
 		expect(caps).toBeUndefined();
 	});
 });
 
 describe("SqlSerialisable requires a table name", () => {
 	it("throws when `name` is omitted", () => {
-		expect(() => SqlSerialisable(Capable(makeFooModel()), freshModule())).toThrow(
-			/`name`/,
-		);
+		expect(() =>
+			SqlSerialisable(Capable(makeFooModel()), freshModule()),
+		).toThrow(/`name`/);
 	});
 });
 
@@ -127,14 +129,20 @@ describe("SqlSerialisable derives mod.sql / mod.sqlPg from the reflected schema"
 
 	it("skips mod.sqlPg when { both: false }", () => {
 		const mod = freshModule();
-		SqlSerialisable(Capable(makeFooModel()), mod, { name: "foos", both: false });
+		SqlSerialisable(Capable(makeFooModel()), mod, {
+			name: "foos",
+			both: false,
+		});
 		expect(mod.sqlPg).toBeUndefined();
 		expect(mod.sql).toBeDefined();
 	});
 
 	it("primary dialect 'pg' derives sql as postgres and sqlPg as sqlite", () => {
 		const mod = freshModule();
-		SqlSerialisable(Capable(makeFooModel()), mod, { name: "foos", dialect: "pg" });
+		SqlSerialisable(Capable(makeFooModel()), mod, {
+			name: "foos",
+			dialect: "pg",
+		});
 		// Both are still derived — just swapped.
 		expect(mod.sql).toBeDefined();
 		expect(mod.sqlPg).toBeDefined();
@@ -149,7 +157,9 @@ describe("SqlSerialisable lifts the SQL surface onto the class", () => {
 	});
 
 	it("static toRow maps the entity to SQL column values", () => {
-		const Ctor = compose() as unknown as { toRow: (e: Foo) => Record<string, unknown> };
+		const Ctor = compose() as unknown as {
+			toRow: (e: Foo) => Record<string, unknown>;
+		};
 		const row = Ctor.toRow({ id: "1", name: "x", n: 7, active: true });
 		expect(row.name).toBe("x");
 		expect(row.n).toBe(7);
@@ -163,12 +173,22 @@ describe("SqlSerialisable lifts the SQL surface onto the class", () => {
 			fromRow: (r: Record<string, unknown>) => Foo;
 		};
 		const row = Ctor.toRow({ id: "1", name: "x", n: 7, active: true });
-		expect(Ctor.fromRow(row)).toEqual({ id: "1", name: "x", n: 7, active: true });
+		expect(Ctor.fromRow(row)).toEqual({
+			id: "1",
+			name: "x",
+			n: 7,
+			active: true,
+		});
 	});
 
 	it("instance toRow() maps a live entity to a row", () => {
 		const Ctor = compose();
-		const inst = new Ctor({ id: "2", name: "y", n: 9, active: false }) as unknown as {
+		const inst = new Ctor({
+			id: "2",
+			name: "y",
+			n: 9,
+			active: false,
+		}) as unknown as {
 			toRow: () => Record<string, unknown>;
 		};
 		expect(inst.toRow().name).toBe("y");
@@ -189,7 +209,12 @@ describe("SqlSerialisable statics exist ONLY when the capacity is composed", () 
 	});
 
 	it("an instance of a plain model has NO toRow()", () => {
-		const inst = new (Capable(makeFooModel()))({ id: "1", name: "x", n: 1, active: true }) as unknown as {
+		const inst = new (Capable(makeFooModel()))({
+			id: "1",
+			name: "x",
+			n: 1,
+			active: true,
+		}) as unknown as {
 			toRow?: unknown;
 		};
 		expect(inst.toRow).toBeUndefined();

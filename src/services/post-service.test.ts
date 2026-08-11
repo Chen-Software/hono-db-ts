@@ -248,9 +248,12 @@ describe("PostService", () => {
 		});
 
 		it("returns 404 when publishing a missing post", async () => {
-			const res = await request("/11111111-1111-4111-8111-111111111111/publish", {
-				method: "POST",
-			});
+			const res = await request(
+				"/11111111-1111-4111-8111-111111111111/publish",
+				{
+					method: "POST",
+				},
+			);
 			expect(res.status).toBe(404);
 		});
 	});

@@ -1,6 +1,6 @@
 # Apply ttsc plugins (e.g. typia transform) at Bun runtime so `bun run`
 # type-checks/validates without a separate build step.
-preload = ["@ttsc/unplugin/bun-register"]
+preload = ["./src/preload.ts"]
 
 [test]
-preload = ["@ttsc/unplugin/bun-register"]
+preload = ["./src/preload.ts"]
