@@ -12,11 +12,10 @@ import { ProtobufEncodable } from "../capacities/protobuf-encodable";
 import { Referencible } from "../capacities/referencible";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
 import type { Timestamped } from "../capacities/timestamped";
-import type { Versioned } from "../capacities/versioned";
+import { Versioned } from "../capacities/versioned";
 import type { Blake3 } from "../tags/format-string-blake3";
 import type { Reference } from "../tags/reference";
 import type { SqlSchemaModule } from "../capacities/sql-tablisable";
-import { Table } from "drizzle-orm";
 import { defineModel } from "./base";
 import { User, type UserSchema } from "./user";
 
@@ -198,6 +197,11 @@ const PostBase = defineModel<PostData>({
 				],
 			},
 		},
+		// Versioned: gives `Post` the version toolkit (`Post.latestOf`,
+		// `post.isNewerThan`, `Post.versionedUpdate`, …) and owns the
+		// construction-time `updated_at` default (first version == created_at).
+		// The append-only history itself still lives in the PostRepo store.
+		Versioned,
 	],
 });
 
@@ -234,6 +238,10 @@ class Post extends PostBase implements PostData {
 	 *  `body` by `createAssertHash` (construction) or `updateHash` (update).
 	 *  Supplied by the `ContentAddressable<"body">` capacity. */
 	declare readonly hash: string & Blake3;
+
+	// `Versioned` capacity — instance-side version comparisons.
+	declare isNewerThan: (other: Post) => boolean;
+	declare compareVersions: (other: Post) => number;
 
 	private constructor(data: Classifiable<PostData>) {
 		super(data);
@@ -307,12 +315,40 @@ class Post extends PostBase implements PostData {
 	declare static toJSON: (input: PostData) => string;
 	declare static fromJSON: (input: string) => PostData;
 
-	// `SqlSerialisable` lifts these statics onto the class at compose time — they
-	// exist ONLY because the capacity is enabled. `table` is the drizzle `Table`;
-	// `toRow` / `fromRow` map between the entity and a SQL row.
-	declare static table: Table;
-	declare static toRow: (e: PostData) => Record<string, unknown>;
-	declare static fromRow: (row: Record<string, unknown>) => PostData;
+	// `Versioned` capacity lifts these onto the class at compose time — they
+	// exist ONLY because the capacity is enabled.
+	declare static latestOf: <T extends IdentifiableSchema<UUID> & Versioned>(
+		history: T[],
+	) => T;
+	declare static isNewerThan: <T extends IdentifiableSchema<UUID> & Versioned>(
+		a: T,
+		b: T,
+	) => boolean;
+	declare static compareVersions: <
+		T extends IdentifiableSchema<UUID> & Versioned,
+	>(
+		a: T,
+		b: T,
+	) => number;
+	declare static nextUpdatedAt: <T extends IdentifiableSchema<UUID> & Versioned>(
+		data: T,
+	) => number;
+	declare static withVersionBump: <
+		T extends IdentifiableSchema<UUID> & Versioned,
+	>(
+		updater: (entity: T, patch: Partial<T>) => T,
+	) => (entity: T, patch: Partial<T>) => T;
+	declare static versionedUpdate: <
+		T extends IdentifiableSchema<UUID> & Versioned,
+	>(
+		reconstruct: (data: T) => T,
+		idAccessor: (entity: T) => string,
+	) => (entity: T, patch: Partial<T>) => T;
+	declare static createVersionedUpdate: <
+		T extends IdentifiableSchema<UUID> & Versioned,
+	>(
+		reconstructor: (data: T) => T,
+	) => (entity: T, patch: Partial<T>) => T;
 
 	// ---- static functions ---------------------------------------------------
 	// NOTE: `toJSON` / `fromJSON` (and JSON-override construction) are provided

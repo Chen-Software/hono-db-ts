@@ -3,7 +3,7 @@ import { blake3 } from "@noble/hashes/blake3.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import type { Blake3 } from "../tags/format-string-blake3";
 import type { Identifiable } from "./identifiable";
-import { type Versioned, versionedUpdate } from "./versioned";
+import { type Versioned, versionedUpdate, withVersionBump } from "./versioned";
 import { type ImmutableSchema, createUpdate } from "./immutable";
 
 /**
@@ -162,8 +162,12 @@ export function updateHash<
 	D extends Identifiable<string> & Versioned & Record<K, string>,
 	T,
 >(key: K, ctor: { from(data: D): T }) {
-	return (entity: D, patch: Partial<D>): T =>
-		versionedUpdate(entity, patch, (d) => ctor.from(withContentHash(d, key)));
+	return withVersionBump((entity: D, patch: Partial<D>): T =>
+		versionedUpdate(
+			(d) => ctor.from(withContentHash(d, key)),
+			(e) => e.id,
+		)(entity, patch),
+	);
 }
 
 // ---------------------------------------------------------------------------

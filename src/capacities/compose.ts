@@ -6,12 +6,14 @@ import { Connectable } from "./connectable";
 import { Derivable } from "./derivable";
 import { Immutable } from "./immutable";
 import { JsonSerialisable } from "./json-serialisable";
+import { Persistable } from "./persistable";
 import { ProtobufEncodable } from "./protobuf-encodable";
 import { Reactive } from "./reactive";
 import type { SchemaModule } from "./schema-module";
 import { SqlSerialisable } from "./sql-serialisable";
 import { Triggerable } from "./triggerable";
 import { Validatable } from "./validatable";
+import { Versioned } from "./versioned";
 
 /**
  * `composeCapabilities` — the declarative capacity-chaining helper.
@@ -137,6 +139,7 @@ for (const [name, fn] of [
 	["Derivable", Derivable],
 	["Connectable", Connectable],
 	["SqlSerialisable", SqlSerialisable],
+	["Versioned", Versioned],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
