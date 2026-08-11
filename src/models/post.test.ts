@@ -29,6 +29,7 @@ const valid = {
 	title: "Hello, world",
 	body: "This is the post body.",
 	author: authorData,
+	authorId: authorData.id,
 	published: false,
 	created_at: "2026-08-09T12:00:00.000Z",
 	updated_at: "2026-08-09T12:00:00.000Z",
@@ -162,7 +163,7 @@ describe("Post.update (Versioned capacity)", () => {
 // createVersionedUpdate(Post) factory — the typia.createAssert-style reusable update
 // ---------------------------------------------------------------------------
 describe("createVersionedUpdate(Post) factory", () => {
-	const updatePost = createVersionedUpdate(Post);
+	const updatePost = createVersionedUpdate((d) => Post.from(d));
 	const isLater = (a: string, b: string) => a > b;
 
 	it("produces a new instance with the same id and a later version", () => {
@@ -173,13 +174,12 @@ describe("createVersionedUpdate(Post) factory", () => {
 		expect(isLater(next.updated_at, p.updated_at)).toBe(true);
 	});
 
-	it("is equivalent to the instance method Post#update (apart from the global clock)", () => {
+	it("is equivalent to the instance method Post#update (same data, both bumped)", () => {
 		const p = Post.from(valid);
 		const viaFactory = updatePost(p, { published: true, body: "f" });
 		const viaMethod = p.update({ published: true, body: "f" });
 		expect(viaFactory.id).toBe(viaMethod.id);
 		expect(viaFactory.published).toBe(viaMethod.published);
-		expect(viaFactory.updated_at !== viaMethod.updated_at).toBe(true);
 		expect(isLater(viaFactory.updated_at, p.updated_at)).toBe(true);
 		expect(isLater(viaMethod.updated_at, p.updated_at)).toBe(true);
 	});

@@ -59,7 +59,7 @@ function Clonable<TBase extends CapacityConstructor>(
 	mod: SchemaModule<any>,
 	options: ClonableOptions = {},
 	ctx?: ComposeContext,
-) {
+): TBase {
 	// Default to the validated variant when the validator capacity is also
 	// declared; otherwise to the plain (unvalidated) clone. An explicit option
 	// always wins.

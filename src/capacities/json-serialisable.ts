@@ -72,7 +72,7 @@ function JsonSerialisable<TBase extends CapacityConstructor>(
 	mod: SchemaModule<any>,
 	_options: JsonSerialisableOptions = {},
 	ctx?: ComposeContext,
-) {
+): TBase {
 	const { toJSON } = mod;
 	Base.prototype.capacities && Base.prototype.addCapacity("JsonSerialisable");
 

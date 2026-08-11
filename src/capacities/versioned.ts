@@ -87,7 +87,7 @@ export function versionedUpdate<T extends Identifiable<string> & Versioned>(
 export function createVersionedUpdate<T extends Identifiable<string> & Versioned>(
 	reconstructor: (data: T) => T,
 ) {
-	return versionedUpdate(reconstructor, (e) => e.id);
+	return withVersionBump(versionedUpdate(reconstructor, (e) => e.id));
 }
 
 /**

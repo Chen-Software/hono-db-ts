@@ -1,31 +1,39 @@
 import typia from "typia";
-import { blake3 } from "@noble/hashes/blake3.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import type { Blake3 } from "../tags/format-string-blake3";
 import type { Identifiable } from "./identifiable";
-import { type Versioned, versionedUpdate, withVersionBump } from "./versioned";
 import { type ImmutableSchema, createUpdate } from "./immutable";
+import type { Versioned } from "./versioned";
+import {
+	type Hashable,
+	hashContent,
+	verifyContentAddress,
+	withContentHash,
+	createAssertHash,
+} from "./hashable";
+import { versionedUpdate, withVersionBump } from "./versioned";
 
 /**
- * ContentField maps the (model-specific) content key to a single `string`
- * field. By making the key a type parameter we let each model name its payload
- * field whatever it likes — `content` by default, or `body`, `text`, ...
- *
- * The field is `readonly`: a content-addressed entity's payload is immutable —
- * you never mutate it in place, you reconstruct. That is exactly why
- * `ContentAddressable` extends the `Immutable` capacity.
+ * Re-export the hash primitives from `hashable` so existing importers of
+ * `content-addressable` keep working. The *hash* concern now lives in
+ * `hashable.ts`; this module owns only the content-ADDRESSING concern
+ * (the content-keyed relationship between a payload and its hash).
  */
-type ContentField<K extends string> = { readonly [P in K]: string };
+export {
+	type Hashable,
+	hashContent,
+	verifyContentAddress,
+	withContentHash,
+	createAssertHash,
+};
 
 /**
  * ContentAddressable is the capacity for CONTENT-ADDRESSED entities.
  *
- * The entity carries a content payload (named by `K`, default `"content"`)
- * together with the BLAKE3 hash of that payload. The hash *is* the address:
- * identical content yields an identical hash, and (collision-resistantly) the
- * hash uniquely identifies the content. This is the foundation for dedup,
- * tamper-proofing, and immutable content stores (Git blobs, IPFS-style
- * addressing, content-addressed storage).
+ * It extends `Hashable` (carrying the `hash` field + hashing primitives) and
+ * adds the *addressing* semantics: the entity's content payload (named by `K`,
+ * default `"content"`) is immutably tied to its hash. Identical content yields
+ * an identical hash, and (collision-resistantly) the hash uniquely identifies
+ * the content. This is the foundation for dedup, tamper-proofing, and immutable
+ * content stores (Git blobs, IPFS-style addressing, content-addressed storage).
  *
  * `K` defaults to `"content"`, so the common case needs no annotation:
  * ```ts
@@ -45,97 +53,13 @@ type ContentField<K extends string> = { readonly [P in K]: string };
  * hash string. We deliberately do NOT use an object-scoped tag to assert
  * `hash === blake3(content)` — content is immutable, so the hash must be
  * RE-DERIVED every time content is set (at construction and on update), not
- * merely validated once. That job belongs to the runtime helpers below:
- * `createAssertHash` (construction) and `updateHash` (update).
+ * merely validated once. That job belongs to the runtime helpers in `hashable`
+ * (`createAssertHash` at construction, `verifyContentAddress` as a check) and to
+ * `updateHash` below (update-time re-hash).
  *
  * @typeParam K - the name of the content field. Defaults to `"content"`.
  */
-export type ContentAddressable<K extends string = "content"> = ImmutableSchema &
-	ContentField<K> & {
-		/** BLAKE3 hash (lowercase 64-hex) of the content field — the address. */
-		readonly hash: string & Blake3;
-	};
-
-// ---------------------------------------------------------------------------
-// Hashing helpers (the runtime counterpart to the type-level capacity)
-// ---------------------------------------------------------------------------
-
-/**
- * Compute the canonical 32-byte BLAKE3 digest of `content`, hex-encoded as a
- * lowercase 64-character string — exactly the form accepted by `Blake3`.
- *
- * This is the *address* of the content: equal content → equal hash. Store its
- * result in the entity's `hash` field (typically via `withContentHash`).
- */
-export function hashContent(content: string): string {
-	return bytesToHex(blake3(utf8ToBytes(content)));
-}
-
-/**
- * Verify that `entity.hash` is the correct BLAKE3 digest of the content stored
- * under `contentKey`. Returns `false` if the content was tampered with, the
- * hash is stale, or the content field is missing — the core integrity
- * guarantee of content-addressing.
- *
- * @param entity - a ContentAddressable instance or plain data object.
- * @param contentKey - the content field name ("content" by default; "body" for
- *   a Post). MUST be passed explicitly for non-default keys, because the key
- *   name is erased at runtime and the function needs to know which field to hash.
- */
-export function verifyContentAddress<K extends string>(
-	entity: ContentAddressable<K>,
-	contentKey: K,
-): boolean {
-	const content = (entity as Record<string, unknown>)[contentKey];
-	if (typeof content !== "string") return false;
-	return entity.hash === hashContent(content);
-}
-
-/**
- * Attach the correct BLAKE3 hash to a content payload, recomputing it from
- * `contentKey` and OVERWRITING any incoming `hash`. Returns the fully-addressed
- * object. This is the primitive behind `createAssertHash` (construction) and
- * `updateHash` (update).
- *
- * Generic over `D` (the full entity data shape) so the result still carries
- * every other field — it is assignable back to `D` (e.g. `PostData`), which is
- * what lets the caller feed it straight into a model's `from`.
- *
- * @example
- * const post = Post.from(withContentHash({ ...data, body }, "body"));
- */
-export function withContentHash<K extends string, D extends Record<K, string>>(
-	payload: D & { hash?: string },
-	contentKey: K,
-): D & { hash: string } {
-	const content = payload[contentKey];
-	return { ...payload, hash: hashContent(content) };
-}
-
-// ---------------------------------------------------------------------------
-// Construction-time: stamp the hash (the "assert" half)
-// ---------------------------------------------------------------------------
-
-/**
- * createAssertHash — bind a content field name and return a function that STAMPS
- * the correct BLAKE3 hash onto a payload, recomputing it from `key` and ignoring
- * any caller-supplied hash. This is the construction-time counterpart to
- * `updateHash`: wire it into a model's `from`/`constructor` so every new
- * instance is correctly addressed without callers having to compute the hash.
- *
- * Because objects are immutable, the constructor is the ONLY place that needs to
- * set the hash up — once stamped, it can never drift.
- *
- * @example
- * const assertBodyHash = createAssertHash("body");
- * // inside Post.from:
- * return new Post(assertBodyHash(data));
- */
-export function createAssertHash<K extends string>(key: K) {
-	return <D extends Record<K, string>>(
-		payload: D & { hash?: string },
-	): D & { hash: string } => withContentHash(payload, key);
-}
+export type ContentAddressable<K extends string = "content"> = Hashable<K>;
 
 // ---------------------------------------------------------------------------
 // Update-time: recompute the hash on every content set (the "mutation" half)

@@ -74,7 +74,7 @@ function Comparable<TBase extends CapacityConstructor>(
 	mod: SchemaModule<any>,
 	options: ComparableOptions = {},
 	ctx?: ComposeContext,
-) {
+): TBase {
 	// Structural comparison cores, pulled from the schema module.
 	const eqFn = mod.equals as (x: any, y: any) => boolean;
 	const lessFn = mod.less as (x: any, y: any) => boolean;
