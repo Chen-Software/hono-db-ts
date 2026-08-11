@@ -83,7 +83,15 @@ export class PostService {
 		if (await this.opts.repo.findById(input.id)) {
 			throw new PostAlreadyExistsError(input.id);
 		}
-		const post = Post.from({ ...input, updated_at: input.created_at });
+		const post = Post.from({
+			...input,
+			updated_at: input.created_at,
+			// `PostData` carries both the nested `author` (for embedding) and the
+			// `authorId` FK. The transport sends the full `author`; derive the FK
+			// from it so `Post.from`'s typia validation (which requires `authorId`)
+			// passes without the client having to supply the duplicate id.
+			authorId: input.author.id,
+		});
 		await this.opts.repo.create(post, {
 			topic: "post.created",
 			payload: { id: post.id },

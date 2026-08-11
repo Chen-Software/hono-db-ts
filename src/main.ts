@@ -39,7 +39,7 @@ const postService = new PostService({ repo: postRepo, bus, assets: assetStore })
 const app = new Hono();
 app.get("/", (c) => c.json({ status: "ok" }));
 app.route("/users", userServiceApp(userService));
-app.route("/posts", postServiceApp(postService));
+app.route("/posts", postServiceApp(postService, postRepo));
 
 const PORT = Number(Bun.env["PORT"] ?? 3000);
 
