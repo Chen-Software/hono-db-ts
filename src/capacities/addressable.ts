@@ -9,14 +9,14 @@ const isAddressable = typia.createIs<Addressable<"uri">>();
 const validateAddressable = typia.createValidate<Addressable<"uri">>();
 console.log(
 	isAddressable({
-		uri: "http://localhost:8080",
-		url: "https://localhost:8080",
+		uri: "http://localhost:3000",
+		url: "https://localhost:3000",
 	}),
 );
 console.log(
 	validateAddressable({
-		uri: "http://localhost:8080",
-		url: "https://localhost:8080",
+		uri: "http://localhost:3000",
+		url: "https://localhost:3000",
 	}),
 );
 export { type Addressable, isAddressable, validateAddressable };

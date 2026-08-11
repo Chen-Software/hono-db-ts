@@ -235,7 +235,7 @@ db:generate ──▶ migrations/NNNN_create_<table>.sql   (idempotent; skips co
 
 ```bash
 bun install            # also runs `prepare` → model:build && db:generate
-bun run dev            # local Bun server (in-memory stores), http://localhost:8080
+bun run dev            # local Bun server (in-memory stores), http://localhost:3000
 bun run seed:test      # seed 100 users + 100 posts and run queries locally
 ```
 

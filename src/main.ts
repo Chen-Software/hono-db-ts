@@ -41,7 +41,7 @@ app.get("/", (c) => c.json({ status: "ok" }));
 app.route("/users", userServiceApp(userService));
 app.route("/posts", postServiceApp(postService));
 
-const PORT = Number(Bun.env["PORT"] ?? 8080);
+const PORT = Number(Bun.env["PORT"] ?? 3000);
 
 console.log(`Serving app on http://localhost:${PORT}`);
 
