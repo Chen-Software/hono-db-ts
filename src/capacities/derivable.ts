@@ -1,7 +1,7 @@
 import { BusRegistry, type EventBus } from "../services/event-bus";
 import type { CapacityConstructor } from "./capable";
 import { Reactive, type ReactiveOptions } from "./reactive";
-import { Registry } from "./registry";
+import { defaultIdentityMap } from "../storage/identity-map";
 import { addLifecycleHook } from "./triggerable";
 
 export interface DerivedSpec {
@@ -166,7 +166,7 @@ function Derivable<TBase extends CapacityConstructor>(
 		// Honest gap: if the target instance isn't loaded in the identity map,
 		// we can't reach it here — that's the whole point of `lazy` + a scheduled
 		// drain or an external subscriber that reloads it first.
-		const inst = Registry.get(schemaName(), String(id)) as any;
+		const inst = defaultIdentityMap.get(schemaName(), String(id)) as any;
 		if (!inst) return undefined;
 		return inst.recompute?.(attr, _event);
 	};

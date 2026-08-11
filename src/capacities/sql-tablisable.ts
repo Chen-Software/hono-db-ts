@@ -571,6 +571,67 @@ function makeMappers(plans: ColPlan[], dialect: SqlDialect) {
  * // def.toRow  — entity → row (booleans → 0/1, objects → JSON text)
  * // def.fromRow— row → entity
  */
+/**
+ * `SqlModelPlan` — a SERIALIZABLE, drizzle-free description of a model's SQL
+ * projection. Produced at BUILD TIME by `scripts/model-build.ts` (where typia
+ * still runs) and saved to `src/generated/models.json`. `scripts/db-generate.ts`
+ * turns it into migration SQL; the runtime never needs typia because the plan
+ * already carries everything (`kind`, `nullable`, `isId`, `reference`, checks).
+ *
+ * This is the build-time artifact the user asked for: models are DERIVED during
+ * build, not at import time on Cloudflare Workers. The `ColPlan` shape is the
+ * raw plan; `SqlModelPlan` adds the table name + relations so generation is
+ * self-contained.
+ */
+export interface SqlModelPlan {
+	/** Table name, e.g. `"users"`. */
+	name: string;
+	/** Primary dialect the plan was derived for. */
+	dialect: SqlDialect;
+	/** Resolved model name used for FK lookups ("UserSchema"). */
+	modelName?: string;
+	/** Column plans — serializable, drizzle-free. */
+	columns: ColPlan[];
+	/** Foreign-key relations (column ↔ target model). */
+	relations: SqlRelationDef[];
+	/** CHECK constraints derived from reflected bounds. */
+	checks: SqlCheckDef[];
+}
+
+/**
+ * Derive a {@link SqlModelPlan} from a reflected JSON schema. Unlike
+ * {@link toDrizzleTable}, this builds NO drizzle `Table` and emits NO `sql`
+ * template — it only plans, so the result is JSON-serializable and can be saved
+ * for the runtime to consume. Reuses the same `planColumns` / `planChecks` /
+ * `planRelations` / `modelNameOf` helpers, so the plan stays in lockstep with
+ * the live drizzle derivation.
+ */
+export function deriveSqlPlan(
+	schema: JsonSchema,
+	options: SqlTablisableOptions,
+): SqlModelPlan {
+	const dialect = options.dialect ?? "sqlite";
+	const root: JsonSchema =
+		"schema" in schema && schema.schema && typeof schema.schema === "object"
+			? (schema.schema as JsonSchema)
+			: schema;
+
+	const columns = planColumns(root);
+	const emitChecks = options.check !== false;
+	const checks = emitChecks ? planChecks(columns, dialect) : [];
+	const relations = planRelations(columns);
+	const modelName = modelNameOf(schema, options.name);
+
+	return {
+		name: options.name,
+		dialect,
+		...(modelName ? { modelName } : {}),
+		columns,
+		relations,
+		checks,
+	};
+}
+
 export function toDrizzleTable<T = any>(
 	schema: JsonSchema,
 	options: SqlTablisableOptions,

@@ -1,7 +1,7 @@
 import { matchesFilter, type Store, StoreRegistry } from "../storage/store";
 import type { CapacityConstructor } from "./capable";
 import type { ComposeContext } from "./compose";
-import { Registry } from "./registry";
+import { defaultIdentityMap } from "../storage/identity-map";
 
 export interface PersistableOptions {
 	/**
@@ -44,8 +44,9 @@ export interface PersistableOptions {
  * deletion-of-blob subscribes to `afterDelete`. Because these are EVENTS (not
  * the synchronous `onUpdate`/`onDelete` hooks), persistence can never block or
  * reject a transaction — exactly the split we settled on. And `load` re-
- * registers the instance into the `Registry` identity map, so `post.getUser()`
- * still resolves after loading from S3, and cascade-delete flows for free
+ * registers the instance into the shared `defaultIdentityMap` (see
+ * `../storage/identity-map`), so `post.getUser()` still resolves after loading
+ * from S3, and cascade-delete flows for free
  * (Referencible's sync `onDelete` hook deletes children, each child's
  * `afterDelete` then drops its blob).
  *
@@ -140,7 +141,7 @@ function Persistable<TBase extends CapacityConstructor>(
 				const objs = await store.query({ prefix, filter });
 				return objs.map((o) => new Ctor(fromBytes(Ctor, o.data)));
 			}
-			const all = Registry.all(Ctor.schemaName);
+			const all = defaultIdentityMap.all(Ctor.schemaName);
 			return filter ? all.filter((i: any) => matchesFilter(i, filter)) : all;
 		}
 	};

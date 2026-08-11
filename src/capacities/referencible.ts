@@ -1,6 +1,6 @@
 import type { CapacityConstructor } from "./capable";
-import { Registry } from "./registry";
 import { addLifecycleHook } from "./triggerable";
+import { getInstanceMap } from "../storage/identity-map";
 
 // Relation vocabulary is defined next to the `Reference` typia tag (the single
 // source of truth shared by this in-memory resolver, the SQL FK projection, and
@@ -102,7 +102,8 @@ function Referencible<TBase extends CapacityConstructor>(
 	// --- register every constructed instance into the identity map ----------
 	// (once, not per-relation — idempotent `Map.set` regardless)
 	addLifecycleHook(Base, "onConstruct", (inst: any) => {
-		if (inst?.id != null) Registry.register(modelName, String(inst.id), inst);
+		if (inst?.id != null)
+			getInstanceMap(inst).register(modelName, String(inst.id), inst);
 		return inst;
 	});
 
@@ -131,9 +132,9 @@ function Referencible<TBase extends CapacityConstructor>(
 			value: function (this: any) {
 				const tn = targetName();
 				if (many) {
-					return Registry.filter(tn, (far: any) => matches(this, far));
+					return getInstanceMap(this).filter(tn, (far: any) => matches(this, far));
 				}
-				const found = Registry.find(tn, (far: any) => matches(this, far));
+				const found = getInstanceMap(this).find(tn, (far: any) => matches(this, far));
 				if (found) return found;
 				if (join === "inner") {
 					throw new Error(
@@ -149,7 +150,7 @@ function Referencible<TBase extends CapacityConstructor>(
 		if (rel.onDelete && rel.onDelete !== "noAction") {
 			addLifecycleHook(Base, "onDelete", (inst: any) => {
 				const tn = targetName();
-				const related = Registry.filter(tn, (far: any) => matches(inst, far));
+				const related = getInstanceMap(inst).filter(tn, (far: any) => matches(inst, far));
 				if (rel.onDelete === "restrict" && related.length > 0) {
 					throw new Error(
 						`Referencible: cannot delete ${modelName} ${inst.id} — ` +
@@ -170,7 +171,8 @@ function Referencible<TBase extends CapacityConstructor>(
 
 	// --- deregister hook so `Triggerable.delete()` can drop this from the map
 	(Base as any).__deregister = (inst: any) => {
-		if (inst?.id != null) Registry.unregister(modelName, String(inst.id));
+		if (inst?.id != null)
+			getInstanceMap(inst).unregister(modelName, String(inst.id));
 	};
 
 	return Base;

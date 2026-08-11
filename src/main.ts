@@ -45,7 +45,4 @@ const PORT = Number(Bun.env["PORT"] ?? 8080);
 
 console.log(`Serving app on http://localhost:${PORT}`);
 
-export default {
-	port: PORT,
-	fetch: app.fetch,
-};
+Bun.serve({ port: PORT, fetch: app.fetch });
