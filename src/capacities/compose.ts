@@ -6,7 +6,6 @@ import { Connectable } from "./connectable";
 import { Derivable } from "./derivable";
 import { Immutable } from "./immutable";
 import { JsonSerialisable } from "./json-serialisable";
-import { Persistable } from "./persistable";
 import { ProtobufEncodable } from "./protobuf-encodable";
 import { Reactive } from "./reactive";
 import type { SchemaModule } from "./schema-module";

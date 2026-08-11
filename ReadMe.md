@@ -1,463 +1,282 @@
-# Hono + Drizzle ORM Starter
+# artefact — Hono + Drizzle + Cloudflare Workers (D1)
 
-A starter project for a REST API built with **Hono** and **Drizzle ORM**, run on **Bun** locally and deployable to **Cloudflare Workers**.
+A starter REST API for **Users** and **Posts**, built with **Hono** + **Drizzle ORM**,
+run locally on **Bun** and deployed to **Cloudflare Workers + D1**.
+
+It is deliberately organized as a **layered / hexagonal** application: the REST
+API is a *transport adapter*, not the system itself. Business logic lives in
+*application services* that depend only on *ports* (capabilities), and the rest
+of the stack — Postgres, S3/R2, queues, telemetry — is an interchangeable set of
+*infrastructure adapters*.
 
 ## Stack
 
-- [Bun](https://bun.sh) — runtime & test runner
-- [Hono](https://hono.dev) — web framework
-- [Drizzle ORM](https://orm.drizzle.team) — database access layer
+- [Bun](https://bun.sh) — runtime, bundler & test runner
+- [Hono](https://hono.dev) — web framework (used as the transport adapter)
+- [Drizzle ORM](https://orm.drizzle.team) — SQL access over D1 (and can target Postgres)
+- [typia](https://typia.io) — build-time schema/`validate` derivation (no runtime validator)
 - [Biome](https://biomejs.dev) — lint & format
-- [Cloudflare Workers](https://workers.cloudflare.com) — edge deployment
-- [D1](https://developers.cloudflare.com/d1/) — serverless SQLite database (Workers)
+- [Cloudflare Workers](https://workers.cloudflare.com) + [D1](https://developers.cloudflare.com/d1/) — edge deployment
 
-## Local development (Bun + SQLite)
+## Architecture
 
-```bash
-bun install          # install dependencies
-bun run dev          # start the Hono server in watch mode (SQLite, loads .env.dev)
-bun run db:generate  # (re)generate SQL migrations from the schema
-bun run db:migrate   # apply migrations to the SQLite database
+Top-down. **The REST API is a transport adapter into the application layer — it is
+not the "service" in the architectural sense.**
+
+```
+                 ┌──────────────────────────────┐
+   HTTP / REST   │         TRANSPORT            │   src/transport/*
+   (Hono)        │   user-controller,           │   maps HTTP → application ops
+                 │   post-controller            │   (thin; no business logic)
+                 └──────────────┬───────────────┘
+                                │   commands / queries
+                                ▼
+                 ┌──────────────────────────────┐
+                 │        APPLICATION           │   src/application/*
+                 │  UserService                  │   orchestrates use cases
+                 │  PostService                 │   depends ONLY on ports
+                 └──────────────┬───────────────┘
+                                │   ports / interfaces
+            ┌───────────────────┼────────────────────┬───────────────────┐
+            ▼                   ▼                     ▼                   ▼
+   ┌─────────────────┐ ┌───────────────┐    ┌──────────────┐   ┌──────────────────┐
+   │ PostRepository  │ │ PostAssetStore│    │EventPublisher│   │ Observability    │
+   │ UserRepository  │ │ (not BlobStore)│   │(domain events)│  │ (cross-cutting)  │
+   └────────┬────────┘ └──────┬────────┘    └──────┬───────┘   └────────┬─────────┘
+            │                 │                    │                    │
+            ▼                 ▼                    ▼                    ▼
+   ┌─────────────────┐ ┌───────────────┐   ┌──────────────┐  ┌──────────────────┐
+   │ PostRepo        │ │ LocalPostAsset│   │ InMemoryBus  │  │ Noop / OTEL      │
+   │ UserRepo        │ │ Store         │   │ (→ Queues…)  │  │ bridge           │
+   │ (SQL / blob)    │ │ (→ S3 / R2)   │   │              │  │                  │
+   └─────────────────┘ └───────────────┘   └──────────────┘  └──────────────────┘
+        INFRASTRUCTURE ADAPTERS — src/providers/*, src/repository/*, src/services/*
 ```
 
-By default **local dev** uses SQLite (`sqlite.db`), and the generic `.env.example`
-defaults to the production `d1` dialect.
+### 1. Transport — *how* you talk to the application
 
-> **`.env.example` and `.env.example.*` are templates — copy one to `.env`**
-> (e.g. `cp .env.example.neon .env`), never to `.env.dev.*` / `.env.neon` /
-> `.env.turso` / any other env filename. `.env` is the single config Bun
-> auto-loads; pick the matching `.env.example.*` for your dialect and copy it
-> to `.env`.
+`src/transport/*` are Hono apps that translate HTTP requests into application
+operations and map domain errors onto HTTP status codes. They contain **no
+business logic** and never name a database, a blob, or a queue.
 
-## Environment configuration
+```ts
+POST   /users            → userService.createUser(command)
+GET    /users?role=…     → userService.listUsers() | listUsersByRole(role)
+GET    /users/:id        → userService.getUser(id)
+DELETE /users/:id        → userService.deleteUser(id)
 
-The project ships **per-dialect** env files. Bun's `--env-file` flag loads the
-file you want; the relevant scripts already point at them:
-
-| File                    | `DATABASE_TYPE` | Used by                                   |
-| ----------------------- | --------------- | ----------------------------------------- |
-| `.env.dev`              | `sqlite`        | `bun run dev` (sqlite local dev)          |
-| `.env.dev.d1`           | `sqlite`        | `bun run dev` (local D1 → sqlite driver)  |
-| `.env.dev.turso`        | `turso` (file://) | `bun run dev` (local TursoDB)           |
-| `.env.dev.neon`         | `postgres`      | `bun run dev` (local Neon → local Postgres) |
-| `.env.dev.postgres` | `postgres`      | `bun run dev` (local Postgres)            |
-| `.env.dev.turso`    | `turso` (file://) | `bun run dev` (local TursoDB)           |
-| `.env.example`      | `d1`            | template — **copy to `.env`** (D1 default) |
-| `.env.example.neon` | `neon`          | template — **copy to `.env`** (Neon)      |
-| `.env.example.turso-cloud` | `turso` (libsql://) | template — **copy to `.env`** (Turso) |
-
-> **`bun run dev` is dialect-aware and runs a local dev server.** It reads
-> `DATABASE_TYPE` from `.env` (defaults to `d1` when missing):
->   - `d1` → local **`sqlite`** driver (closest to D1), `.env.dev.d1`
->   - `sqlite` → Bun server, `.env.dev`
->   - `postgres` → Bun server, `.env.dev.postgres`
->   - `neon` → local **Postgres** (Neon Local, via `docker compose up -d`),
->     Bun server, `.env.dev.neon`
->   - `turso` → local `file://` libSQL SDK, `.env.dev.turso` (never Turso Cloud)
-> The env file is picked by priority: `.env.dev` (if it matches the dialect) →
-> `.env.dev.<type>` → `.env.dev`.
-
-**LOCAL-ONLY dialects (never available on Cloudflare Workers):**
-- **`sqlite`** — `bun:sqlite` cannot run inside a Worker (no such driver there).
-- **`postgres`** — `postgres-js` uses Node.js TCP, which Workers don't support.
-
-Both only affect the **local Bun server** (`bun run dev*`). The Worker never
-imports them.
-
-**DEPLOYABLE dialects (what the Worker actually uses):**
-- **`d1`** — the Worker's `env.DB` D1 binding. `bun run deploy` targets the
-  top-level `wrangler.jsonc` environment, which has **no Hyperdrive**.
-- **`neon`** — serverless Postgres on the Worker via a **Hyperdrive** binding.
-  `bun run deploy:neon` targets the `neon` wrangler environment (`--env=neon`),
-  which **does include Hyperdrive**.
-
-The Worker selects its database at runtime from the bindings present (see
-`src/worker.ts`): if a `HYPERDRIVE` binding exists → Neon; otherwise → D1. So
-`DATABASE_TYPE` / `DATABASE_URL` in `.env` are irrelevant to the deployed
-Worker — they only configure the local Bun server.
-
-To point the app at a given dialect, either rely on the scripts or load a file
-explicitly:
-
-```bash
-bun run dev                      # picks the right env file from .env's DATABASE_TYPE
-# To run a different dialect locally, set DATABASE_TYPE in .env (and the
-# matching .env.dev.* / URL), then `bun run dev` again — no separate dev:* scripts.
-bun run --env-file=.env.example postgres… # or load any env file explicitly
+POST   /posts            → postService.create(command)
+GET    /posts            → postService.list()
+GET    /posts/:id        → postService.get(id)
+GET    /posts/:id/history→ postService.getHistory(id)
+PATCH  /posts/:id        → postService.edit(id, patch)
+POST   /posts/:id/publish→ postService.publish(id)
+DELETE /posts/:id        → postService.delete(id)
 ```
 
-Variables:
+The same `UserService` / `PostService` could be driven by a CLI adapter or a
+queue consumer with **zero changes** to the application layer.
 
-| Variable          | Description                                   | Default                                              |
-| ----------------- | --------------------------------------------- | ---------------------------------------------------- |
-| `DATABASE_TYPE`   | Dialect: `sqlite`, `postgres`, `neon`, `turso`, or `d1` | `d1` (in `.env.example`) / `sqlite` (in `.env.dev`) |
-| `DATABASE_URL`    | Connection URL for the selected dialect       | `sqlite.db` (SQLite) / `postgres://…:5432/mydb` (PG) |
-| `TURSO_URL`       | Turso connection URL (`file:///` local, `libsql://` cloud) | `file:///…/tursodb.db` (local)             |
-| `TURSO_AUTH_TOKEN`| Turso Cloud auth token (cloud only)           | —                                                  |
-| `DATABASE_POOL_SIZE` | Postgres/Neon connection pool size (optional) | `10`                                                 |
+### 2. Application — *what* the system does
 
-### When is `DATABASE_TYPE` read?
+`src/application/*` orchestrates use cases. `UserService` and `PostService`
+depend only on **ports**, never on infrastructure:
 
-`DATABASE_TYPE` / `DATABASE_URL` are **build-time** values. They are read **once, at bundle time** by the macros in `src/macros/db.ts` (which run under `bun run dev`, `bun run build`, and CI) and inlined into the emitted code as literals. They are **never** read at runtime and are **not** part of the Cloudflare Worker bundle:
-
-- **Local dev / CI** — the macros run and bake the selected dialect into the bundle.
-- **Cloudflare Worker** — the Worker reads its database binding at runtime (`env.HYPERDRIVE` → Neon, else `env.DB` → D1) and has no macros; `DATABASE_TYPE` / `DATABASE_URL` are irrelevant there.
-
-> Because the value is baked in at build time, set `DATABASE_TYPE` in `.env`
-> (and the matching `.env.dev.*` / URL), then **restart** `bun run dev` /
-> re-run `bun run build` for it to take effect.
-
-### Dialects
-
-- `d1` (production default) — the Cloudflare Worker's D1 binding (`env.DB`). There is **no local driver** for it; locally this throws a clear error. Use `bun run worker:dev` (or deploy) for the D1 path.
-- `sqlite` (local dev default) — local `bun:sqlite` driver, used via `bun run dev`.
-- `postgres` — local `postgres` driver (requires the `DATABASE_URL` and a running Postgres), used via `bun run dev`.
-- `neon` — serverless Postgres hosted on Neon. Uses the same `postgres-js` driver + schema as `postgres`, but reads a Neon connection string. Local dev uses a local Postgres (`.env.dev.neon`); deploy via Hyperdrive.
-- `turso` — Turso (edge SQLite, SQLite-compatible). `TURSO_URL` decides local vs cloud: `file:///` (local TursoDB, `.env.dev.turso`) or `libsql://` + `TURSO_AUTH_TOKEN` (Turso Cloud). `tursodb` / `turso-cloud` are accepted aliases.
-
-Detailed per-type guides (env vars, cloud setup, architecture):
-
-- [Turso (`turso`)](docs/db-type-turso.md)
-- [Neon (`neon`)](docs/db-type-neon.md)
-
-For Postgres dialect testing:
-
-```bash
-docker compose up -d # start local Postgres on :5432
-DATABASE_TYPE=postgres bun run db:migrate # apply the Postgres migrations
-bun run test               # run the endpoint tests for the active DATABASE_TYPE
-# then set DATABASE_TYPE=postgres and DATABASE_URL in .env to run the app against Postgres
+```ts
+PostService
+  ├── PostRepository   // port: post persistence (findById / listByAuthor / historyOf)
+  ├── EventPublisher   // port: domain events (post.created, post.published, …)
+  └── PostAssetStore   // port: media, expressed as a BUSINESS capability
 ```
 
-The Postgres integration tests (`src/routes/*.postgres.integration.test.ts`)
-exercise the same `/users` API surface against a live Postgres. Tests live next
-to the code they cover and are discovered purely by filename suffix — no central
-`tests/` folder. `bun run test` splits **unit** vs **integration**: it always
-runs `*.unit.test.ts` (no DB), and runs only the integration tests whose db-type
-suffix matches the active `DATABASE_TYPE`, using the db-type dev env
-(`.env.dev.<type>`), overridable with `--env-file=<file>`.
-`bun run test --all` runs every db-type's integration tests. Filters let you
-narrow the run — `--unit`, `--integration`, or `--test <name>` (matches a test
-file whose path contains `<name>`). These are mutually exclusive with `--all`.
+Key design choices already in place:
 
-Before integration tests the runner runs `INTEGRATION_TEST_SETUP_SCRIPT` if set.
-It may be a `.ts` path (run via `bun run`), a `.sh`/`.bash` path (run via
-`bash`), or an inline shell command. A ready-to-use Postgres setup is
-`scripts/postgres-container-setup.ts`, which detects a container runtime
-(priority `container` > `podman` > `docker`) and runs `<runtime> compose up -d`,
-or skips (exit 0) when none is available so a CI-provided Postgres can be used.
-Cap its runtime with `INTEGRATION_TEST_SETUP_TIMEOUT` (ms, default 120s) or
-disable it with `INTEGRATION_TEST_SETUP_SKIP=1`. d1/turso/sqlite run no setup.
-Per-test timeouts default to 10s for `--unit` and 30s for integration / mixed
-runs, overridable with `--timeout=<ms>`; coverage is opt-in via `--coverage`
-(+ optional `--coverage-dir=<dir>`).
+- **Repository exposes domain concepts, not SQL.** `PostRepository` offers
+  `findById`, `listByAuthor`, `historyOf`, `append` — it never says `SELECT` or
+  `INSERT`. Swapping the adapter (in-memory → Postgres → read-model) changes
+  nothing in the service.
+- **Assets are a business capability, not a generic blob API.** The port is
+  `PostAssetStore.storeImage(postId, image)` / `deleteImage(assetId)`, *not* a
+  `BlobStore.put/get/delete`. The application asks for what it needs; the adapter
+  decides the key scheme and backend (S3, R2, local fs, memory).
+- **Publishing is a use case, not a separate service** (`PostService.publish()`).
+  If the system grows (scheduling, fan-out), it can be promoted to its own
+  `PublishingService` *without changing the ports it uses*.
+- **Do not create a service per noun.** `UserService`/`PostService` are small,
+  capability-oriented facades — not CRUD wrappers for every entity.
 
-### Neon (serverless Postgres)
+### 3. Ports — the seams the application owns
 
-Neon is a serverless Postgres. Because `neon` maps to the same `postgres-js`
-driver + schema as `postgres`, it works with the same repo and test suite.
+`src/ports/*` are the interfaces the application depends on. **Who owns the
+abstraction:** the application layer defines the port; infrastructure implements
+it. The service can't tell a Postgres repo from an in-memory one.
 
-```bash
-# one-time setup — link a Neon project and pull its connection string
-bunx neon link               # picks your Neon org/project/branch
-bunx neon checkout main      # pin a branch
-bunx neon env pull           # writes DATABASE_URL etc. into .env
-cp .env.example.neon .env    # copy the Neon template to .env
-# fill in HYPERDRIVE_ID (from `bun x wrangler hyperdrive list`) for deploys
+| Port | File | Shape |
+| ---- | ---- | ----- |
+| `UserRepository` | `ports/user-repository.ts` | `insert / load / list / listByRole / delete` |
+| `PostRepository` | `ports/post-repository.ts` | `findById / listLatest / listByAuthor / historyOf / create / append / delete` (+ outbox `DomainEvent`) |
+| `PostAssetStore` | `ports/asset-store.ts` | `storeImage / deleteImage` (business-shaped) |
+| `EventPublisher` | `ports/event-publisher.ts` | `publish(topic, payload)` — the "record a meaningful business event" seam |
+| `TelemetryProvider` / `MonitoringProvider` | `providers/observability.ts` | `record / emit` (cross-cutting; `Noop*` defaults) |
 
-# then use the neon dialect
-bun run dev                  # local dev (uses .env.dev.neon → a local Postgres)
-bun run db:migrate           # apply migrations to Neon (prod, reads .env)
-bun run db:migrate --dev     # apply migrations to the local Postgres
-bun run test                 # run the endpoint tests (dialect-aware)
-bun run deploy:neon          # deploy the Worker to use Neon via Hyperdrive
+### 4. Infrastructure — how the capabilities are implemented
+
+`src/providers/*`, `src/repository/*`, `src/services/*` are the adapters:
+
+- **Persistence**: `UserRepo` (`repository/user-repo.ts`) over SQL (D1) or a blob
+  store; `PostRepo` over an append-only `VersionHistoryStore`
+  (`services/version-history-store.ts`). Both implement the ports above.
+- **Asset store**: `LocalPostAssetStore` (`providers/local-post-asset-store.ts`)
+  → swap for an S3/R2-backed adapter later.
+- **Events**: `InMemoryBus` (`services/event-bus.ts`) satisfies `EventPublisher`.
+  It is the natural place to forward to Cloudflare Queues / Kafka / an OTEL bridge.
+- **Outbox**: repo writes emit their lifecycle event as part of the *same* write
+  (no dual-write gap). `PostRepo` subscribes to the store's `onChange` and
+  forwards to the bus.
+
+### 5. Composition root — the only place that knows the wiring
+
+`src/main.ts` (local) and `src/cf-worker.ts` (Workers) are the composition roots.
+This is the **single** location that picks which adapter backs each port:
+
+```ts
+// src/main.ts (local)
+const bus = new InMemoryBus("app");
+const userRepo  = UserRepo.overBlob("users", new MemoryStore()); // → swap overSql(...) for Postgres
+const postRepo  = new PostRepo();                                // → swap PostgresPostRepository
+const assetStore = new LocalPostAssetStore(new MemoryStore());   // → swap S3-backed store
+
+const userService = new UserService({ repo: userRepo, bus });
+const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
 ```
 
-> Copy the **`.env.example.neon` template to `.env`** (not to `.env.dev.neon` /
-> `.env.neon`). `.env` holds your real Neon credentials and is gitignored;
-> `.env.dev.neon` is a separate local-dev file pointing at a local Postgres.
+On Workers the *same* services are wired with `UserRepo.overD1("users", drizzle(env.DB))`
+and a `NoOpAssetStore` (replace with R2). **The application layer does not change.**
 
-### Turso (edge SQLite)
+### 6. Telemetry is cross-cutting, not a constructor arg
 
-Turso is a SQLite-compatible edge database, so it reuses the SQLite schema and
-repo (with an **async** libSQL client). A single `DATABASE_TYPE=turso` covers both
-modes; `TURSO_URL` decides local vs cloud.
+Business code is **not** littered with `telemetry.startTimer()` /
+`telemetry.record()`. The application records *meaningful business events* through
+the `EventPublisher` (`post.published`, `user.deleted`, …). Request/span
+instrumentation is a framework/runtime concern; the bus is the seam where OTEL or
+metrics forwarding plugs in. `TelemetryProvider`/`MonitoringProvider` exist as
+injectable capabilities but are intentionally **not** composed into every service.
 
-- **Local TursoDB** (`.env.dev.turso`, `TURSO_URL=file:///…`, no account):
-  ```bash
-  bun run dev                  # run against file:///…/tursodb.db
-  bun run db:migrate --dev     # apply SQLite migrations to the local file
-  bun run test                 # endpoint tests (dialect-aware, uses .env.dev.turso)
-  ```
-- **Turso Cloud** (`.env.example.turso-cloud`, `TURSO_URL=libsql://…` + token):
-  ```bash
-  # one-time setup
-  turso auth login
-  turso db create users-db
-  turso db show users-db --url            # → TURSO_URL
-  turso db tokens create users-db         # → TURSO_AUTH_TOKEN
-  cp .env.example.turso-cloud .env         # copy the Turso template to .env
+### 7. Don't abstract everything "just because"
 
-  bun run dev                  # run against Turso Cloud
-  bun run db:migrate           # apply SQLite migrations (prod, reads .env)
-  bun run test                 # endpoint tests (dialect-aware, uses .env.dev.turso)
-  ```
-- **Deploy the Turso worker** — the Worker uses `@libsql/client/http` (not
-  WebSocket), which reads `env.TURSO_URL` (var) and `env.TURSO_AUTH_TOKEN`
-  (secret):
-  ```bash
-  bun run deploy:turso                     # build + wrangler deploy --env=turso
-  # one-time: store the token as a Worker secret (not a plain var)
-  echo "$TURSO_AUTH_TOKEN" | bun x wrangler secret put TURSO_AUTH_TOKEN --env=turso
-  ```
-  The generated `wrangler.jsonc` keeps only `TURSO_URL` in `vars`; the token is
-  a secret. Deploys as `users-worker-turso` at
-  `https://users-worker-turso.<account>.workers.dev`.
+The abstraction is valuable where it names a real boundary (persistence, assets,
+events) — not as a rule that every class needs an interface. `PostRepo` is the
+*only* `PostRepository` today; that's fine. Introduce `PostgresPostRepository`
+when (and if) a second backend is actually needed.
 
-> Copy the **`.env.example.turso-cloud` template to `.env`** (not to
-> `.env.turso`). `.env` holds your real Turso token (gitignored);
-> `.env.dev.turso` is a separate local-dev file pointing at a local `file://` DB.
-> `turso` is a SQLite-compatible **local/remote dev** path — it does not
-ship to the Cloudflare Worker (which uses D1 or Neon via Hyperdrive).
-(`tursodb` / `turso-cloud` are accepted aliases for `DATABASE_TYPE=turso`.)
+## Project layout
+
+```
+src/
+  models/            Domain models & aggregates (User, Post) — typia-validated
+  capacities/        Declarative decorators/macros (SqlTablisable, Identifiable,
+                     Versioned, ContentAddressable, …) that turn models into
+                     SQL-projection / versioned entities at build time
+  application/       APPLICATION layer — UserService, PostService (depend on ports only)
+  ports/             Ports/interfaces the application owns (repositories, asset
+                     store, event publisher, observability)
+  transport/         TRANSPORT adapters — Hono controllers (HTTP ⇄ application)
+  repository/        INFRA adapters implementing the repository ports (UserRepo, PostRepo)
+  providers/         INFRA adapters (sql-backend, d1-client, blob-store, object-store,
+                     fs-provider, local-post-asset-store, observability, …)
+  services/          Cross-cutting infra (InMemoryBus, version-history-store, hono-adapter)
+  storage/           In-memory store backend used by local adapters
+  tags/              Tagging capacity
+  macros/            Build-time macros (Bun/Worker detection)
+  generated/         Build-time artifact: models.json (derivation result of model:build)
+  main.ts            Local Bun composition root + Bun.serve
+  cf-worker.ts       Cloudflare Workers composition root (injects env.DB)
+scripts/
+  model-build.ts     Build-time model derivation → src/generated/models.json
+  db-generate.ts     models.json → idempotent migrations/NNNN_create_*.sql
+  build-cf.ts        Bun.build + ttsc/typia plugin → dist/cf-worker.js
+  seed-test.ts       Seed 100 users + 100 posts and query them locally
+migrations/          Generated D1 migration SQL (0001_create_users.sql, …)
+wrangler.jsonc       Cloudflare Workers config (main: dist/cf-worker.js, D1 binding DB)
+```
 
 ## Build process
 
-`bun run build` runs `scripts/build.ts`, which uses [`Bun.build`](https://bun.com/docs/bundler) to bundle the app **and execute the macros** (`import ... with { type: "macro" }`) at build time. Output goes to `dist/`:
+Models are **derived at build time** (where typia runs) and saved for the runtime,
+so the deployed Worker bundle needs no typia. The pipeline is layered and
+non-redundant — codegen runs exactly once per pipeline:
 
-| Output | Source                     | Target   | Notes                                   |
-| ------ | -------------------------- | -------- | --------------------------------------- |
-| `dist/server.js` | `src/main.ts`       | `bun`    | Local server bundle; macros are inlined |
-| `dist/worker.js` | `src/worker.ts`     | `browser`| Cloudflare Worker bundle (no macros)    |
+```
+model:build ──▶ src/generated/models.json
+db:generate ──▶ migrations/NNNN_create_<table>.sql   (idempotent; skips covered tables)
+        │
+        ▼
+   build:cf ──▶ dist/cf-worker.js          (Bun.build + typia plugin)
+        │
+        ▼
+   db:migrate ──▶ wrangler d1 migrations apply artefact-db
+        │
+        ▼
+   wrangler deploy
+```
 
-Both are emitted with `minify` and an external sourcemap. A failing job aborts the build with a non-zero exit code.
+| Script | Purpose |
+| ------ | ------- |
+| `bun run model:build` | Derive SQL projection for every model → `src/generated/models.json` |
+| `bun run db:generate` | Render idempotent migrations from the model plan |
+| `bun run gen` | `model:build && db:generate` (single source of truth) |
+| `bun run build:cf` | Bundle the Workers entry (`scripts/build-cf.ts`) |
+| `bun run cf-dev` | `gen && build:cf && wrangler dev` |
+| `bun run cf-deploy` | `gen && build:cf && wrangler deploy` |
+| `bun run deploy` | `gen && build:cf && db:migrate && wrangler deploy` |
+| `bun run prepare` | `gen` (runs automatically on `bun install`) |
+
+## Local development
 
 ```bash
-DATABASE_TYPE=sqlite  bun run build   # bake in the sqlite dialect
-DATABASE_TYPE=postgres bun run build  # bake in the postgres dialect
+bun install            # also runs `prepare` → model:build && db:generate
+bun run dev            # local Bun server (in-memory stores), http://localhost:8080
+bun run seed:test      # seed 100 users + 100 posts and run queries locally
 ```
 
-> The macros read `process.env` at build time, so the `DATABASE_TYPE`/`DATABASE_URL` present in the environment when you run `build`/`dev`/CI are the ones baked in.
-
-## Deploy to Cloudflare Workers
-
-The app ships with a `wrangler.jsonc` and a dedicated Worker entry (`src/worker.ts`) that picks its storage from the bindings available at runtime:
-
-- if a **`HYPERDRIVE`** binding is present → **Neon** (serverless Postgres) via Hyperdrive, using `postgres-js` + `nodejs_compat`.
-- otherwise → **D1** (`env.DB`).
-
-`wrangler.jsonc` uses Wrangler **named environments** to toggle Hyperdrive:
-
-- **top-level (default, `bun run deploy`)** — D1 only, **no Hyperdrive** → deploys `users-worker` using D1.
-- **`neon` environment (`bun run deploy:neon`)** — adds a **Hyperdrive** binding → deploys `users-worker-neon` using Neon.
-- **`turso` environment (`bun run deploy:turso`)** — `TURSO_URL` var + `TURSO_AUTH_TOKEN` secret → deploys `users-worker-turso` using Turso Cloud (via `@libsql/client/http`).
-
-This keeps `DATABASE_TYPE=d1` (`wrangler.jsonc` top-level) free of Hyperdrive, while
-`DATABASE_TYPE=neon` (`--env=neon`) carries it — automatically matching the dialect.
-
-### 1. Create the D1 database (fallback)
+## Deploy to Cloudflare Workers + D1
 
 ```bash
-bun x wrangler d1 create users-db
+# one-time: create the D1 database and set its id in wrangler.jsonc
+bun x wrangler d1 create artefact-db
+
+# full pipeline (codegen → bundle → migrate → deploy)
+bun run deploy
 ```
 
-Copy the printed `database_id` into `wrangler.jsonc`, replacing
-`REPLACE_WITH_YOUR_D1_DATABASE_ID`. Alternatively, use `${D1_DATABASE_ID}` and
-set that env var / `.dev.vars` entry for CI-friendly interpolation. A value of
-`REPLACE_WITH_YOUR_D1_DATABASE_ID` will fail a real deploy (dry-run is fine).
-
-### 2. (Optional) Wire Neon via Hyperdrive
-
-To make the Worker use Neon instead of D1:
-
-```bash
-# 1. Create a Hyperdrive config pointing at your Neon (unpooled) connection string
-bun x wrangler hyperdrive create neon-hyperdrive \
-  --connection-string="postgresql://user:pass@host.region.aws.neon.tech/db"
-
-# 2. Set HYPERDRIVE_ID in your .env (e.g.
-#    HYPERDRIVE_ID=<the id from `wrangler hyperdrive list`>). The build
-#    (wrangler.config.ts) generates wrangler.jsonc from it under
-#    env.neon.hyperdrive[].id. The top-level D1 env stays free of Hyperdrive.
-```
-
-> Neon's guidance: use Hyperdrive with a standard TCP Postgres driver (`postgres-js`),
-> **not** the Neon Serverless (WebSocket) driver. Hyperdrive provides its own pool,
-> so `max: 1` is used. Requires the `nodejs_compat` compatibility flag.
-
-### 4. Apply the schema
-
-For D1, generate and run the SQLite migration:
-
-```bash
-bun run db:generate
-bun x wrangler d1 execute users-db --remote --file ./drizzle/sqlite/0000_*.sql
-```
-
-For Neon, apply the Postgres migrations to the Neon database:
-
-```bash
-bun run db:migrate   # migrates the active DATABASE_TYPE from .env (prod)
-bun run db:migrate --dev   # migrates using .env.dev.<type> (local)
-```
-
-### 5. Deploy
-
-```bash
-bun run deploy            # deploy D1 worker `users-worker` (no Hyperdrive)
-bun run deploy:neon       # deploy Neon worker `users-worker-neon` (with Hyperdrive)
-bun run deploy:turso      # deploy Turso worker `users-worker-turso` (TURSO_URL var + token secret)
-bun run deploy:dry-run        # validate the D1 bundle without deploying
-bun run deploy:dry-run:neon   # validate the Neon bundle without deploying
-bun run deploy:dry-run:turso  # validate the Turso bundle without deploying
-```
-
-### Local Workers development
-
-```bash
-bun run worker:dev   # run the Worker locally (uses a local D1 simulation)
-bun run worker:types # regenerate worker-configuration.d.ts
-```
-
-### Worker types
-
-[For generating/synchronising types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
-
-```txt
-bun run worker:types
-```
-
-Pass the `CloudflareBindings` as generics when instantiating `Hono` in the Worker entry:
-
-```ts
-// src/worker.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-```
-
-## Scripts
-
-| Script                 | Description                                     |
-| ---------------------- | ----------------------------------------------- |
-| `bun run dev`          | Start the local dev server (picks the env file from `DATABASE_TYPE`) |
-| `bun run build`        | Bundle server + Worker with `Bun.build` (runs macros) |
-| `bun run test`         | All unit tests + current `DATABASE_TYPE` integration tests. Filters: `--all` (all integrations), `--unit`, `--integration`, `--test <name>` (path substring); `--env-file` to override; `--coverage` (+ optional `--coverage-dir=<dir>`) for text + lcov coverage; `--timeout=<ms>` to override the per-test timeout. Runs `INTEGRATION_TEST_SETUP_SCRIPT` (`.ts`/`.sh`/`.bash` path or inline) before integration tests; `scripts/postgres-container-setup.ts` detects container runtime + `compose up -d`; control via `_SCRIPT`/`_TIMEOUT`/`_SKIP`. `--all`/`--unit`/`--integration`/`--test` are mutually exclusive. Bun's reporter prints per-file and total elapsed times |
-| `bun run typecheck`    | Run `tsc --noEmit`                              |
-| `bun run db:generate`  | Generate SQL migrations for SQLite **and** Postgres |
-| `bun run db:generate:sqlite` | Generate SQLite migrations               |
-| `bun run db:generate:postgres` | Generate Postgres migrations            |
-| `bun run db:migrate`   | Migrate the active `DATABASE_TYPE` (`.env`); `--dev` uses `.env.dev.<type>` |
-| `bun run db:push`      | Push the schema for the active `DATABASE_TYPE`; `--dev` uses `.env.dev.<type>` |
-| `bun run db:seed`      | Seed the active `DATABASE_TYPE`; `--dev` uses `.env.dev.<type>` |
-| `bun run deploy`       | Build (runs macros) then deploy D1 worker (no Hyperdrive) |
-| `bun run deploy:neon`  | Deploy the Neon worker via `--env=neon` (with Hyperdrive) |
-| `bun run deploy:turso` | Deploy the Turso worker via `--env=turso` (TURSO_URL var + token secret) |
-| `bun run deploy:dry-run` | Build then validate the D1 bundle without deploying |
-| `bun run deploy:dry-run:neon` | Validate the Neon bundle without deploying   |
-| `bun run deploy:dry-run:turso` | Validate the Turso bundle without deploying   |
-| `bun run worker:dev`   | Run the Worker locally with wrangler             |
-| `bun run worker:types` | Regenerate Worker binding types                  |
-| `bun run check`        | Lint & format check (Biome)                      |
-| `bun run start`        | Run the server without watch mode                |
+The Worker picks its database from the `DB` binding at runtime; the application
+and transport layers are identical to local — only the composition root differs.
 
 ## API
 
 ### users
 
-| Method   | Path           | Description      | Request body                        | Success    |
-| -------- | -------------- | ---------------- | ----------------------------------- | ---------- |
-| `GET`    | `/users`      | List all users  | —                                   | `200`      |
-| `GET`    | `/users/:id`  | Get one user    | —                                   | `200`      |
-| `POST`   | `/users`      | Create a user   | `{ "title": string, "releaseYear"?: number }` | `201` |
-| `PUT`    | `/users/:id`  | Update a user   | `{ "title"?: string, "releaseYear"?: number \| null }` | `200` |
-| `DELETE` | `/users/:id`  | Delete a movie   | —                                   | `200`      |
+| Method   | Path            | Result            | Success |
+| -------- | --------------- | ----------------- | ------- |
+| `POST`   | `/users`        | Create a user     | `201`   |
+| `GET`    | `/users`        | List users (`?role=admin` filters) | `200` |
+| `GET`    | `/users/:id`    | Get one user      | `200`   |
+| `DELETE` | `/users/:id`    | Delete a user     | `204`   |
 
-Errors return `{ "error": string }` with an appropriate status code (`400` invalid input, `404` not found).
+### posts
 
-#### Examples
+| Method   | Path                 | Result                       | Success |
+| -------- | -------------------- | ---------------------------- | ------- |
+| `POST`   | `/posts`             | Create a post                | `201`   |
+| `GET`    | `/posts`             | List latest version of every post | `200` |
+| `GET`    | `/posts/:id`         | Get latest version           | `200`   |
+| `GET`    | `/posts/:id/history` | Full immutable version log   | `200`   |
+| `PATCH`  | `/posts/:id`         | Edit → new immutable version | `200`   |
+| `POST`   | `/posts/:id/publish` | Publish (use case)           | `200`   |
+| `DELETE` | `/posts/:id`         | Delete post + history        | `204`   |
 
-```bash
-# List
-curl http://localhost:3000/movies
-
-# Create
-curl -X POST http://localhost:3000/movies \
-  -H 'Content-Type: application/json' \
-  -d '{"title": "Inception", "releaseYear": 2010}'
-
-# Get one
-curl http://localhost:3000/movies/1
-
-# Update
-curl -X PUT http://localhost:3000/movies/1 \
-  -H 'Content-Type: application/json' \
-  -d '{"title": "Interstellar"}'
-
-# Delete
-curl -X DELETE http://localhost:3000/movies/1
-```
-
-### Schema
-
-A movie has:
-
-| Column        | Type   |
-| ------------- | ------ |
-| `id`          | `int`  |
-| `title`       | `text` |
-| `releaseYear` | `int`  |
-
-## Project layout
-
-```
-.env                   # real config (copy a `.env.example.*` template here)
-.env.dev               # SQLite local dev config (loaded by `bun run dev`)
-.env.dev.d1            # local D1 dev config → sqlite driver (loaded by `bun run dev`)
-.env.dev.turso         # local TursoDB dev config (loaded by `bun run dev`)
-.env.dev.neon          # local Neon dev config → local Postgres (loaded by `bun run dev`)
-.env.dev.postgres      # Postgres local dev config (loaded by `bun run dev`)
-.env.example           # template → copy to `.env` (D1 default)
-.env.example.neon      # template → copy to `.env` (Neon)
-.env.example.turso-cloud # template → copy to `.env` (Turso)
-compose.yml            # local Postgres server for dialect testing
-src/
-  app.ts             # pure createApp() Hono factory (no DB, no macros)
-  main.ts            # local Bun entry (bun run dev/start) — uses macros + sqlite
-  worker.ts          # Cloudflare Worker entry (D1 only, no macros)
-  macros/
-    db.ts            # build-time DATABASE_TYPE / DATABASE_URL macros
-    platform.ts      # build-time Bun/Worker detection macros
-  db/
-    index.ts         # dialect factory (build-time via macros) + Drizzle clients
-    sqlite-client.ts # bun:sqlite Drizzle client (local)
-    postgres-client.ts # postgres Drizzle client (local)
-    neon-client.ts   # Worker client: postgres-js via Hyperdrive (nodejs_compat)
-    turso-client.ts  # Turso (libSQL) client — local file or cloud (async)
-    schema/
-      index.ts       # re-exports the SQLite movie schema for app code
-      sqlite.ts      # SQLite movies table & Zod schemas
-      postgres.ts    # Postgres movies table & Zod schemas
-  repo/
-    movies-repo.ts       # storage-agnostic MoviesRepo interface
-    movies-repo-sqlite.ts# bun:sqlite implementation
-    movies-repo-postgres.ts # postgres/Neon implementation (used locally + Worker)
-    movies-repo-turso.ts # Turso (libSQL, async) implementation
-    movies-repo-d1.ts    # Cloudflare D1 implementation
-    factory.ts       # pick the repo for the active DATABASE_TYPE
-  routes/
-    movies.ts        # /movies REST handlers
-    movies.sqlite.integration.test.ts   # sqlite/d1 integration tests (colocated)
-    movies.postgres.integration.test.ts # postgres/neon integration tests (colocated)
-    movies.turso.integration.test.ts    # turso integration tests (colocated)
-  # tests are discovered by filename suffix:
-  #   *.unit.test.ts (always run) and *.<db-type>.integration.test.ts (env-aware)
-scripts/
-  build.ts               # Bun.build: bundle server + Worker (runs macros)
-  db-migrate.ts          # apply migrations for the active DATABASE_TYPE (sqlite/postgres/neon/d1)
-  db-seed.ts             # seed data
-wrangler.jsonc       # Cloudflare Workers configuration (main: src/worker.ts)
-worker-configuration.d.ts # generated Worker binding types
-```
-
-### Why the Worker entry is separate
-
-Bun macros only run under Bun's bundler/transpiler — Wrangler bundles Workers with esbuild and does **not** execute them (it rejects `with { type: "macro" }` imports). So the Worker uses a dedicated entry (`src/worker.ts`) that picks its database binding at runtime — `env.HYPERDRIVE` → Neon, else `env.DB` → D1 — with no macros, while the local Bun entry (`src/main.ts`) uses macros to pick its dialect at build time. This replaced the old `src/stubs/bun-sqlite.ts` + Wrangler `alias` workaround. The Worker only drags in `postgres` when the Hyperdrive path is bundled (which is why Wrangler handles that bundle with `nodejs_compat`).
+Errors return `{ "status": "error", "message": string }` with an appropriate
+status (`400` invalid input, `404` not found, `409` conflict). The `PostAssetStore`
+post-image capability is wired (`LocalPostAssetStore` locally, `NoOpAssetStore` on
+Workers) and can be surfaced as a `POST /posts/:id/image` route when an asset
+backend is connected.
