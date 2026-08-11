@@ -6,7 +6,7 @@ import {
 	type PostService,
 } from "../application/post-service";
 import { InvalidStateError } from "../models/post";
-import type { PostQueries } from "../ports/post-queries";
+import type { PostRepository } from "../ports/post-repository";
 
 /**
  * `postServiceApp` — the REST TRANSPORT ADAPTER for `PostService`.
@@ -26,13 +26,16 @@ import type { PostQueries } from "../ports/post-queries";
  * lives here: the controller maps domain errors (404 / 409 / 400) onto HTTP
  * statuses and shapes the JSON response.
  */
-export function postServiceApp(postService: PostService): Hono {
+export function postServiceApp(
+	postService: PostService,
+	queries?: PostRepository,
+): Hono {
 	const app = new Hono();
 
 	// GET / — list the latest version of every post. Prefer the read-side
 	// port (CQRS projection) when wired; fall back to the service otherwise.
 	app.get("/", async (c) => {
-		if (queries) return c.json(await queries.latest());
+		if (queries) return c.json(await queries.listLatest());
 		const list = await postService.list();
 		return c.json(
 			list.map(({ id, title, published, author, created_at, updated_at, hash }) => ({
@@ -68,7 +71,7 @@ export function postServiceApp(postService: PostService): Hono {
 	app.get("/:id", async (c) => {
 		try {
 			const id = c.req.param("id");
-			const post = queries ? await queries.byId(id) : await postService.get(id);
+			const post = queries ? await queries.findById(id) : await postService.get(id);
 			if (!post) throw new PostNotFoundError(id);
 			return c.json(post);
 		} catch (e) {
