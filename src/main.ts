@@ -2,9 +2,9 @@ import { Hono } from "hono";
 
 import { PostService } from "./application/post-service";
 import { UserService } from "./application/user-service";
+import { LocalPostAssetStore } from "./providers/local-post-asset-store";
 import { PostRepo } from "./repository/post-repo";
 import { UserRepo } from "./repository/user-repo";
-import { LocalPostAssetStore } from "./providers/local-post-asset-store";
 import { InMemoryBus } from "./services/event-bus";
 import { MemoryStore } from "./storage/store";
 import { postServiceApp } from "./transport/post-controller";
@@ -33,7 +33,11 @@ const assetStore = new LocalPostAssetStore(new MemoryStore()); // e.g. swap → 
 
 // 2. Application services: depend ONLY on ports.
 const userService = new UserService({ repo: userRepo, bus });
-const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
+const postService = new PostService({
+	repo: postRepo,
+	bus,
+	assets: assetStore,
+});
 
 // 3. Transport: controllers translate HTTP requests into commands.
 const app = new Hono();

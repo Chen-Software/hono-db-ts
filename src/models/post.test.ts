@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { createVersionedUpdate } from "../capacities/versioned";
 import {
 	hashContent,
 	verifyContentAddress,
 } from "../capacities/content-addressable";
+import { createVersionedUpdate } from "../capacities/versioned";
 import { Post } from "./post";
 
 // ---------------------------------------------------------------------------

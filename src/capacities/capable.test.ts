@@ -58,9 +58,9 @@ describe("Capable provisions the capacity registry", () => {
 
 	it("installs an addCapacity method on the prototype", () => {
 		const C = Capable(makeModel());
-		expect(
-			typeof (C as unknown as WithCapacities).prototype.addCapacity,
-		).toBe("function");
+		expect(typeof (C as unknown as WithCapacities).prototype.addCapacity).toBe(
+			"function",
+		);
 	});
 });
 

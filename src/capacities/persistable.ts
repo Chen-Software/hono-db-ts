@@ -1,7 +1,7 @@
+import { defaultIdentityMap } from "../storage/identity-map";
 import { matchesFilter, type Store, StoreRegistry } from "../storage/store";
 import type { CapacityConstructor } from "./capable";
 import type { ComposeContext } from "./compose";
-import { defaultIdentityMap } from "../storage/identity-map";
 
 export interface PersistableOptions {
 	/**

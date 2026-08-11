@@ -27,10 +27,10 @@ export type BlobStoreObject = import("../storage/store").StoreObject;
 export type BlobStoreQuery = import("../storage/store").StoreQuery;
 
 export {
-	StoreError,
-	StoreRegistry,
-	MemoryStore,
 	decodeJson,
 	encodeJson,
+	MemoryStore,
 	matchesFilter,
+	StoreError,
+	StoreRegistry,
 } from "../storage/store";

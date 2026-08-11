@@ -4,11 +4,11 @@ import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
-import { Validatable } from "@/capacities/validatable";
 import { Referencible } from "@/capacities/referencible";
+import { Validatable } from "@/capacities/validatable";
+import type { IdentifiableSchema } from "../capacities/identifiable";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
 import type { SqlSchemaModule } from "../capacities/sql-tablisable";
-import type { IdentifiableSchema } from "../capacities/identifiable";
 import type { Timestamped } from "../capacities/timestamped";
 import { defineModel } from "./base";
 import { Post } from "./post";
@@ -132,7 +132,10 @@ const UserModel = defineModel<UserSchema>({
 	capacities: [
 		JsonSerialisable,
 		ProtobufEncodable,
-		{ capacity: SqlSerialisable, options: { name: "users", dialect: "sqlite" } },
+		{
+			capacity: SqlSerialisable,
+			options: { name: "users", dialect: "sqlite" },
+		},
 		// Validatable pulls its validators from `UserSchemaModule`; here we
 		// demonstrate BOTH lifecycle hooks: `onNew` (assert on construction) and
 		// `onUpdate` (assert on the mutable `update`). The `validate` / `assert`
@@ -158,7 +161,13 @@ const UserModel = defineModel<UserSchema>({
 			capacity: Referencible,
 			options: {
 				relations: [
-					{ name: "posts", target: () => Post, by: "authorId", cardinality: "one-to-many", onDelete: "cascade" },
+					{
+						name: "posts",
+						target: () => Post,
+						by: "authorId",
+						cardinality: "one-to-many",
+						onDelete: "cascade",
+					},
 				],
 			},
 		},
@@ -182,4 +191,4 @@ class User extends UserModel {
 	}
 }
 
-export { User, UserModel, UserSchemaModule, type UserSchema };
+export { User, UserModel, type UserSchema, UserSchemaModule };

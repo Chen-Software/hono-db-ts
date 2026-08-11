@@ -1,10 +1,10 @@
+import type { SchemaModule } from "../capacities/schema-module";
 import {
-	decodeJson,
-	matchesFilter,
 	type BlobStoreObject,
 	type BlobStoreProvider,
+	decodeJson,
+	matchesFilter,
 } from "./blob-store";
-import type { SchemaModule } from "../capacities/schema-module";
 import type { EntityFilter, StoreBackend } from "./store-backend";
 
 /**
@@ -64,7 +64,10 @@ export class BlobBackend<E> implements StoreBackend<E> {
 	async find(ns: string, filter: EntityFilter<E> = {}): Promise<E[]> {
 		const prefix = `${ns}/`;
 		const objs: BlobStoreObject[] = this.blob.query
-			? await this.blob.query({ prefix, filter: filter.where as Record<string, unknown> })
+			? await this.blob.query({
+					prefix,
+					filter: filter.where as Record<string, unknown>,
+				})
 			: await this.scan(ns, filter.where);
 		let out = objs.map((o) =>
 			this.schema.fromJSON(new TextDecoder().decode(o.data)),

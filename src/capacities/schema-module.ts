@@ -236,5 +236,4 @@ export interface SchemaModule<T = unknown> {
 	 * NO network code — decoding only.
 	 */
 	http?: HttpSchemaModule;
-
 }

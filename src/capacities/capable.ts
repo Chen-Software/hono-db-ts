@@ -5,13 +5,13 @@
 // `validatable.ts`) keep working unchanged.
 // ---------------------------------------------------------------------------
 export type {
-	LifecyclePhase,
-	LifecycleHook,
-	LifecycleHooks,
-	ModelEvent,
 	EventListener,
 	EventListeners,
 	EventStem,
+	LifecycleHook,
+	LifecycleHooks,
+	LifecyclePhase,
+	ModelEvent,
 } from "./triggerable";
 
 export {

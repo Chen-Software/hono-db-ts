@@ -2,9 +2,9 @@ import type { CapacityConstructor } from "./capable";
 import type { ComposeContext } from "./compose";
 import type { SqlSchemaModule } from "./sql-tablisable";
 import {
-	toDrizzleTable,
 	type SqlDialect,
 	type SqlTablisableOptions,
+	toDrizzleTable,
 } from "./sql-tablisable";
 
 /**
@@ -113,7 +113,9 @@ function SqlSerialisable<TBase extends CapacityConstructor>(
 	(Base as any).table = primaryDef.table;
 	(Base as any).toRow = primaryDef.toRow;
 	(Base as any).fromRow = primaryDef.fromRow;
-	(Base.prototype as any).toRow = function (this: any): Record<string, unknown> {
+	(Base.prototype as any).toRow = function (
+		this: any,
+	): Record<string, unknown> {
 		return primaryDef.toRow(this);
 	};
 

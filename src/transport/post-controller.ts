@@ -38,15 +38,17 @@ export function postServiceApp(
 		if (queries) return c.json(await queries.listLatest());
 		const list = await postService.list();
 		return c.json(
-			list.map(({ id, title, published, author, created_at, updated_at, hash }) => ({
-				id,
-				title,
-				published,
-				author,
-				created_at,
-				updated_at,
-				hash,
-			})),
+			list.map(
+				({ id, title, published, author, created_at, updated_at, hash }) => ({
+					id,
+					title,
+					published,
+					author,
+					created_at,
+					updated_at,
+					hash,
+				}),
+			),
 		);
 	});
 
@@ -71,7 +73,9 @@ export function postServiceApp(
 	app.get("/:id", async (c) => {
 		try {
 			const id = c.req.param("id");
-			const post = queries ? await queries.findById(id) : await postService.get(id);
+			const post = queries
+				? await queries.findById(id)
+				: await postService.get(id);
 			if (!post) throw new PostNotFoundError(id);
 			return c.json(post);
 		} catch (e) {

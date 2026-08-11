@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import type typia from "typia";
 import {
+	type AssertImmutable,
 	assertImmutable,
 	createAssertUpdate,
 	createImmutableUpdate,
 	createUpdate,
 	createValidateImmutableUpdate,
 	createValidateUpdate,
-	isImmutable,
-	type AssertImmutable,
 	type IsImmutable,
+	isImmutable,
 } from "./immutable";
 
 interface Doc {

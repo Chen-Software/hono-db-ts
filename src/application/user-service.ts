@@ -40,6 +40,17 @@ export class UserService {
 		return user;
 	}
 
+	async updateUser(
+		id: string,
+		input: Partial<UserSchema>,
+	): Promise<User | undefined> {
+		const existing = await this.opts.repo.load(id);
+		if (!existing) return undefined;
+		const user = await this.opts.repo.update(id, input);
+		this.bus?.publish("user.updated", { id });
+		return user;
+	}
+
 	async getUser(id: string): Promise<User | undefined> {
 		return this.opts.repo.load(id);
 	}

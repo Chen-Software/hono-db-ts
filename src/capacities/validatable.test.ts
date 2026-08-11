@@ -1,5 +1,5 @@
-import typia from "typia";
 import { describe, expect, it } from "bun:test";
+import typia from "typia";
 import { defineModel } from "../models/base";
 import type { SchemaModule } from "./schema-module";
 import { Validatable, type ValidatableOptions } from "./validatable";

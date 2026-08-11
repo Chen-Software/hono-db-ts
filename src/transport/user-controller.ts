@@ -45,6 +45,17 @@ export function userServiceApp(userService: UserService): Hono {
 		return c.json(user);
 	});
 
+	app.patch("/:id", async (c) => {
+		try {
+			const body = await c.req.json();
+			const user = await userService.updateUser(c.req.param("id"), body);
+			if (!user) return c.json({ error: "not found" }, 404);
+			return c.json(user);
+		} catch (e) {
+			return c.json({ error: (e as Error)?.message ?? "invalid input" }, 422);
+		}
+	});
+
 	app.delete("/:id", async (c) => {
 		await userService.deleteUser(c.req.param("id"));
 		return c.body(null, 204);

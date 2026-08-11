@@ -1,14 +1,14 @@
 import typia from "typia";
-import type { Identifiable } from "./identifiable";
-import { type ImmutableSchema, createUpdate } from "./immutable";
-import type { Versioned } from "./versioned";
 import {
+	createAssertHash,
 	type Hashable,
 	hashContent,
 	verifyContentAddress,
 	withContentHash,
-	createAssertHash,
 } from "./hashable";
+import type { Identifiable } from "./identifiable";
+import { createUpdate, type ImmutableSchema } from "./immutable";
+import type { Versioned } from "./versioned";
 import { versionedUpdate, withVersionBump } from "./versioned";
 
 /**
@@ -18,11 +18,11 @@ import { versionedUpdate, withVersionBump } from "./versioned";
  * (the content-keyed relationship between a payload and its hash).
  */
 export {
+	createAssertHash,
 	type Hashable,
 	hashContent,
 	verifyContentAddress,
 	withContentHash,
-	createAssertHash,
 };
 
 /**
@@ -86,11 +86,12 @@ export function updateHash<
 	D extends Identifiable<string> & Versioned & Record<K, string>,
 	T,
 >(key: K, ctor: { from(data: D): T }) {
-	return withVersionBump((entity: D, patch: Partial<D>): T =>
-		versionedUpdate(
-			(d) => ctor.from(withContentHash(d, key)),
-			(e) => e.id,
-		)(entity, patch),
+	return withVersionBump(
+		(entity: D, patch: Partial<D>): T =>
+			versionedUpdate(
+				(d) => ctor.from(withContentHash(d, key)),
+				(e) => e.id,
+			)(entity, patch),
 	);
 }
 

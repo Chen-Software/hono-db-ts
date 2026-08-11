@@ -1,22 +1,22 @@
+import type { Table } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
-	sqliteTable,
-	text as sText,
-	integer as sInt,
-	real as sReal,
-	check as sCheck,
-} from "drizzle-orm/sqlite-core";
-import {
-	pgTable,
-	text as pText,
-	integer as pInt,
-	doublePrecision as pDouble,
 	boolean as pBool,
 	check as pCheck,
+	doublePrecision as pDouble,
+	pgTable,
+	integer as pInt,
+	text as pText,
 } from "drizzle-orm/pg-core";
+import {
+	check as sCheck,
+	integer as sInt,
+	sqliteTable,
+	real as sReal,
+	text as sText,
+} from "drizzle-orm/sqlite-core";
+import type { OnDelete, RelationCardinality } from "../tags/reference";
 import type { SchemaModule } from "./schema-module";
-import type { Table } from "drizzle-orm";
-import type { RelationCardinality, OnDelete } from "../tags/reference";
 
 /**
  * `ReferenceMeta` — the decoded shape of a `Reference` tag (`x-reference`
@@ -56,7 +56,10 @@ export function registerTable(
 }
 
 /** Resolve a registered table (throws if the target was never derived). */
-export function resolveTableThunk(modelName: string, dialect: SqlDialect): () => Table {
+export function resolveTableThunk(
+	modelName: string,
+	dialect: SqlDialect,
+): () => Table {
 	const thunk = tableRegistry.get(regKey(modelName, dialect));
 	if (!thunk) {
 		throw new Error(
@@ -283,7 +286,10 @@ function unwrapObject(schema: JsonSchema): JsonSchema {
  * `components.schemas.<ModelName>`, which is exactly the key other models'
  * `Reference` tags target. Falls back to an explicit `modelName` option.
  */
-function modelNameOf(schema: JsonSchema, fallback?: string): string | undefined {
+function modelNameOf(
+	schema: JsonSchema,
+	fallback?: string,
+): string | undefined {
 	const schemas = (schema as Record<string, any>)?.components?.schemas;
 	if (schemas && typeof schemas === "object") {
 		const keys = Object.keys(schemas);
@@ -296,7 +302,17 @@ function modelNameOf(schema: JsonSchema, fallback?: string): string | undefined 
 function baseType(p: JsonProp): string | undefined {
 	const t = p.type;
 	if (Array.isArray(t)) return t.find((x) => x !== "null");
-	return t;
+	if (t !== undefined) return t;
+	if (p.oneOf && Array.isArray(p.oneOf)) {
+		for (const sub of p.oneOf) {
+			const subType = baseType(sub);
+			if (subType !== undefined && subType !== "null") return subType;
+			if (sub.const !== undefined) {
+				return typeof sub.const;
+			}
+		}
+	}
+	return undefined;
 }
 
 function isNullable(p: JsonProp): boolean {
@@ -393,9 +409,15 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 		if (!b) continue;
 		const col = q(c.name);
 		if (b.minimum !== undefined)
-			checks.push({ name: `${c.name}_min`, expression: `${col} >= ${b.minimum}` });
+			checks.push({
+				name: `${c.name}_min`,
+				expression: `${col} >= ${b.minimum}`,
+			});
 		if (b.maximum !== undefined)
-			checks.push({ name: `${c.name}_max`, expression: `${col} <= ${b.maximum}` });
+			checks.push({
+				name: `${c.name}_max`,
+				expression: `${col} <= ${b.maximum}`,
+			});
 		if (typeof b.exclusiveMinimum === "number")
 			checks.push({
 				name: `${c.name}_exclmin`,
@@ -417,7 +439,9 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 				expression: `length(${col}) <= ${b.maxLength}`,
 			});
 		if (b.enum && b.enum.length > 0) {
-			const list = b.enum.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(", ");
+			const list = b.enum
+				.map((v) => `'${String(v).replace(/'/g, "''")}'`)
+				.join(", ");
 			checks.push({
 				name: `${c.name}_enum`,
 				expression: `${col} IN (${list})`,
@@ -428,15 +452,17 @@ function planChecks(plans: ColPlan[], dialect: SqlDialect): SqlCheckDef[] {
 			const re = `'${b.pattern.replace(/'/g, "''")}'`;
 			checks.push({
 				name: `${c.name}_pattern`,
-				expression:
-					dialect === "pg" ? `${col} ~ ${re}` : `${col} REGEXP ${re}`,
+				expression: dialect === "pg" ? `${col} ~ ${re}` : `${col} REGEXP ${re}`,
 			});
 		}
 	}
 	return checks;
 }
 
-function buildColumns(plans: ColPlan[], dialect: SqlDialect): Record<string, any> {
+function buildColumns(
+	plans: ColPlan[],
+	dialect: SqlDialect,
+): Record<string, any> {
 	const cols: Record<string, any> = {};
 	for (const c of plans) {
 		// Default keeps the column non-nullable-safe if a kind is somehow missed.
@@ -547,7 +573,7 @@ function makeMappers(plans: ColPlan[], dialect: SqlDialect) {
 					out[name] = typeof v === "string" ? JSON.parse(v) : v;
 					break;
 				case "boolean":
-					out[name] = dialect === "sqlite" ? (v === 1 || v === true) : !!v;
+					out[name] = dialect === "sqlite" ? v === 1 || v === true : !!v;
 					break;
 				case "string":
 					out[name] = v instanceof Date ? v.toISOString() : v;

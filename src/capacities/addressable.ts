@@ -19,4 +19,5 @@ console.log(
 		url: "https://localhost:3000",
 	}),
 );
+
 export { type Addressable, isAddressable, validateAddressable };

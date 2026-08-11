@@ -1,5 +1,5 @@
-import type { EntityFilter, StoreBackend } from "./store-backend";
 import type { SchemaModule } from "../capacities/schema-module";
+import type { EntityFilter, StoreBackend } from "./store-backend";
 
 /**
  * `StoreProvider` — the ENTITY-FACING storage provider.

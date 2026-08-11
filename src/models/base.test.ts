@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { defineModel } from "./base";
+import { describe, expect, it } from "bun:test";
 import typia from "typia";
+import { defineModel } from "./base";
 
 interface Point {
 	x: number;

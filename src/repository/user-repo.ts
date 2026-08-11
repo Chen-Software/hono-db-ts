@@ -1,10 +1,10 @@
-import { Repository } from "./repository";
-import { StoreProvider } from "../providers/store-provider";
-import { BlobBackend } from "../providers/blob-backend";
-import { SqlBackend, type DrizzleRunner } from "../providers/sql-backend";
-import type { BlobStoreProvider } from "../providers/blob-store";
+import { User, type UserSchema, UserSchemaModule } from "../models/user";
 import type { UserRepository, UserRole } from "../ports/user-repository";
-import { User, UserSchemaModule, type UserSchema } from "../models/user";
+import { BlobBackend } from "../providers/blob-backend";
+import type { BlobStoreProvider } from "../providers/blob-store";
+import { type DrizzleRunner, SqlBackend } from "../providers/sql-backend";
+import { StoreProvider } from "../providers/store-provider";
+import { Repository } from "./repository";
 
 /**
  * `UserRepo` — the concrete host for `User`.

@@ -1,16 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import typia from "typia";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
-import { toDrizzleTable, type JsonSchema } from "./sql-tablisable";
+import typia from "typia";
 import { PostSchemaModule } from "../models/post";
 import { UserSchemaModule } from "../models/user";
+import { type JsonSchema, toDrizzleTable } from "./sql-tablisable";
 
 describe("toDrizzleTable reads the Reference tag (sql-tablisable)", () => {
 	it("derives a many-to-one FK relation from a Reference-tagged column", () => {
-		const def = toDrizzleTable(PostSchemaModule.schema as unknown as JsonSchema, {
-			name: "posts",
-			modelName: "PostData",
-		});
+		const def = toDrizzleTable(
+			PostSchemaModule.schema as unknown as JsonSchema,
+			{
+				name: "posts",
+				modelName: "PostData",
+			},
+		);
 		expect(def.relations).toBeDefined();
 		expect(def.relations).toHaveLength(1);
 		const rel = def.relations![0];

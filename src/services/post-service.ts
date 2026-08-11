@@ -5,9 +5,9 @@
  * resolving; delete once every consumer imports the new path.
  */
 export {
+	InvalidInputError,
+	PostAlreadyExistsError,
+	PostNotFoundError,
 	PostService,
 	type PostServiceOptions,
-	PostNotFoundError,
-	PostAlreadyExistsError,
-	InvalidInputError,
 } from "../application/post-service";

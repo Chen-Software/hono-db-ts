@@ -3,7 +3,7 @@ import type {
 	PostAsset,
 	PostAssetStore,
 } from "../ports/asset-store";
-import { decodeJson, encodeJson, type BlobStoreProvider } from "./blob-store";
+import { type BlobStoreProvider, decodeJson, encodeJson } from "./blob-store";
 
 /**
  * `LocalPostAssetStore` — an INFRASTRUCTURE adapter implementing the

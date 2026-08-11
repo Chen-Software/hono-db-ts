@@ -15,6 +15,9 @@ export interface UserRepository {
 	/** Insert (or upsert) a user; assigns `id` / `created_at` when absent. */
 	insert(data: Partial<UserSchema>): Promise<User>;
 
+	/** Update a user by id. */
+	update(id: string, data: Partial<UserSchema>): Promise<User>;
+
 	/** Load a user by id, or `undefined` if absent. */
 	load(id: string): Promise<User | undefined>;
 

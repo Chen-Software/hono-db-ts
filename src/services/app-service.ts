@@ -2,9 +2,9 @@ import { Hono } from "hono";
 
 import { PostService } from "../application/post-service";
 import { UserService } from "../application/user-service";
+import { LocalPostAssetStore } from "../providers/local-post-asset-store";
 import { PostRepo } from "../repository/post-repo";
 import { UserRepo } from "../repository/user-repo";
-import { LocalPostAssetStore } from "../providers/local-post-asset-store";
 import { InMemoryBus } from "../services/event-bus";
 import { MemoryStore } from "../storage/store";
 import { postServiceApp } from "../transport/post-controller";
@@ -22,7 +22,11 @@ export function createApp(): Hono {
 	const assetStore = new LocalPostAssetStore(new MemoryStore());
 
 	const userService = new UserService({ repo: userRepo, bus });
-	const postService = new PostService({ repo: postRepo, bus, assets: assetStore });
+	const postService = new PostService({
+		repo: postRepo,
+		bus,
+		assets: assetStore,
+	});
 
 	const app = new Hono();
 	app.get("/", (c) => c.json({ status: "ok" }));

@@ -1,11 +1,10 @@
-import type { CapacityConstructor } from "./capable";
-import { addLifecycleHook } from "./triggerable";
 import { getInstanceMap } from "../storage/identity-map";
-
 // Relation vocabulary is defined next to the `Reference` typia tag (the single
 // source of truth shared by this in-memory resolver, the SQL FK projection, and
 // the tag itself).
-import type { RelationCardinality, OnDelete } from "../tags/reference";
+import type { OnDelete, RelationCardinality } from "../tags/reference";
+import type { CapacityConstructor } from "./capable";
+import { addLifecycleHook } from "./triggerable";
 
 /**
  * Join mode — controls behaviour when the reference is MISSING.
@@ -113,8 +112,7 @@ function Referencible<TBase extends CapacityConstructor>(
 		const pred = predicateFor(rel);
 		const many = isMany(rel);
 		const join = rel.join ?? "left";
-		const getterName =
-			"get" + rel.name[0].toUpperCase() + rel.name.slice(1);
+		const getterName = "get" + rel.name[0].toUpperCase() + rel.name.slice(1);
 
 		// Direction-aware match: the FK-owning side uses `pred(self, candidate)`;
 		// the inverse (collection) side flips to `pred(candidate, self)` so the
@@ -132,9 +130,13 @@ function Referencible<TBase extends CapacityConstructor>(
 			value: function (this: any) {
 				const tn = targetName();
 				if (many) {
-					return getInstanceMap(this).filter(tn, (far: any) => matches(this, far));
+					return getInstanceMap(this).filter(tn, (far: any) =>
+						matches(this, far),
+					);
 				}
-				const found = getInstanceMap(this).find(tn, (far: any) => matches(this, far));
+				const found = getInstanceMap(this).find(tn, (far: any) =>
+					matches(this, far),
+				);
 				if (found) return found;
 				if (join === "inner") {
 					throw new Error(
@@ -150,7 +152,9 @@ function Referencible<TBase extends CapacityConstructor>(
 		if (rel.onDelete && rel.onDelete !== "noAction") {
 			addLifecycleHook(Base, "onDelete", (inst: any) => {
 				const tn = targetName();
-				const related = getInstanceMap(inst).filter(tn, (far: any) => matches(inst, far));
+				const related = getInstanceMap(inst).filter(tn, (far: any) =>
+					matches(inst, far),
+				);
 				if (rel.onDelete === "restrict" && related.length > 0) {
 					throw new Error(
 						`Referencible: cannot delete ${modelName} ${inst.id} — ` +

@@ -84,9 +84,9 @@ export function versionedUpdate<T extends Identifiable<string> & Versioned>(
 }
 
 /** Convenience over `versionedUpdate` for entities whose id is `.id`. */
-export function createVersionedUpdate<T extends Identifiable<string> & Versioned>(
-	reconstructor: (data: T) => T,
-) {
+export function createVersionedUpdate<
+	T extends Identifiable<string> & Versioned,
+>(reconstructor: (data: T) => T) {
 	return withVersionBump(versionedUpdate(reconstructor, (e) => e.id));
 }
 

@@ -203,6 +203,30 @@ assert(
 	"hono GET by id",
 );
 
+// Test PATCH /:id (Update CRUD)
+const patchRes = await app.request(`/${body.id}`, {
+	method: "PATCH",
+	body: JSON.stringify({ name: "Dora The Explorer", age: 35 }),
+});
+assert(patchRes.status === 200, "hono PATCH 200");
+const patchedBody = (await patchRes.json()) as any;
+assert(patchedBody.name === "Dora The Explorer" && patchedBody.age === 35, "hono PATCH returns updated user");
+
+// Verify that the get on that id returns the updated details
+const getPatchedRes = await app.request(`/${body.id}`);
+assert(
+	getPatchedRes.status === 200 && ((await getPatchedRes.json()) as any).name === "Dora The Explorer",
+	"hono GET after PATCH returns updated name",
+);
+
+// Verify that domain event 'user.updated' was published
+let updatedEvents = 0;
+bus.subscribe("user.updated", () => {
+	updatedEvents++;
+});
+await svc.updateUser(body.id, { name: "Dora E." });
+assert(updatedEvents === 1, "bus published user.updated");
+
 const bad = await app.request("/", {
 	method: "POST",
 	body: JSON.stringify({ name: "", email: "x", role: "admin", age: 5 }),

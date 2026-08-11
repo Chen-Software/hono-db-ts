@@ -1,9 +1,9 @@
-import type { StoreProvider } from "../providers/store-provider";
 import type { EntityFilter } from "../providers/store-backend";
+import type { StoreProvider } from "../providers/store-provider";
 import {
 	IdentityMap,
-	setInstanceMap,
 	type IdentityMap as IdentityMapType,
+	setInstanceMap,
 } from "../storage/identity-map";
 
 /**
@@ -34,7 +34,9 @@ export interface RepositoryOptions<E extends { id: string }, M = E> {
 	/** The entity-facing store (already bound to a backend + schema). */
 	store: StoreProvider<E>;
 	/** The model class used to rehydrate stored data into live instances. */
-	Model: new (data: any) => M;
+	Model: new (
+		data: any,
+	) => M;
 	/** Optional entity-level authorization hook. Throw to deny. */
 	authorize?: (op: AuthOp, id: string | null, principal?: unknown) => void;
 	/**
@@ -68,6 +70,17 @@ export class Repository<E extends { id: string }, M = E> {
 	async insert(data: Partial<E>): Promise<M> {
 		this.opts.authorize?.("write", null);
 		const { id, entity } = await this.opts.store.insert(data);
+		const inst = new this.opts.Model(entity);
+		this.tag(inst);
+		return inst;
+	}
+
+	/** Update by id; merges the patch and returns the updated rehydrated instance. */
+	async update(id: string, patch: Partial<E>): Promise<M> {
+		this.opts.authorize?.("write", id);
+		await this.opts.store.update(id, patch);
+		const entity = await this.opts.store.load(id);
+		if (!entity) throw new Error(`Entity not found: ${id}`);
 		const inst = new this.opts.Model(entity);
 		this.tag(inst);
 		return inst;

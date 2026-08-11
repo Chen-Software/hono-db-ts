@@ -1,6 +1,6 @@
 import type { Post } from "../models/post";
-import type { DomainEvent, PostRepository } from "../ports/post-repository";
 import type { EventPublisher } from "../ports/event-publisher";
+import type { DomainEvent, PostRepository } from "../ports/post-repository";
 import {
 	createVersionHistoryStore,
 	type VersionHistoryStore,

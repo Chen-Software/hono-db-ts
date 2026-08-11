@@ -1,7 +1,7 @@
 import { BusRegistry, type EventBus } from "../services/event-bus";
+import { defaultIdentityMap } from "../storage/identity-map";
 import type { CapacityConstructor } from "./capable";
 import { Reactive, type ReactiveOptions } from "./reactive";
-import { defaultIdentityMap } from "../storage/identity-map";
 import { addLifecycleHook } from "./triggerable";
 
 export interface DerivedSpec {

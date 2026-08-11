@@ -1,9 +1,9 @@
-import typia from "typia";
 import { describe, expect, it } from "bun:test";
+import typia from "typia";
 import { defineModel } from "../models/base";
+import { Comparable } from "./comparable";
 import type { SchemaModule } from "./schema-module";
 import { Validatable } from "./validatable";
-import { Comparable } from "./comparable";
 
 interface Mini {
 	id: string;

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { hashContent } from "../capacities/content-addressable";
-import type { User } from "../models/user";
 import { type Post, PostModel } from "../models/post";
-import { PostRepo } from "../repository/post-repo";
+import type { User } from "../models/user";
 import { LocalPostAssetStore } from "../providers/local-post-asset-store";
-import { InMemoryBus } from "./event-bus";
+import { PostRepo } from "../repository/post-repo";
 import { MemoryStore } from "../storage/store";
-import { PostService } from "./post-service";
 import { postServiceApp } from "../transport/post-controller";
+import { InMemoryBus } from "./event-bus";
+import { PostService } from "./post-service";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -248,9 +248,12 @@ describe("PostService", () => {
 		});
 
 		it("returns 404 when publishing a missing post", async () => {
-			const res = await request("/11111111-1111-4111-8111-111111111111/publish", {
-				method: "POST",
-			});
+			const res = await request(
+				"/11111111-1111-4111-8111-111111111111/publish",
+				{
+					method: "POST",
+				},
+			);
 			expect(res.status).toBe(404);
 		});
 	});
