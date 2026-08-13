@@ -134,7 +134,9 @@ function unwrapObject(schema: any): any {
 }
 
 /** All `Reference`-tagged columns on a reflected schema, as `{ column, meta }`. */
-export function referencesOf(schema: any): { column: string; meta: ReferenceMeta }[] {
+export function referencesOf(
+	schema: any,
+): { column: string; meta: ReferenceMeta }[] {
 	const obj = unwrapObject(schema);
 	const props: Record<string, any> = obj?.properties ?? {};
 	const out: { column: string; meta: ReferenceMeta }[] = [];

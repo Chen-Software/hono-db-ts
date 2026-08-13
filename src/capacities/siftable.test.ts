@@ -64,11 +64,15 @@ describe("Siftable — cursor pagination", () => {
 		let cursor: string | null = null;
 		let guard = 0;
 		do {
-			const page = Thread.sift(board.getThreads(), {}, {
-				limit: 2,
-				cursor,
-				sort: { field: "updated_at", dir: "asc" },
-			});
+			const page = Thread.sift(
+				board.getThreads(),
+				{},
+				{
+					limit: 2,
+					cursor,
+					sort: { field: "updated_at", dir: "asc" },
+				},
+			);
 			collected.push(...page.rows.map((t) => t.title));
 			cursor = page.nextCursor;
 			if (++guard > 10) break;
@@ -93,7 +97,11 @@ describe("Siftable — cursor pagination", () => {
 	it("combines with Queriable filtering", () => {
 		const { board } = seed();
 		// Filter to pinned=false then page. All are unpinned, so all 5 come back.
-		const page = Thread.sift(board.getThreads(), { pinned: "false" }, { limit: 10 });
+		const page = Thread.sift(
+			board.getThreads(),
+			{ pinned: "false" },
+			{ limit: 10 },
+		);
 		expect(page.rows.length).toBe(5);
 	});
 });
