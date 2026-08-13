@@ -1,8 +1,11 @@
+import { resolve } from "node:path";
+
 function printHelp(bin = "artefact") {
 	console.log(`
 Usage: ${bin} <command> [args]
 
 Commands:
+  build                   Bundle the app via scripts/build.ts (wires the typia transform)
   echo <message>          Print the message back to stdout
   add <a> <b>             Add two numbers
   subtract <a> <b>        Subtract b from a
@@ -18,8 +21,8 @@ function parseNumber(value: string, name: string): number {
 	return n;
 }
 
-export function run(argv = process.argv.slice(2)) {
-  const [command, ...args] = argv;
+export async function run(argv = process.argv.slice(2)) {
+	const [command, ...args] = argv;
 
 	switch (command) {
 		case "echo": {
@@ -53,12 +56,24 @@ export function run(argv = process.argv.slice(2)) {
 			break;
 		}
 
-    default: {
-      if (command) {
-        console.error(`Error: unknown command "${command}"`);
-      }
-      printHelp();
-      process.exit(command ? 1 : 0);
-    }
-  }
+		case "build": {
+			// Delegate to the programmatic build script, which wires the
+			// @ttsc/unplugin/bun plugin so the typia transform runs during bundling.
+			const child = Bun.spawn(
+				["bun", "run", resolve(import.meta.dir, "../scripts/build.ts")],
+				{ stdout: "inherit", stderr: "inherit", stdin: "inherit" },
+			);
+			const code = await child.exited;
+			if (code !== 0) process.exit(code);
+			break;
+		}
+
+		default: {
+			if (command) {
+				console.error(`Error: unknown command "${command}"`);
+			}
+			printHelp();
+			process.exit(command ? 1 : 0);
+		}
+	}
 }
