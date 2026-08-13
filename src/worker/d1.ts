@@ -15,7 +15,7 @@ import { buildQueryApp } from "@/http/app";
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
 
 /** Adapter turning the Workers D1 binding into the `SqlQueryExecutor` shape. */
-class D1Executor implements SqlQueryExecutor {
+export class D1Executor implements SqlQueryExecutor {
 	constructor(private readonly db: D1Database) {}
 
 	unsafe(sql: string, params: unknown[] = []): Promise<unknown[]> {
