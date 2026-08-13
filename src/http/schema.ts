@@ -20,6 +20,16 @@ import type { SqlQueryExecutor } from "@/capacities/servable";
 
 const MIGRATIONS_DIR = resolve(import.meta.dir, "../../drizzle");
 
+/** The deliberate `DATABASE_URL` targets a service can run against. */
+export type DatabaseTargetKind = "memory" | "file" | "d1" | "turso";
+
+/** A resolved `DATABASE_URL`: which backend it targets + the normalised URL. */
+export interface DatabaseTarget {
+	kind: DatabaseTargetKind;
+	/** Normalised URL to feed the backend client (`new SQL` / D1 binding name). */
+	url: string;
+}
+
 /**
  * Normalise a `DATABASE_URL` for Bun's `new SQL()`.
  *
@@ -30,13 +40,53 @@ const MIGRATIONS_DIR = resolve(import.meta.dir, "../../drizzle");
  */
 export function normalizeDatabaseUrl(url: string): string {
 	const trimmed = url.trim();
-	// sqlite:///:memory:  → :memory:
-	// sqlite:///memory:   → :memory:   (the `/:` form)
-	if (/^sqlite:(?:\/\/)?\/:?memory:$/.test(trimmed)) {
+	// Any sqlite-prefixed `:memory:` variant → the bare form Bun accepts.
+	//   sqlite:///:memory:   sqlite:///memory:   sqlite://:memory:   sqlite::memory:
+	if (/^sqlite:(?:\/\/)?\/?(:?memory:?)$/.test(trimmed)) {
 		return ":memory:";
 	}
-	// sqlite:///absolute/path.db  → keep as-is (Bun accepts sqlite: paths)
+	// File URLs (file:…, sqlite:///path.db, sqlite:./x.db) → pass through.
 	return trimmed;
+}
+
+/**
+ * Resolve a `DATABASE_URL` (optionally alongside `DATABASE_TYPE`) into a
+ * deliberate target:
+ *
+ *   - `:memory:` / `sqlite::memory:` …          → `memory`
+ *   - `file:./dev.db`, `sqlite:///abs.db`,      → `file`
+ *     `./dev.db`, `/abs/dev.db`, `dev.db`
+ *   - `d1:<name>` / `d1://<name>` / `d1:name`   → `d1`   (Cloudflare D1 remote)
+ *   - `libsql://…` or `DATABASE_TYPE=turso`     → `turso`
+ *
+ * If `type` is given, an explicit `d1`/`turso` type overrides URL inference
+ * (e.g. `DATABASE_URL=:memory:` with `DATABASE_TYPE=turso` is still in-memory,
+ * but a bare name with `type=d1` is treated as a D1 database).
+ */
+export function resolveDatabaseTarget(
+	url: string,
+	type: string | undefined,
+): DatabaseTarget {
+	const trimmed = url.trim();
+
+	// Memory — any of the sqlite :memory: spellings.
+	if (/^sqlite:(?:\/\/)?\/?(:?memory:?)$/.test(trimmed) || trimmed === ":memory:") {
+		return { kind: "memory", url: ":memory:" };
+	}
+
+	// Turso — explicit type, or the libsql:// protocol.
+	if (type === "turso" || /^libsql:/.test(trimmed)) {
+		return { kind: "turso", url: trimmed };
+	}
+
+	// D1 — explicit type, or the d1: scheme / a bare database name under type=d1.
+	if (type === "d1" || /^d1:/.test(trimmed)) {
+		const name = trimmed.replace(/^d1:(?:\/\/)?/, "") || "bbs-db";
+		return { kind: "d1", url: name };
+	}
+
+	// File — any path-ish value (relative, absolute, or a file: URL).
+	return { kind: "file", url: trimmed };
 }
 
 /** Split a migration file's SQL into individual statements. */
