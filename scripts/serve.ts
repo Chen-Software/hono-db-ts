@@ -88,8 +88,11 @@ if (created) {
 
 const queryApp = buildQueryApp(client);
 
-// The combined server: /api → JSON queries; / → Honox UI (when built).
+// The combined server: /api → JSON queries (always); / → Honox UI (when built).
 const app = new Hono();
+
+// The JSON query API is ALWAYS available under /api — independent of the UI.
+app.route("/api", queryApp);
 
 // Try to load the built Honox UI (dist/ui/_worker.js). It's a self-contained
 // Hono app (SSR + /static/* + favicon) produced by `bun run src/main.ts ui:build`.
@@ -97,15 +100,15 @@ const UI_BUNDLE = resolve(import.meta.dir, "../dist/ui/_worker.js");
 const hasUi = existsSync(UI_BUNDLE);
 if (hasUi) {
 	const { default: uiApp } = await import(UI_BUNDLE);
-	// Mount the JSON query app under /api, then the UI at the root.
-	app.route("/api", queryApp);
+	// Mount the UI at the root (it owns /, /static/*, /favicon.ico).
 	app.route("/", uiApp as Hono);
 	console.log("serve: Honox UI mounted at / (from dist/ui/_worker.js).");
 } else {
-	// No UI build — keep the JSON API at the root (back-compat with old clients).
+	// No UI build — keep the JSON API ALSO at the root so `/boards` etc. keep
+	// working for clients that hit the API without the /api prefix.
 	app.route("/", queryApp);
 	console.log(
-		"serve: no dist/ui/_worker.js — serving the JSON API at / only.\n" +
+		"serve: no dist/ui/_worker.js — serving the JSON API at / AND /api.\n" +
 			"  Build the UI with: bun run src/main.ts ui:build",
 	);
 }
@@ -118,7 +121,7 @@ const server = Bun.serve({
 console.log(`BBS query server running on http://localhost:${server.port}`);
 console.log(
 	hasUi
-		? "  UI : http://localhost:" + server.port + "/"
-		: "  API: http://localhost:" + server.port + "/api/stats",
+		? "  UI : http://localhost:" + server.port + "/  (Honox UI)"
+		: "  API: http://localhost:" + server.port + "/api/...  (JSON, also at /...)",
 );
 console.log("  API: /api/stats, /api/boards, /api/boards/:id/threads, /api/threads/:id/replies, /api/users/:id/posts, /api/search?q=, /api/latest-posts");

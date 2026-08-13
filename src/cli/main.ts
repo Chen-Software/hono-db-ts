@@ -46,16 +46,21 @@ Commands:
                           {"age":{">":30}}, and LIKE search {"title":{"contains":"x"}}.
                           Booleans are coerced to 0/1. Default order: updated_at desc.
 
-  serve [port]            Run the local BBS query server (scripts/serve.ts, default
-                          :8787). Serves the Honox UI at / (when built) and the
-                          JSON query API at /api.
+  serve [port]            Run the local server (scripts/serve.ts, default :8787).
+                          JSON query API is ALWAYS at /api; the Honox UI is served
+                          at / when it has been built (see ui:build). Without a UI
+                          build, the API is ALSO exposed at / for back-compat.
 
   ui:build                Build the Honox UI in /app -> dist/ui/_worker.js
-                          (vite.ui.config.ts: honox routes/islands + ttsc + tailwind,
-                          via @hono/vite-build/bun). Do this before serve to get
-                          the UI.
+                          (vite.ui.config.ts: honox routes/islands + ttsc + Panda
+                          CSS, via @hono/vite-build/bun). Run this BEFORE serve
+                          to get the UI.
 
   ui:dev                  Run the Honox UI dev server (vite, HMR on :8787).
+
+To serve the UI locally:
+  bun run src/main.ts ui:build   # build the UI -> dist/ui/_worker.js
+  bun run src/main.ts serve      # UI at /, JSON API at /api, on :8787
 
   cf-build                Bundle src/worker.ts into dist/worker.js for a Cloudflare
                           Worker (inlines the generated migration SQL). Depends on
