@@ -1,0 +1,10 @@
+# Apply ttsc transform plugins (typia, via tsconfig.json compilerOptions.plugins)
+# to every `bun run` module load. Matches scripts/build.ts, which wires the same
+# transform into Bun.build via @ttsc/unplugin/bun.
+preload = ["@ttsc/unplugin/bun-register"]
+
+# bun test needs the preload under its own section (top-level preload only
+# covers `bun run`), otherwise typia reflection calls throw
+# "no transform has been configured".
+[test]
+preload = ["@ttsc/unplugin/bun-register"]
