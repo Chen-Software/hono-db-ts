@@ -8,6 +8,7 @@ import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Queriable } from "@/capacities/queriable";
 import { Randomisable } from "@/capacities/randomisable";
 import { Referencible } from "@/capacities/referencible";
+import { Servable } from "@/capacities/servable";
 import { Siftable } from "@/capacities/siftable";
 import { Validatable } from "@/capacities/validatable";
 import {
@@ -140,6 +141,13 @@ const BoardModel = defineModel<BoardSchema>({
 		Queriable,
 		{
 			capacity: Siftable,
+			options: { sort: { field: "created_at", dir: "desc" } },
+		},
+		// Servable: generates the SQL-backed Hono routes `GET /boards` +
+		// `GET /boards/:id` via `Board.serve(app, client)`, with the same
+		// `created_at` desc sort Siftable uses.
+		{
+			capacity: Servable,
 			options: { sort: { field: "created_at", dir: "desc" } },
 		},
 		Randomisable,

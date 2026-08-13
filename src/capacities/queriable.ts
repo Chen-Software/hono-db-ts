@@ -63,7 +63,13 @@ export interface QueriableOptions {
 /** The matcher each field resolves to. */
 type Matcher = "eq" | "substring" | "range" | "list" | "none";
 
-interface FieldPlan {
+/**
+ * One resolved queryable field: how the query-param `param` maps onto the
+ * model field `field`, with the inferred matcher mode. Exported so sibling
+ * capacities (e.g. `Servable`) can reuse `Queriable`'s schema-inferred
+ * semantics to build SQL filters instead of re-deriving them.
+ */
+export interface FieldPlan {
 	/** The field name on the model instance. */
 	field: string;
 	/** The query-param key (defaults to `field`; may be overridden via `as`). */
@@ -105,9 +111,11 @@ function collectFormats(schema: JsonSchema): Record<string, string> {
 
 /**
  * Build the per-field matcher table for a model from its reflected schema,
- * applying option overrides on top of kind/format inference.
+ * applying option overrides on top of kind/format inference. Exported so
+ * `Servable` (and other SQL translators) reuse the SAME inference `Queriable`
+ * uses — a `?param=` means the same thing in-memory and over SQL.
  */
-function deriveFieldPlans(
+export function deriveFieldPlans(
 	schema: JsonSchema,
 	options: QueriableOptions = {},
 ): FieldPlan[] {

@@ -8,6 +8,7 @@ import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Queriable } from "@/capacities/queriable";
 import { Randomisable } from "@/capacities/randomisable";
 import { Referencible } from "@/capacities/referencible";
+import { Servable } from "@/capacities/servable";
 import { Validatable } from "@/capacities/validatable";
 import {
 	Identifiable,
@@ -187,6 +188,18 @@ const UserModel = defineModel<UserSchema>({
 		{
 			capacity: Queriable,
 			options: { fields: { email: { as: "mail" } } },
+		},
+		// Servable: generates the SQL-backed Hono read routes `GET /users` +
+		// `GET /users/:id` (`User.serve(app, client)`), reusing the SAME
+		// `fields` alias override so `?mail=` filters over SQL exactly as it
+		// does in-memory. Sort defaults to `created_at` (User has no
+		// `updated_at`). Requires `SqlSerialisable` to be composed first.
+		{
+			capacity: Servable,
+			options: {
+				sort: { field: "created_at", dir: "desc" },
+				fields: { email: { as: "mail" } },
+			},
 		},
 		// Meterable: opts `User`'s repository operations into metrics. Every
 		// `UserRepo` op (insert / load / find / delete / update) is timed and

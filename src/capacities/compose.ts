@@ -26,6 +26,7 @@ import { Randomisable } from "./randomisable";
 import { Reactive } from "./reactive";
 import type { Referencible } from "./referencible";
 import type { SchemaModule } from "./schema-module";
+import { Servable, type ServableStatic } from "./servable";
 import { Siftable } from "./siftable";
 import { SqlSerialisable } from "./sql-serialisable";
 import type { Timestamped } from "./timestamped";
@@ -134,7 +135,8 @@ export type CapacityFn =
 	| typeof Referencible
 	| typeof Queriable
 	| typeof Siftable
-	| typeof Meterable;
+	| typeof Meterable
+	| typeof Servable;
 
 /**
  * Per-capacity options bag passed through to the capacity at compose time
@@ -199,6 +201,7 @@ for (const [name, fn] of [
 	["Queriable", Queriable],
 	["Siftable", Siftable],
 	["Meterable", Meterable],
+	["Servable", Servable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
 }
@@ -227,11 +230,13 @@ type CapacityInstance<C> = C extends typeof Hashable
 			? ComparableStatic & ComparableInstance
 			: C extends typeof Clonable
 				? ClonableStatic & ClonableInstance
-				: C extends { capacity: infer D }
-					? CapacityInstance<D>
-					: C extends string
-						? unknown
-						: unknown;
+				: C extends typeof Servable
+					? ServableStatic
+					: C extends { capacity: infer D }
+						? CapacityInstance<D>
+						: C extends string
+							? unknown
+							: unknown;
 
 /** Left-to-right fold of a ref tuple into the composed class type. */
 export type Composed<B extends CapacityComposer, S> = S extends readonly [
