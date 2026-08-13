@@ -32,6 +32,9 @@ import { resolve } from "node:path";
 // which registers the class in the model registry.
 import "@/models/user";
 import "@/models/post";
+import "@/models/board";
+import "@/models/thread";
+import "@/models/reply";
 
 import type { SqlDialect, SqlModelPlan } from "../src/capacities/sql-serialisable";
 import { deriveSqlPlan } from "../src/capacities/sql-serialisable";
