@@ -171,10 +171,18 @@ function Referencible<TBase extends CapacityComposer>(
 		const c = rel.cardinality ?? "auto";
 		const isMany = c === "one-to-many" || c === "many-to-many";
 		if (!isMany) continue;
+		// Match the SPECIFIC inverse model: the one whose Reference tag on the
+		// SAME FK column (`rel.by`) targets this model. A model may be referenced
+		// by MANY other models with different onDelete rules (e.g. `User` is
+		// referenced by `Post.authorId` cascade AND `Board.moderatorId` setNull);
+		// we must validate against the correct complement, not the first model
+		// that happens to reference us.
 		for (const [name, ctor] of listModels()) {
 			if (name === modelName) continue;
 			const cols = referencesOf((ctor as any)?.schema);
-			const match = cols.find((x) => x.meta.target === modelName);
+			const match = cols.find(
+				(x) => x.meta.target === modelName && x.column === rel.by,
+			);
 			if (!match) continue;
 			if (
 				rel.onDelete &&
