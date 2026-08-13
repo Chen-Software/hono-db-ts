@@ -1,6 +1,6 @@
 /**
  * Compile-time environment macros — imported by `macros/index.ts` with
- * `with { type: "macro" }` (singular; the real Bun macro key). Every export is
+is
  * a Bun macro: it is CALLED at the use site and replaced with the literal
  * result at BUILD time. The module is never shipped as runtime code.
  *
@@ -23,17 +23,17 @@
  */
 
 /** Current runtime mode, resolved at BUILD time and inlined. Default "development". */
-export function env(): string {
+function env(): string {
 	return process.env.NODE_ENV ?? "development";
 }
 
 /** True when built for development (NODE_ENV === "development"). */
-export function isDev(): boolean {
+function isDev(): boolean {
 	return process.env.NODE_ENV === "development";
 }
 
 /** True when built for production (NODE_ENV === "production"). */
-export function isProd(): boolean {
+function isProd(): boolean {
 	return process.env.NODE_ENV === "production";
 }
 
@@ -46,21 +46,28 @@ export function isProd(): boolean {
  *               in the cloud). SQLite dialect, so it shares the D1 schema.
  * Defaults: prod → "d1", otherwise → "sqlite", overridable via DATABASE_TYPE.
  */
-export function databaseType(): "sqlite" | "d1" | "turso" {
+function databaseType(): "sqlite" | "d1" | "turso" {
 	const t = process.env.DATABASE_TYPE;
 	if (t === "sqlite" || t === "d1" || t === "turso") return t;
 	return process.env.NODE_ENV === "production" ? "d1" : "sqlite";
 }
 
+function databaseUrl(): string {
+	return (
+		process.env.DATABASE_URL ||
+		(process.env.DATABASE_TYPE === "turso" && process.env.TURSO_URL)
+	);
+}
+
 /** True when the build targets local sqlite (bun:sqlite). Drops the D1 path in dev. */
-export function isSqlite(): boolean {
+function isSqlite(): boolean {
 	const t = process.env.DATABASE_TYPE;
 	if (t === "sqlite" || t === "d1" || t === "turso") return t === "sqlite";
 	return process.env.NODE_ENV !== "production";
 }
 
 /** True when the build targets Cloudflare D1. Drops bun:sqlite in the worker. */
-export function isD1(): boolean {
+function isD1(): boolean {
 	const t = process.env.DATABASE_TYPE;
 	if (t === "sqlite" || t === "d1" || t === "turso") return t === "d1";
 	return process.env.NODE_ENV === "production";
@@ -71,7 +78,7 @@ export function isD1(): boolean {
  * Turso cloud, selected by `TURSO_URL`. The schema is the SQLite dialect, so
  * the SAME `users` / `post_versions` tables the D1 build uses apply here.
  */
-export function isTurso(): boolean {
+function isTurso(): boolean {
 	const t = process.env.DATABASE_TYPE;
 	if (t === "sqlite" || t === "d1" || t === "turso") return t === "turso";
 	return false;
@@ -83,32 +90,32 @@ export function isTurso(): boolean {
  * runs without R2 (in-memory fallback). Set `R2_ENABLED=false` to tree-shake
  * the entire R2 client out of the bundle for a minimal build.
  */
-export function r2Enabled(): boolean {
+function r2Enabled(): boolean {
 	return process.env.R2_ENABLED !== "false";
 }
 
 /** Local Bun dev server port (default 3000). */
-export function port(): number {
+function port(): number {
 	return Number(process.env.PORT ?? 3000);
 }
 
 /** Public base URL of the deployed worker. */
-export function workerUrl(): string | undefined {
+function workerUrl(): string | undefined {
 	return process.env.WORKER_URL;
 }
 
 /** Deployed R2 bucket name (reference only — not a credential). */
-export function r2Bucket(): string | undefined {
+function r2Bucket(): string | undefined {
 	return process.env.R2_BUCKET;
 }
 
 /** Deployed D1 database name (reference only — not a credential). */
-export function d1Database(): string | undefined {
+function d1Database(): string | undefined {
 	return process.env.D1_DATABASE;
 }
 
 /** Optional CORS allow-list origin (also a Cloudflare secret binding). */
-export function allowedOrigin(): string | undefined {
+function allowedOrigin(): string | undefined {
 	return process.env.ALLOWED_ORIGIN;
 }
 
@@ -117,15 +124,15 @@ export function allowedOrigin(): string | undefined {
  * TO the deployed worker. NOT the worker's gate secret (that is the runtime
  * `env.API_TOKEN` Cloudflare binding). See the module SECURITY NOTE above.
  */
-export function apiToken(): string | undefined {
+function apiToken(): string | undefined {
 	return process.env.API_TOKEN;
 }
 
-export function tursoUrl(): string | undefined {
-	return process.env.TURSO_URL;
+function tursoUrl(): string | undefined {
+	return process.env.TURSO_URL || process.env.DATABASE_URL;
 }
 
-export function tursoAuthToken(): string | undefined {
+function tursoAuthToken(): string | undefined {
 	return process.env.TURSO_AUTH_TOKEN;
 }
 
@@ -140,21 +147,45 @@ export function tursoAuthToken(): string | undefined {
  * OTEL config. An empty string (`OTEL_EXPORTER_OTLP_ENDPOINT=`) resolves to
  * `false` so it does NOT enable the exporter.
  */
-export function otelEnabled(): boolean {
+function otelEnabled(): boolean {
 	return !!process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 }
 
 /** Full OTLP metrics endpoint, e.g. https://otel.example.com/v1/metrics. */
-export function otelEndpoint(): string | undefined {
+function otelEndpoint(): string | undefined {
 	return process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 }
 
 /** Standard OTel header string, `k1=v1,k2=v2` (e.g. Grafana Cloud auth). */
-export function otelHeaders(): string | undefined {
+function otelHeaders(): string | undefined {
 	return process.env.OTEL_EXPORTER_OTLP_HEADERS;
 }
 
 /** `service.name` resource attribute. Defaults to "artefact". */
-export function otelServiceName(): string | undefined {
+function otelServiceName(): string | undefined {
 	return process.env.OTEL_SERVICE_NAME;
 }
+
+export {
+	env,
+	isDev,
+	isProd,
+	databaseType,
+	databaseUrl,
+	isSqlite,
+	isD1,
+	isTurso,
+	r2Enabled,
+	port,
+	workerUrl,
+	r2Bucket,
+	d1Database,
+	allowedOrigin,
+	apiToken,
+	tursoUrl,
+	tursoAuthToken,
+	otelEnabled,
+	otelEndpoint,
+	otelHeaders,
+	otelServiceName,
+};
