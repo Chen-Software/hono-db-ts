@@ -127,7 +127,7 @@ export async function run(argv = process.argv.slice(2)) {
 		}
 
 		case "query": {
-			await runQuery(args[0], args[1]);
+			await runQuery(args);
 			break;
 		}
 
@@ -147,17 +147,37 @@ export async function run(argv = process.argv.slice(2)) {
 }
 
 /**
- * `query <table> [jsonFilter]` — run `db.select().from(table)` against the DB
- * via `drizzle-orm/bun-sql` + the `databaseUrl()` build macro, using the Bun +
- * Drizzle client pattern (`new SQL(url)` → `drizzle({ client })`) exactly as
- * the app does. `<table>` is a model/table name; the model is looked up in the
- * registry and its derived drizzle `table` (from `SqlSerialisable`) is used as
- * the `.from()` target. Optional `[json]` is a JSON object of equality filters
- * (e.g. `{"published": true}`) applied as a WHERE clause.
+ * `query <table> [jsonFilter] [flags]` — query a BBS model table via
+ * `drizzle-orm/bun-sql` + the `databaseUrl()` macro (the Bun + Drizzle client
+ * pattern: `new SQL(url)` → `drizzle({ client })`, exactly as the app does).
+ *
+ * `<table>` is a model/table name (e.g. `users`, `UserSchema`, `boards`,
+ * `threads`, `replies`, `posts`) resolved through the model registry.
+ *
+ * The filter is a JSON object with per-column matchers:
+ *   - equality:      `{"role": "admin"}`
+ *   - comparisons:   `{"age": {">": 30}}`, `{"updated_at": {">=": "2026-01-01"}}`
+ *   - string search: `{"title": {"contains": "hello"}}` (LIKE), `{"title": {"startsWith": "x"}}`
+ *   - multiple keys are ANDed. Booleans (`"true"`/`"false"`) are coerced to the
+ *     column's storage type (SQLite stores bools as 0/1) automatically.
+ *
+ * Flags:
+ *   --limit N         cap the result set (default 50)
+ *   --sort f[:asc|desc]  order by a column (default `updated_at` desc when present)
+ *   --count           return only the matching row count
+ *
+ * Examples:
+ *   cli query users '{"role": "admin"}'
+ *   cli query threads '{"boardId": "<id>", "pinned": "true"}' --sort updated_at:desc --limit 20
+ *   cli query replies '{"threadId": "<id>"}' --count
+ *   cli query users '{"name": {"contains": "a"}}' --sort created_at:asc
  */
-async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
+async function runQuery(args: string[]): Promise<void> {
+	const tableArg = args[0];
 	if (!tableArg) {
-		console.error("Error: query requires a <table> name, e.g. `query users`");
+		console.error(
+			"Error: query requires a <table> name. Known tables: users, boards, threads, replies, posts.",
+		);
 		process.exit(1);
 	}
 
@@ -182,8 +202,8 @@ async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 		process.exit(1);
 	}
 
-	// Resolve the table: try an exact schemaName/table-name match, then a
-	// case-insensitive match on the derived table name.
+	// Resolve the table: exact schemaName/table-name match, then case-insensitive
+	// match on the derived drizzle table name.
 	let target: any;
 	for (const [, Ctor] of listModels()) {
 		const tableName = Ctor.table?.[Symbol.for("drizzle:Name")];
@@ -208,33 +228,132 @@ async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 		process.exit(1);
 	}
 
-	// Follow the official Bun + Drizzle pattern (bun.com/docs/guides/ecosystem
-	// /drizzle, orm.drizzle.team/docs/connect-bun-sql): create a Bun `SQL` client
-	// and hand it to `drizzle({ client })`. `databaseUrl()` is a build-time macro
-	// (inlined from process.env at startup) — see macros/envs.ts.
-	const client = new SQL(url);
-	const db = drizzle({ client });
-	let builder = db.select().from(target);
-	if (filterArg) {
-		let filter: Record<string, unknown>;
-		try {
-			filter = JSON.parse(filterArg) as Record<string, unknown>;
-		} catch {
-			console.error(`Error: filter is not valid JSON: "${filterArg}"`);
-			process.exit(1);
-		}
-		const { eq, and } = await import("drizzle-orm");
-		const cols: Record<string, any> = target[Symbol.for("drizzle:Columns")];
-		const conditions = Object.entries(filter).map(([k, v]) => {
-			const col = cols[k];
-			if (!col) {
-				console.error(`Error: unknown column "${k}" on table "${tableArg}"`);
+	// ------------------------------------------------------------------
+	// Parse flags + the (optional) filter JSON.
+	// ------------------------------------------------------------------
+	let filter: Record<string, unknown> = {};
+	let limit = 50;
+	let sort: { field: string; dir: "asc" | "desc" } | null = null;
+	let doCount = false;
+
+	const rest = args.slice(1);
+	for (let i = 0; i < rest.length; i++) {
+		const a = rest[i]!;
+		if (a === "--limit") {
+			limit = Math.max(1, Number(rest[i + 1]) || 50);
+			i++;
+		} else if (a === "--sort") {
+			const spec = rest[i + 1];
+			i++;
+			if (spec) {
+				const [field, dir] = spec.split(":");
+				sort = { field: field!, dir: dir === "asc" ? "asc" : "desc" };
+			}
+		} else if (a === "--count") {
+			doCount = true;
+		} else if (a.startsWith("{")) {
+			try {
+				filter = JSON.parse(a) as Record<string, unknown>;
+			} catch {
+				console.error(`Error: filter is not valid JSON: "${a}"`);
 				process.exit(1);
 			}
-			return eq(col, v as any);
-		});
-		builder = builder.where(and(...conditions)) as typeof builder;
+		}
 	}
+
+	// ------------------------------------------------------------------
+	// Build the WHERE clause.
+	// ------------------------------------------------------------------
+	const { eq, ne, gt, gte, lt, lte, like, and } = await import("drizzle-orm");
+	const cols: Record<string, any> = target[Symbol.for("drizzle:Columns")];
+
+	/** Coerce a boolean/boolean-string to its int storage (SQLite bools → 0/1). */
+	function coerce(value: unknown): unknown {
+		if (typeof value === "boolean") return value ? 1 : 0;
+		if (
+			value === "true" ||
+			value === "false" ||
+			value === "True" ||
+			value === "False"
+		) {
+			return value === "true" || value === "True" ? 1 : 0;
+		}
+		return value;
+	}
+
+	const conditions: any[] = [];
+	for (const [key, value] of Object.entries(filter)) {
+		const col = cols[key];
+		if (!col) {
+			console.error(`Error: unknown column "${key}" on table "${tableArg}"`);
+			process.exit(1);
+		}
+		if (value && typeof value === "object" && !Array.isArray(value)) {
+			// Operator object, e.g. {">": 30}, {"contains": "x"}.
+			const ops = value as Record<string, unknown>;
+			for (const [op, operand] of Object.entries(ops)) {
+				switch (op) {
+					case "eq":
+						conditions.push(eq(col, coerce(operand)));
+						break;
+					case "ne":
+						conditions.push(ne(col, coerce(operand)));
+						break;
+					case ">":
+						conditions.push(gt(col, coerce(operand)));
+						break;
+					case ">=":
+						conditions.push(gte(col, coerce(operand)));
+						break;
+					case "<":
+						conditions.push(lt(col, coerce(operand)));
+						break;
+					case "<=":
+						conditions.push(lte(col, coerce(operand)));
+						break;
+					case "contains":
+						conditions.push(like(col, `%${operand}%`));
+						break;
+					case "startsWith":
+						conditions.push(like(col, `${operand}%`));
+						break;
+					default:
+						console.error(
+							`Error: unsupported operator "${op}" on "${key}" (use eq/ne/></=</=</>=/contains/startsWith)`,
+						);
+						process.exit(1);
+				}
+			}
+		} else {
+			conditions.push(eq(col, coerce(value)));
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Execute.
+	// ------------------------------------------------------------------
+	const client = new SQL(url);
+	const db = drizzle({ client });
+
+	let builder = db.select().from(target);
+	if (conditions.length > 0) builder = builder.where(and(...conditions)) as any;
+
+	if (doCount) {
+		// Apply the WHERE (no limit/order) and return the matching count.
+		const rows = await builder;
+		console.log(JSON.stringify({ table: tableArg, count: rows.length }));
+		return;
+	}
+
+	// Ordering — default to `updated_at` desc when the column exists.
+	const orderField = sort?.field ?? (cols["updated_at"] ? "updated_at" : "created_at");
+	if (cols[orderField]) {
+		const orderCol = cols[orderField];
+		builder = builder.orderBy(
+			(sort?.dir ?? "desc") === "desc" ? orderCol.desc() : orderCol.asc(),
+		) as any;
+	}
+	builder = builder.limit(limit) as any;
 
 	const rows = await builder;
 	console.log(JSON.stringify(rows, null, 2));
