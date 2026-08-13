@@ -110,9 +110,12 @@ export function defineModel<T>(
 		constructor(data: any) {
 			const Ctor = this.constructor as any;
 
-			// `UPDATE_PHASE` marks a *reconstruction* (from `Immutable.update`).
-			// Strip the marker before classifying and skip the `onConstruct`
-			// phase — the update path already ran the `onUpdate` hooks.
+			// `UPDATE_PHASE` marks a *reconstruction* (from `Immutable.update`):
+			// the data is `{ ...entity, ...patch }` with an UPDATE_PHASE marker.
+			// Strip the marker, classify the merged candidate, and run the
+			// `onUpdate` lifecycle hooks (which validate the reconstructed entity)
+			// instead of `onConstruct` — so an invalid patch is rejected here,
+			// before a new object escapes. A fresh construct runs `onConstruct`.
 			const isReconstruction =
 				data && typeof data === "object" && data[UPDATE_PHASE] === true;
 			const input = isReconstruction ? { ...data } : data;
@@ -124,20 +127,26 @@ export function defineModel<T>(
 			const classify = Ctor.classify ?? schemaModule.classify;
 			Object.assign(this, classify(input));
 
-			if (!isReconstruction) {
+			if (isReconstruction) {
+				runHooks(Ctor.hooks?.onUpdate, this);
+			} else {
 				runHooks(Ctor.hooks?.onConstruct, this);
 			}
 		}
 
 		/**
-		 * Base MUTABLE update — merges the patch in place, then runs the
+		 * Base MUTABLE update — validates the merged candidate through the
 		 * `onUpdate` hooks (e.g. `Validatable`'s enforcement, `Derivable`'s
-		 * recompute) with the patch so hooks see what changed. `Immutable` and
+		 * recompute) BEFORE committing, then writes it to `this` in place. So an
+		 * invalid patch throws and leaves `this` untouched. `Immutable` and
 		 * `Versionable` override this with their reconstruction-based update.
 		 */
 		update(patch: Record<string, unknown>): this {
-			Object.assign(this, patch);
-			runHooks((this.constructor as any).hooks?.onUpdate, this, patch);
+			// Build the merged candidate WITHOUT mutating `this`, so hooks can
+			// reject it before any change is committed.
+			const candidate = { ...this, ...patch };
+			runHooks((this.constructor as any).hooks?.onUpdate, candidate, patch);
+			Object.assign(this, candidate);
 			return this;
 		}
 	}
