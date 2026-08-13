@@ -11,6 +11,10 @@
  * `databaseUrl()` macro + `new SQL` client, exactly like the app). Response
  * shape is `{ ok: true, data }` or `{ ok: false, data: { error } }`.
  *
+ * Zero-setup: if the target database has no tables (a fresh `:memory:` DB or
+ * an empty file DB), the generated migration SQL from `drizzle/*.sql` is
+ * applied at startup (see `src/http/schema.ts`). Existing data is preserved.
+ *
  * Endpoints (the "good queries" for a BBS): /stats, /boards, /boards/:id,
  * /boards/:id/threads, /boards/:id/hot, /threads/:id, /threads/:id/replies,
  * /users/:id, /users/:id/threads, /users/:id/posts, /users/:id/replies,
@@ -21,14 +25,25 @@ import { SQL } from "bun";
 
 import { databaseUrl } from "../src/macros/envs" with { type: "macro" };
 import { buildQueryApp } from "../src/http/app";
+import { ensureSchema, normalizeDatabaseUrl } from "../src/http/schema";
 
-const url = databaseUrl();
+const url = normalizeDatabaseUrl(databaseUrl() ?? "");
 if (!url) {
 	console.error("serve: no DATABASE_URL — set it in .env or the shell.");
 	process.exit(1);
 }
 
 const client = new SQL(url);
+
+// Zero-setup: create the schema when the DB is empty (fresh :memory: or a new
+// file DB). Existing databases are left untouched.
+const created = await ensureSchema(client);
+if (created) {
+	console.log(
+		`serve: database had no schema — applied ${"drizzle/*.sql"} from the generated migrations.`,
+	);
+}
+
 const app = buildQueryApp(client);
 
 const server = Bun.serve({
