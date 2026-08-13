@@ -402,6 +402,12 @@ function kindOf(p: JsonProp): ColKind {
 function planColumns(schema: JsonSchema): ColPlan[] {
 	const obj = unwrapObject(schema);
 	const props = obj.properties ?? {};
+	// A property is nullable when typia marks it `nullable`/union-with-null, OR
+	// when it is NOT listed in `required` (i.e. it is OPTIONAL, e.g. `parentId?`).
+	// The reflected `required` array is the authoritative source for the latter.
+	const required = Array.isArray(obj.required)
+		? new Set(obj.required as string[])
+		: null;
 	return Object.entries(props).map(([name, p]) => {
 		// Enum membership: typia emits either `enum: [...]` (TS `enum`/tuple) or
 		// `oneOf: [{ const: ... }, ...]` (a union of string/number literals).
@@ -429,7 +435,9 @@ function planColumns(schema: JsonSchema): ColPlan[] {
 		return {
 			name,
 			kind: kindOf(p),
-			nullable: isNullable(p),
+			// Optional (not in `required`) ⇒ nullable. `isNullable` covers explicit
+			// `nullable`/union-with-null; the required-list check covers `field?`.
+			nullable: isNullable(p) || (required != null && !required.has(name)),
 			isId: name === "id",
 			reference: name !== "id" ? readReference(p) : undefined,
 			...(hasBounds
