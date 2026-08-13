@@ -1,0 +1,24 @@
+{
+	// Cloudflare Workers config for the BBS query service.
+	//
+	// `main` is the BUNDLED worker produced by `bun run scripts/cf-build.ts`
+	// (dist/worker.js). Do not point wrangler directly at src/worker.ts — the
+	// build inlines the generated migration SQL as `__MIGRATIONS_SQL__`.
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "bbs-query",
+	"main": "dist/worker.js",
+	"compatibility_date": "2026-01-01",
+	// bun:sqlite is used by the in-memory database; nodejs_compat keeps the
+	// built-in modules available under the Workers runtime.
+	"compatibility_flags": ["nodejs_compat"],
+
+	// Production database is configured as in-memory sqlite
+	// (DATABASE_TYPE=sqlite + DATABASE_URL=:memory:). Each isolate creates its
+	// own fresh in-memory schema at startup (see src/worker.ts). The env below
+	// is only referenced for parity — the macros are baked at build time.
+	"vars": {
+		"ENVIRONMENT": "production",
+		"DATABASE_TYPE": "sqlite",
+		"DATABASE_URL": ":memory:"
+	}
+}

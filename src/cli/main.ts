@@ -47,6 +47,11 @@ Commands:
                           Booleans are coerced to 0/1. Default order: updated_at desc.
 
   serve [port]            Run the local BBS query server (scripts/serve.ts, default :8787)
+
+  cf-build                Bundle src/worker.ts into dist/worker.js for a Cloudflare
+                          Worker (inlines the generated migration SQL). Depends on
+                          db:generate (regenerates drizzle/*.sql from the models).
+                          See wrangler.jsonc / scripts/cf-build.ts.
 `);
 }
 
@@ -135,6 +140,16 @@ export async function run(argv = process.argv.slice(2)) {
 
 		case "serve": {
 			await runScript("serve.ts", args);
+			break;
+		}
+
+		case "cf-build": {
+			// Depends on the generated migrations — regenerate them (sqlite
+			// dialect) so the inlined schema matches the current models, then
+			// bundle the worker.
+			await runScript("model-build.ts");
+			await runScript("db-generate.ts", ["sqlite"]);
+			await runScript("cf-build.ts");
 			break;
 		}
 

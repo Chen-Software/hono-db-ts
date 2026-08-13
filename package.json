@@ -16,7 +16,11 @@
 		"fix": "bun run check",
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
-		"lint": "bun x @biomejs/biome lint --fix ."
+		"lint": "bun x @biomejs/biome lint --fix .",
+		"cf:build": "bun run scripts/cf-build.ts",
+		"cf:dev": "wrangler dev",
+		"cf:deploy": "wrangler deploy",
+		"cf:types": "wrangler types"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
