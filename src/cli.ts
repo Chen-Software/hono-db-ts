@@ -36,10 +36,15 @@ Commands:
   db:migrate              Depends on models:build. Apply the generated migrations to the
                           database from the databaseUrl() macro (drizzle-orm/bun-sql)
 
+  db:seed [counts…]       Seed the DB with BBS data (Randomisable.random()): defaults
+                          50 users / 100 boards / 1000 posts / 1000 threads / 2000 replies
+
   query <table> [json]    Run a query against the DB via drizzle-orm/bun-sql + databaseUrl().
                           <table> is a model/table name (e.g. "users", "UserSchema"); the
                           derived drizzle table is selected. Optional [json] is a JSON filter
                           object applied as WHERE equality.
+
+  serve [port]            Run the local BBS query server (scripts/serve.ts, default :8787)
 `);
 }
 
@@ -115,8 +120,19 @@ export async function run(argv = process.argv.slice(2)) {
 			break;
 		}
 
+		case "db:seed": {
+			// Depends on migrations being applied (the tables must exist).
+			await runScript("seed.ts", args);
+			break;
+		}
+
 		case "query": {
 			await runQuery(args[0], args[1]);
+			break;
+		}
+
+		case "serve": {
+			await runScript("serve.ts", args);
 			break;
 		}
 
@@ -141,7 +157,7 @@ export async function run(argv = process.argv.slice(2)) {
  */
 async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 	if (!tableArg) {
-		console.error('Error: query requires a <table> name, e.g. `query users`');
+		console.error("Error: query requires a <table> name, e.g. `query users`");
 		process.exit(1);
 	}
 
@@ -149,6 +165,9 @@ async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 	// registry is populated and every `.table` is derived.
 	await import("@/models/user");
 	await import("@/models/post");
+	await import("@/models/board");
+	await import("@/models/thread");
+	await import("@/models/reply");
 
 	const { drizzle } = await import("drizzle-orm/bun-sql");
 	const { listModels } = await import("@/registry");
@@ -179,7 +198,9 @@ async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 	}
 	if (!target) {
 		const known = listModels()
-			.map(([, c]) => `${c.schemaName}(${c.table?.[Symbol.for("drizzle:Name")]})`)
+			.map(
+				([, c]) => `${c.schemaName}(${c.table?.[Symbol.for("drizzle:Name")]})`,
+			)
 			.join(", ");
 		console.error(
 			`Error: unknown table "${tableArg}". Known models: ${known || "(none)"}`,
