@@ -1,5 +1,5 @@
 function printHelp(bin = "artefact") {
-  console.log(`
+	console.log(`
 Usage: ${bin} <command> [args]
 
 Commands:
@@ -10,48 +10,48 @@ Commands:
 }
 
 function parseNumber(value: string, name: string): number {
-  const n = Number(value);
-  if (Number.isNaN(n)) {
-    console.error(`Error: "${name}" must be a number, got "${value}"`);
-    process.exit(1);
-  }
-  return n;
+	const n = Number(value);
+	if (Number.isNaN(n)) {
+		console.error(`Error: "${name}" must be a number, got "${value}"`);
+		process.exit(1);
+	}
+	return n;
 }
 
 export function run(argv = process.argv.slice(2)) {
   const [command, ...args] = argv;
 
-  switch (command) {
-    case "echo": {
-      if (args.length === 0) {
-        console.error("Error: echo requires a message");
-        process.exit(1);
-      }
-      console.log(args.join(" "));
-      break;
-    }
+	switch (command) {
+		case "echo": {
+			if (args.length === 0) {
+				console.error("Error: echo requires a message");
+				process.exit(1);
+			}
+			console.log(args.join(" "));
+			break;
+		}
 
-    case "add": {
-      if (args.length < 2) {
-        console.error("Error: add requires two numbers");
-        process.exit(1);
-      }
-      const a = parseNumber(args[0]!, "a");
-      const b = parseNumber(args[1]!, "b");
-      console.log(a + b);
-      break;
-    }
+		case "add": {
+			if (args.length < 2) {
+				console.error("Error: add requires two numbers");
+				process.exit(1);
+			}
+			const a = parseNumber(args[0]!, "a");
+			const b = parseNumber(args[1]!, "b");
+			console.log(a + b);
+			break;
+		}
 
-    case "subtract": {
-      if (args.length < 2) {
-        console.error("Error: subtract requires two numbers");
-        process.exit(1);
-      }
-      const a = parseNumber(args[0]!, "a");
-      const b = parseNumber(args[1]!, "b");
-      console.log(a - b);
-      break;
-    }
+		case "subtract": {
+			if (args.length < 2) {
+				console.error("Error: subtract requires two numbers");
+				process.exit(1);
+			}
+			const a = parseNumber(args[0]!, "a");
+			const b = parseNumber(args[1]!, "b");
+			console.log(a - b);
+			break;
+		}
 
     default: {
       if (command) {
