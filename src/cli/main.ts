@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 
 import { runQuery } from "./query";
 
-const SCRIPTS = resolve(import.meta.dir, "../scripts");
+// `import.meta.dir` is src/cli — scripts live one level up at the repo root.
+const SCRIPTS = resolve(import.meta.dir, "../../scripts");
 
 /** Spawn a Bun script, inheriting stdio, and exit with its code on failure. */
 async function runScript(script: string, args: string[] = []): Promise<void> {
