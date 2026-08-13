@@ -31,10 +31,12 @@ function splitStatements(sql: string): string[] {
 }
 
 export const backend: WorkerBackend = {
-	init(_env: WorkerEnv) {
+	async init(_env: WorkerEnv) {
 		const client = new SQL(":memory:");
+		// Bun's SQL.unsafe() is ASYNC — await each statement so the DDL
+		// completes before the first query races ahead of it.
 		for (const stmt of splitStatements(__MIGRATIONS_SQL__)) {
-			client.unsafe(stmt);
+			await client.unsafe(stmt);
 		}
 		return buildQueryApp(client);
 	},
