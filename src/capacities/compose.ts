@@ -26,6 +26,7 @@ import { Randomisable } from "./randomisable";
 import { Reactive } from "./reactive";
 import type { Referencible } from "./referencible";
 import type { SchemaModule } from "./schema-module";
+import { Siftable } from "./siftable";
 import { SqlSerialisable } from "./sql-serialisable";
 import type { Timestamped } from "./timestamped";
 import { Triggerable } from "./triggerable";
@@ -132,6 +133,7 @@ export type CapacityFn =
 	| typeof Timestamped
 	| typeof Referencible
 	| typeof Queriable
+	| typeof Siftable
 	| typeof Meterable;
 
 /**
@@ -195,6 +197,7 @@ for (const [name, fn] of [
 	["Hashable", Hashable],
 	["Randomisable", Randomisable],
 	["Queriable", Queriable],
+	["Siftable", Siftable],
 	["Meterable", Meterable],
 ] as const) {
 	registerCapacity(name, fn as AnyCapacity);
