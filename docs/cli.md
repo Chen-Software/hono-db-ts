@@ -19,6 +19,34 @@ bun run src/main.ts <command> [args]
 All DB commands read `DATABASE_URL` (e.g. `file:./dev.db`) via the
 `databaseUrl()` build-time macro (`@/macros/envs`).
 
+## Environment files
+
+Bun auto-loads env files by mode, layered over the base `.env`:
+
+| File                       | Purpose                                   | Committed? |
+| -------------------------- | ----------------------------------------- | ---------- |
+| `.env`                     | base defaults                             | no         |
+| `.env.development`         | shared development defaults               | yes        |
+| `.env.development.local`   | machine-specific dev overrides            | no         |
+| `.env.production`          | production defaults                       | yes        |
+| `.env.production.local`    | secret / machine-specific prod overrides  | no         |
+
+Set `NODE_ENV=development|production` to select the layer (Bun loads
+`.env.<NODE_ENV>` and `.env.<NODE_ENV>.local` automatically).
+
+- **Development** defaults to in-memory sqlite
+  (`DATABASE_TYPE=sqlite`, `DATABASE_URL=sqlite:///:memory:`); override in
+  `.env.development.local` to use a persistent `file:./dev.db`.
+- **Production** is configured as in-memory sqlite
+  (`DATABASE_TYPE=sqlite`, `DATABASE_URL=:memory:`). The Cloudflare Worker
+  (`src/worker.ts`) creates a fresh schema from the bundled migration SQL on
+  each isolate; there is no cross-request persistence by design.
+
+These values feed the BUILD-TIME macros, so they control what is compiled into
+the deployed artifact (e.g. which SQL backend is inlined). For a durable edge
+database, switch `DATABASE_TYPE=d1` and use the `env.DB` D1 binding — the app
+and routes are unchanged.
+
 ---
 
 ## Commands
