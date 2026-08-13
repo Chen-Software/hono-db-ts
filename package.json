@@ -20,9 +20,15 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
-		"@types/bun": "latest"
+		"@ttsc/unplugin": "^0.26.2",
+		"@types/bun": "latest",
+		"ttsc": "^0.26.2",
+		"vite": "^8.2.1"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"typia": "^13.3.0"
 	}
 }
