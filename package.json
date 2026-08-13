@@ -31,6 +31,7 @@
 	},
 	"dependencies": {
 		"drizzle-orm": "^1.0.0-rc.4",
+		"hono": "^4.13.2",
 		"typia": "^13.3.0"
 	}
 }
