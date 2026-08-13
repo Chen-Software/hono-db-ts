@@ -29,7 +29,7 @@ bun run src/main.ts query users '{"role":"admin"}' --limit 5
 bun run src/main.ts serve                # JSON API at http://localhost:8787/api/...
 
 # 5. (Optional) Serve the Honox UI in /app
-bun run src/main.ts ui:build             # build the UI -> dist/ui/_worker.js
+bun run src/main.ts ui:build             # build the UI -> dist/ui/index.js
 bun run src/main.ts serve                # UI at / , JSON API at /api, on :8787
 #   dev server with HMR instead:  bun run src/main.ts ui:dev
 ```
@@ -73,7 +73,7 @@ scripts/
   db-migrate.ts   db:migrate    — apply migration SQL via drizzle-orm/bun-sql
   seed.ts         db:seed       — BBS dataset via Randomisable.random()
   serve.ts        serve         — local server: Honox UI at / + JSON API at /api
-  ui-build.ts     ui:build      — build the Honox UI -> dist/ui/_worker.js
+  ui-build.ts     ui:build      — build the Honox UI -> dist/ui/index.js
 app/              Honox UI (routes/, islands/, client.ts, style.css — Panda CSS)
 panda.config.ts   Panda CSS config (tokens + utilities -> styled-system/)
 vite.ui.config.ts Vite config for building the UI (@hono/vite-build/bun)

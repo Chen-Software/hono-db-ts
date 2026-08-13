@@ -6,7 +6,7 @@
  * Uses the dedicated Vite config (`vite.ui.config.ts`):
  *
  *   - the honox plugin wires the file-system routes + islands,
- *   - `@hono/vite-build/bun` emits `dist/ui/_worker.js` — a Hono app that serves
+ *   - `@hono/vite-build/bun` emits `dist/ui/index.js` — a Hono app that serves
  *     SSR HTML + static assets via `hono/bun`'s `serveStatic`,
  *   - the `ttsc` plugin runs the typia transform so the `@/macros` build-time
  *     macros resolve at build time,

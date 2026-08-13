@@ -14,8 +14,9 @@ import ttsc from '@ttsc/unplugin/vite'
  *     the client bundle (`app/client.ts` + `app/style.css`).
  *   - Panda CSS (via `postcss.config.mjs` + `@pandacss/postcss`) compiles the
  *     utilities from `panda.config.ts` into `app/style.css`.
- *   - `@hono/vite-build/bun` emits `dist/ui/_worker.js` (a Hono app that serves
- *     SSR HTML + static assets via `hono/bun`'s `serveStatic`).
+ *   - `@hono/vite-build/bun` emits `dist/ui/index.js` (a Hono app that serves
+ *     SSR HTML + static assets via `hono/bun`'s `serveStatic`). `outputDir` is
+ *     set here (the plugin overrides the top-level `build.outDir`).
  *
  * The project root stays the repo root so honox's `/app/routes/**` globs and
  * the `@/*` → `src/*` alias resolve as they do everywhere else.
@@ -32,13 +33,11 @@ export default defineConfig({
       client: { input: ['/app/client.ts', '/app/style.css'] },
     }),
     build({
+      outputDir: resolve(import.meta.dir, 'dist/ui'),
+      emptyOutDir: true,
       staticRoot: resolve(import.meta.dir, 'app/public'),
     }),
   ],
-  build: {
-    outDir: resolve(import.meta.dir, 'dist/ui'),
-    emptyOutDir: true,
-  },
   server: {
     port: 8787,
   },
