@@ -21,6 +21,14 @@
 			"@/*": ["./src/*"]
 		},
 
+		// ttsc transform plugins — applied by @ttsc/unplugin (see scripts/build.ts).
+		// Runs the typia transformer during Bun.build / Vite / tests.
+		"plugins": [
+			{
+				"transform": "typia/lib/transform"
+			}
+		],
+
 		// Best practices
 		"strict": true,
 		"skipLibCheck": true,
