@@ -1,9 +1,10 @@
 # Data Models & Storage
 
 1. **What is a model here?** — the capacity-composition architecture.
-2. **Where is data stored?** — the three cooperating layers.
-3. **How do I query all LATEST posts from a user?**
-4. **How do I query the HISTORY of a post?**
+2. **The BBS models** — `Board`, `Thread`, `Reply` (and `Siftable` pagination).
+3. **Where is data stored?** — the three cooperating layers.
+4. **How do I query all LATEST posts from a user?**
+5. **How do I query the HISTORY of a post?**
 
 ---
 
@@ -80,7 +81,147 @@ class Post extends PostBase {
 
 ---
 
-## 2. Storage has three cooperating layers
+## 2. The BBS models — Board, Thread, Reply
+
+The same capacity system scales to a full bulletin-board graph with three more
+models, each a ~30-line `defineModel` declaration reusing the existing
+capacities. The relations are declared by `Reference` FK tags (owner side,
+derived accessors) + manual inverse collections (the `Referencible` options).
+
+### `Board` (版块)
+
+```ts
+const BoardModel = defineModel<BoardSchema>({
+  schemaName: "BoardSchema",
+  schemaModule: BoardSchemaModule,
+  capacities: [
+    Identifiable, Timestamped, JsonSerialisable, ProtobufEncodable,
+    Clonable, Comparable,
+    { capacity: SqlSerialisable, options: { name: "boards", dialect: "sqlite" } },
+    { capacity: Referencible, options: { relations: [
+        // inverse collection: FK `boardId` lives on `Thread`
+        { name: "threads", target: () => "ThreadSchema", by: "boardId",
+          cardinality: "one-to-many", onDelete: "cascade" },
+    ] } },
+    { capacity: Validatable, options: { onNew: "assert", onUpdate: "assert" } },
+    Queriable,
+    { capacity: Siftable, options: { sort: { field: "created_at", dir: "desc" } } },
+    Randomisable, { capacity: Meterable, options: { name: "Board" } },
+  ],
+});
+```
+
+- `moderatorId: UUID & Reference<"UserSchema","id","many-to-one","setNull","inner","moderator">`
+  — FK to `User`; the 6th type param names the derived accessor `getModerator()`.
+- `getThreads()` — inverse collection (string target avoids a runtime cycle:
+  `Thread` imports this module, so the thunk resolves by schema name via the
+  registry instead of a class value).
+
+### `Thread` (主题帖)
+
+```ts
+interface ThreadSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
+  updated_at: string & tags.Format<"date-time">; // last activity (bumped by touch())
+  boardId:  UUID & Reference<"BoardSchema","id","many-to-one","cascade","inner">;
+  authorId: UUID & Reference<"UserSchema","id","many-to-one","cascade","inner","author">;
+  title: string & tags.MinLength<1> & tags.MaxLength<300>;
+  pinned: boolean;
+  locked: boolean;
+}
+```
+
+- MUTABLE (unlike `Post`'s content-addressed immutability): title edits,
+  pinning, locking are in-place state changes; `updated_at` means "last
+  activity" and is bumped by `touch()`.
+- Aggregate invariants on the class: `pin()`/`unpin()`/`lock()`/`unlock()`
+  throw `InvalidThreadStateError` on illegal transitions (e.g. double-pin).
+- `getBoard()` / `getAuthor()` derived from the FK tags; `getReplies()`
+  inverse collection (FK `threadId` lives on `Reply`).
+
+### `Reply` (回帖)
+
+```ts
+interface ReplySchema extends IdentifiableSchema<UUID>, TimestampedSchema {
+  threadId: UUID & Reference<"ThreadSchema","id","many-to-one","cascade","inner">;
+  authorId: UUID & Reference<"UserSchema","id","many-to-one","cascade","inner","author">;
+  parentId?: UUID & Reference<"ReplySchema","id","many-to-one","cascade","left","parent">;
+  body: string & tags.MinLength<1> & tags.MaxLength<20000>;
+}
+```
+
+- **Self-referencing FK** (`parentId` → `Reply`): supports nested threading.
+  `parentId` is optional — top-level replies omit it.
+- `getParent()` derived from the tag (owner side); `getChildren()` is a manual
+  inverse collection using a predicate (`candidate.parentId === self.id`).
+- The SQL projection correctly derives `parentId` as a **nullable** column with
+  a self-`FOREIGN KEY` (the `sql-serialisable` nullability inference treats
+  fields absent from the schema's `required` list as nullable).
+
+### `Siftable` — cursor pagination
+
+`Queriable.filter` returns the WHOLE matching set; BBS list endpoints need
+stable paging. `Siftable` adds `static sift(items, query?, cursorOpts?)`:
+
+```ts
+const page1 = Thread.sift(board.getThreads(), {}, { limit: 20 });
+// { rows: Thread[], nextCursor: "2026-08-05T…" }
+
+const page2 = Thread.sift(board.getThreads(), {}, { limit: 20, cursor: page1.nextCursor });
+```
+
+Keyset (cursor) semantics: filter (same query shape as `Queriable`) → order by
+a sort key (default `updated_at` desc) → resume strictly past the cursor.
+Cursor is the sort-key value of the last item, so it is opaque yet sufficient
+to resume; `nextCursor` is `null` on the last page.
+
+### `Servable` — generated SQL-backed HTTP routes
+
+`Siftable` paginates in memory; the SQL server (`scripts/serve.ts`) hand-writes
+join-heavy read models. `Servable` closes the gap: it turns any
+`SqlSerialisable` model into a Hono app with **generated read routes** —
+`Model.serve(app, client)` registers `GET /<table>` + `GET /<table>/:id`, and
+`Model.routeSpec()` introspects what a route accepts:
+
+```ts
+import { Hono } from "hono";
+
+const app = new Hono();
+Board.serve(app, client);   // GET /boards, GET /boards/:id
+Thread.serve(app, client);  // GET /threads, GET /threads/:id
+User.serve(app, client);    // GET /users, GET /users/:id
+
+app.get("/boards/:id/hot", /* explicit multi-model read model stays hand-written */);
+```
+
+It reuses the two sources the rest of the architecture already derives from the
+schema — no per-model SQL:
+
+- **`SqlSerialisable`** — the derived drizzle `table` (name + columns), the
+  column kinds and the primary key, plus the `fromRow` mapper (so booleans /
+  JSON come back as domain values, not storage encodings).
+- **`Queriable`** — the exported `deriveFieldPlans` matcher table, so a
+  `?param=` means the SAME thing over SQL as it does in-memory: boolean →
+  exact, number → exact + `[min,max]` range, date → day-level range
+  (`[2026-01-01,2026-12-31]`), string/uuid → substring, array → "contains all".
+
+List semantics mirror `Siftable`: `?limit=` (clamped to `[1, maxLimit]`) and
+`?cursor=` keyset pagination, ordered by a configured sort key (default
+`updated_at` desc, falling back to `created_at` then the PK), with a
+`nextCursor` in the response. Like `Queriable`, it is **permissive** — unknown
+params and empty values are ignored, never 400. Composition order matters:
+`SqlSerialisable` must be declared before `Servable` (it lifts `table` /
+`fromRow`).
+
+> **Scope is deliberately read-only per model.** `Servable` generates the two
+> generic CRUD-ish read routes only. The join-heavy "good BBS queries"
+> (`/boards/:id/hot`, `/threads/:id` with author+count, `/search`) are
+> multi-model read models — they stay as explicit handlers. `Servable` is the
+> per-model surface; the wire shape it emits (`{ ok, data }`) matches the
+> hand-written server and `LocalTransport`.
+
+---
+
+## 3. Storage has three cooperating layers
 
 | Layer | File | Holds | Used for |
 |---|---|---|---|
@@ -105,7 +246,7 @@ class Post extends PostBase {
 
 ---
 
-## 3. Query all LATEST posts from a user
+## 4. Query all LATEST posts from a user
 
 Use the `Referencible` inverse relation `user.getPosts()` plus the fact that the
 identity map already keeps the latest instance per id:
@@ -155,7 +296,7 @@ const posts = await db.select().from(Post.table).where(eq(Post.table.authorId, u
 
 ---
 
-## 4. Query the HISTORY of a post
+## 5. Query the HISTORY of a post
 
 The identity map does **not** keep old versions — it overwrites by id. The full,
 append-only history of a post lives in the version-history store (the
@@ -194,7 +335,7 @@ const current = postRepo.findById(post.id);
 
 ---
 
-## 5. Mental model, in one paragraph
+## 6. Mental model, in one paragraph
 
 | You want… | You call… | Returns |
 |---|---|---|
@@ -204,6 +345,7 @@ const current = postRepo.findById(post.id);
 | Newest version from a history array | `Post.latestOf(history)` | the max-`updated_at` instance |
 | Narrow a set (published, date range, substring) | `Post.filter(items, query)` | filtered array (schema-inferred matchers) |
 | The same data at the SQL layer | `Post.table` + drizzle | real rows / `CREATE TABLE` |
+| The same filters over HTTP | `Board.serve(app, client)` | `GET /boards` (+ `/:id`), generated SQL routes |
 
 Two posts → two `getPosts()` entries; one post edited twice → one `getPosts()`
 entry (the latest) but a 3-version `historyOf(id)`.
