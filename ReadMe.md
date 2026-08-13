@@ -26,10 +26,19 @@ bun run src/main.ts db:seed
 # 4. Query the data (CLI or HTTP)
 bun run src/main.ts query boards --count
 bun run src/main.ts query users '{"role":"admin"}' --limit 5
-bun run src/main.ts serve                # http://localhost:8787
+bun run src/main.ts serve                # JSON API at http://localhost:8787/api/...
+
+# 5. (Optional) Serve the Honox UI in /app
+bun run src/main.ts ui:build             # build the UI -> dist/ui/_worker.js
+bun run src/main.ts serve                # UI at / , JSON API at /api, on :8787
+#   dev server with HMR instead:  bun run src/main.ts ui:dev
 ```
 
 Set `DATABASE_URL` (e.g. `file:./dev.db`) in the environment or `.env`.
+
+> **Routes when `serve` runs with a built UI**: the Honox UI is at `/` and the
+> JSON query API is at `/api/…`. Without a UI build, the JSON API is served at
+> both `/` and `/api`.
 
 ## What is a "model"?
 
@@ -63,7 +72,10 @@ scripts/
   db-generate.ts  db:generate   — models.json → CREATE TABLE SQL in drizzle/
   db-migrate.ts   db:migrate    — apply migration SQL via drizzle-orm/bun-sql
   seed.ts         db:seed       — BBS dataset via Randomisable.random()
-  serve.ts        serve         — local HTTP query server (a Hono app: hand-written
-                                   "good queries" + Servable-generated per-model routes)
+  serve.ts        serve         — local server: Honox UI at / + JSON API at /api
+  ui-build.ts     ui:build      — build the Honox UI -> dist/ui/_worker.js
+app/              Honox UI (routes/, islands/, client.ts, style.css — Panda CSS)
+panda.config.ts   Panda CSS config (tokens + utilities -> styled-system/)
+vite.ui.config.ts Vite config for building the UI (@hono/vite-build/bun)
 docs/             data-models-storage + CLI reference
 ```

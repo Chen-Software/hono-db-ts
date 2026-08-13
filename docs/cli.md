@@ -150,27 +150,49 @@ bun run src/main.ts query posts '{"published":"true"}' --sort updated_at:desc --
 
 ### `serve [port]`
 
-Run the local BBS query server (`scripts/serve.ts`, default `:8787`). The
-server is a **Hono app** (`import { Hono } from "hono"`); its handler is fed to
+Run the local server (`scripts/serve.ts`, default `:8787`). The server is a
+**Hono app** (`import { Hono } from "hono"`); its handler is fed to
 `Bun.serve({ fetch: app.fetch })`, so the same `app` can be reused in-process
-(the shape `LocalTransport` in `src/services/transport.ts` consumes). Two kinds
-of routes coexist:
+(the shape `LocalTransport` in `src/services/transport.ts` consumes).
 
-1. **Hand-written "good queries"** — the multi-model read models that need
-   joins/aggregation, registered in `scripts/serve.ts`: `/stats`, `/boards`,
-   `/boards/:id/threads`, `/boards/:id/hot`, `/threads/:id`,
-   `/threads/:id/replies`, `/users/:id`, `/users/:id/posts`,
-   `/users/:id/replies`, `/search?q=`, `/latest-posts`.
-2. **Generated per-model routes** — the `Servable` capacity (see
-   `docs/data-models-storage.md` §6) turns any `SqlSerialisable` model into
-   `GET /<table>` + `GET /<table>/:id` automatically via `Model.serve(app,
-   client)`, reusing `Queriable`'s matcher inference for `?param=` filtering
-   and `Siftable`'s keyset pagination (`?limit=&cursor=`).
+#### Routes
+
+- **JSON query API — always under `/api`**: `GET /api/stats`, `/api/boards`,
+  `/api/boards/:id`, `/api/boards/:id/threads`, `/api/boards/:id/hot`,
+  `/api/threads/:id`, `/api/threads/:id/replies`, `/api/users/:id`,
+  `/api/users/:id/threads`, `/api/users/:id/posts`, `/api/users/:id/replies`,
+  `/api/search?q=`, `/api/latest-posts`.
+  Two kinds of API routes coexist:
+  1. **Hand-written "good queries"** — the multi-model read models that need
+     joins/aggregation, registered in `src/http/app.ts` (`buildQueryApp`).
+  2. **Generated per-model routes** — the `Servable` capacity (see
+     `docs/data-models-storage.md` §6) turns any `SqlSerialisable` model into
+     `GET /api/<table>` + `GET /api/<table>/:id` automatically via
+     `Model.serve(app, client)`.
+- **Honox UI — at `/` (when built)**: after `bun run src/main.ts ui:build`,
+  the built `dist/ui/_worker.js` is mounted at the root, so `/` renders the
+  UI (SSR + islands + `/static/*` assets).
+
+If `dist/ui/_worker.js` does not exist (UI not built), the JSON API is ALSO
+mounted at `/` for back-compatibility — so `/boards` works, but `/api/boards`
+is the canonical route.
 
 Every endpoint reads the SAME database the CLI `query` command and the
 `db:generate`/`db:migrate`/`db:seed` pipeline use, through the derived drizzle
 tables (`drizzle-orm/bun-sql` + `databaseUrl()` macro + `new SQL(url)`, exactly
 like the app). Responses are `{ ok: true, data }` / `{ ok: false, data: { error } }`.
+
+### `ui:build`
+
+Build the Honox UI (in `/app`) into `dist/ui/_worker.js` via the dedicated
+Vite config (`vite.ui.config.ts`): honox routes/islands + the `ttsc` typia
+transform + Panda CSS (`panda.config.ts` → `styled-system/`), emitted with
+`@hono/vite-build/bun`. Run this **before** `serve` to get the UI at `/`.
+
+### `ui:dev`
+
+Run the Honox UI dev server (Vite, HMR) on `:8787` with `vite.ui.config.ts`.
+This is for iterating on the UI in `/app`; it does not mount the JSON API.
 
 ---
 
@@ -182,5 +204,11 @@ export DATABASE_URL="file:./dev.db"
 bun run src/main.ts db:generate && bun run src/main.ts db:migrate   # schema
 bun run src/main.ts db:seed                                          # data
 bun run src/main.ts query boards --count                             # verify
-bun run src/main.ts serve &                                          # HTTP API
+
+# JSON API only
+bun run src/main.ts serve &            # API at /api/... and /... on :8787
+
+# JSON API + Honox UI
+bun run src/main.ts ui:build
+bun run src/main.ts serve &            # UI at /, API at /api on :8787
 ```
