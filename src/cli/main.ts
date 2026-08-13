@@ -46,7 +46,16 @@ Commands:
                           {"age":{">":30}}, and LIKE search {"title":{"contains":"x"}}.
                           Booleans are coerced to 0/1. Default order: updated_at desc.
 
-  serve [port]            Run the local BBS query server (scripts/serve.ts, default :8787)
+  serve [port]            Run the local BBS query server (scripts/serve.ts, default
+                          :8787). Serves the Honox UI at / (when built) and the
+                          JSON query API at /api.
+
+  ui:build                Build the Honox UI in /app -> dist/ui/_worker.js
+                          (vite.ui.config.ts: honox routes/islands + ttsc + tailwind,
+                          via @hono/vite-build/bun). Do this before serve to get
+                          the UI.
+
+  ui:dev                  Run the Honox UI dev server (vite, HMR on :8787).
 
   cf-build                Bundle src/worker.ts into dist/worker.js for a Cloudflare
                           Worker (inlines the generated migration SQL). Depends on
@@ -149,6 +158,27 @@ export async function run(argv = process.argv.slice(2)) {
 
 		case "serve": {
 			await runScript("serve.ts", args);
+			break;
+		}
+
+		case "ui:build": {
+			await runScript("ui-build.ts");
+			break;
+		}
+
+		case "ui:dev": {
+			// Run the honox UI dev server (vite, HMR) with the dedicated config.
+			const child = Bun.spawn(
+				["bun", "x", "vite", "--config", "vite.ui.config.ts", ...args],
+				{
+					cwd: resolve(import.meta.dir, "../.."),
+					stdout: "inherit",
+					stderr: "inherit",
+					stdin: "inherit",
+				},
+			);
+			const code = await child.exited;
+			if (code !== 0) process.exit(code);
 			break;
 		}
 

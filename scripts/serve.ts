@@ -1,5 +1,6 @@
 /**
- * serve — a local Hono HTTP server exposing the good BBS queries.
+ * serve — a local Hono HTTP server exposing the good BBS queries AND the
+ * Honox UI.
  *
  *     bun run scripts/serve.ts [port]     (default :8787)
  *
@@ -10,6 +11,18 @@
  * pipeline use, through the derived drizzle tables (`drizzle-orm/bun-sql` +
  * `databaseUrl()` macro + `new SQL` client, exactly like the app). Response
  * shape is `{ ok: true, data }` or `{ ok: false, data: { error } }`.
+ *
+ * ## Serving the UI
+ *
+ * When `dist/ui/` exists (built with `bun run src/main.ts ui:build`), the
+ * Honox UI in `/app` is mounted at the root (`/`) and the JSON query app under
+ * `/api`. So the same port serves:
+ *
+ *   - `GET /`            — the Honox UI (SSR HTML, islands, /static/* assets)
+ *   - `GET /api/stats` … — the "good BBS queries" JSON API
+ *
+ * If `dist/ui/` is missing, `serve` prints a hint and serves the JSON API only
+ * (mounted at both `/` and `/api` for compatibility with existing clients).
  *
  * The `DATABASE_URL` target is resolved deliberately — it may be an in-memory
  * DB, a local file, or (in the Worker) a Cloudflare D1 / Turso remote:
@@ -33,6 +46,9 @@
  * /search, /latest-posts.
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { Hono } from "hono";
 import { SQL } from "bun";
 
 import { databaseType, databaseUrl } from "../src/macros/envs" with { type: "macro" };
@@ -70,7 +86,29 @@ if (created) {
 	);
 }
 
-const app = buildQueryApp(client);
+const queryApp = buildQueryApp(client);
+
+// The combined server: /api → JSON queries; / → Honox UI (when built).
+const app = new Hono();
+
+// Try to load the built Honox UI (dist/ui/_worker.js). It's a self-contained
+// Hono app (SSR + /static/* + favicon) produced by `bun run src/main.ts ui:build`.
+const UI_BUNDLE = resolve(import.meta.dir, "../dist/ui/_worker.js");
+const hasUi = existsSync(UI_BUNDLE);
+if (hasUi) {
+	const { default: uiApp } = await import(UI_BUNDLE);
+	// Mount the JSON query app under /api, then the UI at the root.
+	app.route("/api", queryApp);
+	app.route("/", uiApp as Hono);
+	console.log("serve: Honox UI mounted at / (from dist/ui/_worker.js).");
+} else {
+	// No UI build — keep the JSON API at the root (back-compat with old clients).
+	app.route("/", queryApp);
+	console.log(
+		"serve: no dist/ui/_worker.js — serving the JSON API at / only.\n" +
+			"  Build the UI with: bun run src/main.ts ui:build",
+	);
+}
 
 const server = Bun.serve({
 	port: Number(process.argv[2]) || 8787,
@@ -78,4 +116,9 @@ const server = Bun.serve({
 });
 
 console.log(`BBS query server running on http://localhost:${server.port}`);
-console.log("Try: /stats, /boards, /boards/:id/threads, /threads/:id/replies, /users/:id/posts, /search?q=, /latest-posts");
+console.log(
+	hasUi
+		? "  UI : http://localhost:" + server.port + "/"
+		: "  API: http://localhost:" + server.port + "/api/stats",
+);
+console.log("  API: /api/stats, /api/boards, /api/boards/:id/threads, /api/threads/:id/replies, /api/users/:id/posts, /api/search?q=, /api/latest-posts");

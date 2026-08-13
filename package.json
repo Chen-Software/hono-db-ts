@@ -12,11 +12,15 @@
 	"scripts": {
 		"build": "bun run scripts/build.ts",
 		"start": "bun run src/main.ts",
+		"serve": "bun run src/main.ts serve",
 		"test": "bun test",
 		"fix": "bun run check",
 		"check": "bun x @biomejs/biome check --fix .",
 		"format": "bun x @biomejs/biome format --fix .",
 		"lint": "bun x @biomejs/biome lint --fix .",
+		"ui:build": "bun run scripts/ui-build.ts",
+		"ui:dev": "bun x vite --config vite.ui.config.ts",
+		"panda:gen": "panda codegen",
 		"cf:build": "bun run scripts/cf-build.ts",
 		"cf:dev": "wrangler dev",
 		"cf:deploy": "wrangler deploy",
@@ -24,6 +28,10 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
+		"@hono/vite-build": "^1.11.1",
+		"@hono/vite-dev-server": "^0.26.1",
+		"@pandacss/dev": "^1.12.0",
+		"@pandacss/postcss": "^1.12.0",
 		"@ttsc/unplugin": "^0.26.2",
 		"@types/bun": "latest",
 		"drizzle-kit": "^1.0.0-rc.4",
@@ -32,6 +40,9 @@
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.2"
+	},
+	"overrides": {
+		"typescript@>=4.8.4 <6.1.0": "6.0.3"
 	},
 	"dependencies": {
 		"drizzle-orm": "^1.0.0-rc.4",
