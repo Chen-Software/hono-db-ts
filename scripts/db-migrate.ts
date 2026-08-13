@@ -6,14 +6,20 @@
  * ascending) to the database selected by the `databaseUrl()` build macro via
  * the `drizzle-orm/bun-sql` driver, exactly as the `query` command does:
  *
+ *     import { SQL } from "bun";
  *     import { drizzle } from "drizzle-orm/bun-sql";
- *     import { databaseUrl } from "@/macros" with { type: "macro" };
- *     const db = drizzle(databaseUrl());
+ *     import { databaseUrl } from "@/macros/envs" with { type: "macro" };
+ *     const client = new SQL(databaseUrl());
+ *     const db = drizzle({ client });
+ *
+ * (Note: the re-export barrel `@/macros` cannot be consumed with
+ * `with { type: "macro" }` — Bun throws `MacroLoadError` — so we import the
+ * `envs` macro module directly, and it does not re-export `databaseUrl`.)
  *
  * Each migration file is split on `;` into statements, and each statement is
- * executed sequentially through the drizzle handle (`db.run(...)`). This keeps
- * migrations plain SQL (no drizzle-kit journal format) while still flowing
- * through the same drizzle `BunSQLiteDatabase` the app queries with.
+ * executed sequentially through the drizzle handle (`db.execute(...)`). This
+ * keeps migrations plain SQL (no drizzle-kit journal format) while still
+ * flowing through the same drizzle database the app queries with.
  *
  * Run directly (`bun run scripts/db-migrate.ts`) or via the CLI
  * (`bun run src/main.ts db:migrate`). The CLI runs `models:build` first so the
@@ -23,6 +29,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import { databaseUrl } from "../src/macros/envs" with { type: "macro" };
 
@@ -54,7 +61,8 @@ export async function runMigrations(): Promise<string[]> {
 		return [];
 	}
 
-	const db = drizzle(url);
+	const client = new SQL(url);
+	const db = drizzle({ client });
 	const applied: string[] = [];
 
 	for (const file of files) {

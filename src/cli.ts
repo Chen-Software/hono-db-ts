@@ -1,3 +1,4 @@
+import { SQL } from "bun";
 import { resolve } from "node:path";
 
 import { databaseUrl } from "@/macros/envs" with { type: "macro" };
@@ -131,8 +132,9 @@ export async function run(argv = process.argv.slice(2)) {
 
 /**
  * `query <table> [jsonFilter]` — run `db.select().from(table)` against the DB
- * via `drizzle-orm/bun-sql` + the `databaseUrl()` build macro, exactly as the
- * app does. `<table>` is a model/table name; the model is looked up in the
+ * via `drizzle-orm/bun-sql` + the `databaseUrl()` build macro, using the Bun +
+ * Drizzle client pattern (`new SQL(url)` → `drizzle({ client })`) exactly as
+ * the app does. `<table>` is a model/table name; the model is looked up in the
  * registry and its derived drizzle `table` (from `SqlSerialisable`) is used as
  * the `.from()` target. Optional `[json]` is a JSON object of equality filters
  * (e.g. `{"published": true}`) applied as a WHERE clause.
@@ -185,7 +187,12 @@ async function runQuery(tableArg?: string, filterArg?: string): Promise<void> {
 		process.exit(1);
 	}
 
-	const db = drizzle(url);
+	// Follow the official Bun + Drizzle pattern (bun.com/docs/guides/ecosystem
+	// /drizzle, orm.drizzle.team/docs/connect-bun-sql): create a Bun `SQL` client
+	// and hand it to `drizzle({ client })`. `databaseUrl()` is a build-time macro
+	// (inlined from process.env at startup) — see macros/envs.ts.
+	const client = new SQL(url);
+	const db = drizzle({ client });
 	let builder = db.select().from(target);
 	if (filterArg) {
 		let filter: Record<string, unknown>;
