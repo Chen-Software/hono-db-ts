@@ -29,9 +29,7 @@ import { defineModel } from "./base";
  * "last activity" and is bumped by `touch()` rather than being a version. The
  * `pinned` / `locked` aggregate methods enforce their invariants on the class.
  */
-interface ThreadSchema
-	extends IdentifiableSchema<UUID>,
-		TimestampedSchema {
+interface ThreadSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 	/** Last activity timestamp — bumped by `touch()`. */
 	updated_at: string & tags.Format<"date-time">;
 
@@ -156,7 +154,8 @@ class Thread extends ThreadModel {
 
 	/** Pin this thread (idempotent-safe). */
 	pin(): this {
-		if (this.pinned) throw new InvalidThreadStateError("Thread is already pinned");
+		if (this.pinned)
+			throw new InvalidThreadStateError("Thread is already pinned");
 		return this.update({ pinned: true, updated_at: new Date().toISOString() });
 	}
 
@@ -167,7 +166,8 @@ class Thread extends ThreadModel {
 
 	/** Lock — no new replies. */
 	lock(): this {
-		if (this.locked) throw new InvalidThreadStateError("Thread is already locked");
+		if (this.locked)
+			throw new InvalidThreadStateError("Thread is already locked");
 		return this.update({ locked: true, updated_at: new Date().toISOString() });
 	}
 

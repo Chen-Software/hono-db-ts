@@ -7,10 +7,7 @@ import {
 	type Composed,
 } from "../capacities/compose";
 import type { SchemaModule } from "../capacities/schema-module";
-import {
-	UPDATE_PHASE,
-	type LifecycleHooks,
-} from "../capacities/triggerable";
+import { UPDATE_PHASE, type LifecycleHooks } from "../capacities/triggerable";
 import { registerModel } from "../registry";
 
 /**
@@ -68,8 +65,7 @@ export interface BaseModelStatics<T> {
 }
 
 /** The base model class: a constructor plus the model-class statics. */
-export type BaseModel<T = unknown> = CapacityComposer<T> &
-	BaseModelStatics<T>;
+export type BaseModel<T = unknown> = CapacityComposer<T> & BaseModelStatics<T>;
 
 /**
  * Run lifecycle middleware for a phase against `target`. Hooks are declared as

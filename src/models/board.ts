@@ -29,9 +29,7 @@ import { defineModel } from "./base";
  * query/pagination capacities. `moderatorId` is a `Reference` FK to `User`, so
  * `board.getModerator()` is DERIVED from the tag (owner side).
  */
-interface BoardSchema
-	extends IdentifiableSchema<UUID>,
-		TimestampedSchema {
+interface BoardSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 	/** Display name of the board. */
 	name: string & tags.MinLength<1> & tags.MaxLength<80>;
 
@@ -47,7 +45,14 @@ interface BoardSchema
 	/** Moderator of the board — FK to `User`. Owner side (derived accessor
 	 *  `getModerator()`, named via the 6th `Reference` type param). */
 	moderatorId: UUID &
-		Reference<"UserSchema", "id", "many-to-one", "setNull", "inner", "moderator">;
+		Reference<
+			"UserSchema",
+			"id",
+			"many-to-one",
+			"setNull",
+			"inner",
+			"moderator"
+		>;
 }
 
 const boardLess = typia.compare.createLess<BoardSchema>();

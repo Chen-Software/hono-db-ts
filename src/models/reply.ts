@@ -30,9 +30,7 @@ import { defineModel } from "./base";
  * self-reference to `ReplySchema`, so `Referencible` derives `getParent()`
  * (owner side) and we declare the inverse `getChildren()` manually.
  */
-interface ReplySchema
-	extends IdentifiableSchema<UUID>,
-		TimestampedSchema {
+interface ReplySchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 	/** Thread this reply belongs to — FK to `Thread` (owner side). */
 	threadId: UUID &
 		Reference<"ThreadSchema", "id", "many-to-one", "cascade", "inner">;
