@@ -39,10 +39,12 @@ Commands:
   db:seed [counts…]       Seed the DB with BBS data (Randomisable.random()): defaults
                           50 users / 100 boards / 1000 posts / 1000 threads / 2000 replies
 
-  query <table> [json]    Run a query against the DB via drizzle-orm/bun-sql + databaseUrl().
-                          <table> is a model/table name (e.g. "users", "UserSchema"); the
-                          derived drizzle table is selected. Optional [json] is a JSON filter
-                          object applied as WHERE equality.
+  query <table> [jsonFilter] [--limit N] [--sort f[:asc|desc]] [--count]
+                          Query a model table via drizzle-orm/bun-sql + databaseUrl().
+                          <table> = users|boards|threads|replies|posts (or schemaName).
+                          jsonFilter supports equality {"role":"admin"}, comparisons
+                          {"age":{">":30}}, and LIKE search {"title":{"contains":"x"}}.
+                          Booleans are coerced to 0/1. Default order: updated_at desc.
 
   serve [port]            Run the local BBS query server (scripts/serve.ts, default :8787)
 `);
@@ -264,7 +266,8 @@ async function runQuery(args: string[]): Promise<void> {
 	// ------------------------------------------------------------------
 	// Build the WHERE clause.
 	// ------------------------------------------------------------------
-	const { eq, ne, gt, gte, lt, lte, like, and } = await import("drizzle-orm");
+	const { eq, ne, gt, gte, lt, lte, like, and, desc, asc } =
+		await import("drizzle-orm");
 	const cols: Record<string, any> = target[Symbol.for("drizzle:Columns")];
 
 	/** Coerce a boolean/boolean-string to its int storage (SQLite bools → 0/1). */
@@ -345,12 +348,15 @@ async function runQuery(args: string[]): Promise<void> {
 		return;
 	}
 
-	// Ordering — default to `updated_at` desc when the column exists.
-	const orderField = sort?.field ?? (cols["updated_at"] ? "updated_at" : "created_at");
+	// Ordering — default to `updated_at` desc when the column exists. Use the
+	// drizzle `desc`/`asc` operators (columns from `drizzle:Columns` don't carry
+	// a `.desc()` method).
+	const orderField =
+		sort?.field ?? (cols["updated_at"] ? "updated_at" : "created_at");
 	if (cols[orderField]) {
 		const orderCol = cols[orderField];
 		builder = builder.orderBy(
-			(sort?.dir ?? "desc") === "desc" ? orderCol.desc() : orderCol.asc(),
+			(sort?.dir ?? "desc") === "desc" ? desc(orderCol) : asc(orderCol),
 		) as any;
 	}
 	builder = builder.limit(limit) as any;
