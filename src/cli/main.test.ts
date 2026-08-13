@@ -7,7 +7,7 @@ import {
 	mock,
 	spyOn,
 } from "bun:test";
-import { run } from "./cli.ts";
+import { run } from "./main.ts";
 
 // Captured output helpers
 let stdout: string[];

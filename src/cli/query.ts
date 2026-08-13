@@ -120,8 +120,9 @@ export async function runQuery(args: string[]): Promise<void> {
 	// ------------------------------------------------------------------
 	// Build the WHERE clause.
 	// ------------------------------------------------------------------
-	const { eq, ne, gt, gte, lt, lte, like, and, desc, asc } =
-		await import("drizzle-orm");
+	const { eq, ne, gt, gte, lt, lte, like, and, desc, asc } = await import(
+		"drizzle-orm"
+	);
 	const cols: Record<string, any> = target[Symbol.for("drizzle:Columns")];
 
 	/** Coerce a boolean/boolean-string to its int storage (SQLite bools → 0/1). */
