@@ -8,7 +8,7 @@ import { Post } from "./post";
 // ---------------------------------------------------------------------------
 // A valid 64-hex placeholder hash. The model's constructor (`Post.from` →
 // `createAssertHash`) recomputes the REAL hash from `body`, so this value only
-// needs to satisfy the `Blake3` FORMAT check at the input boundary.
+// needs to satisfy the `Sha256` FORMAT check at the input boundary.
 const HASH_PLACEHOLDER = "a".repeat(64);
 
 const authorData = {

@@ -18,7 +18,7 @@ import { Referencible } from "../capacities/referencible";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
 import { Timestamped, type TimestampedSchema } from "../capacities/timestamped";
 import { Versionable } from "../capacities/versionable";
-import type { Blake3 } from "../tags/format-string-blake3";
+import type { Sha256 } from "../tags/format-string-sha256";
 import type { Reference } from "../tags/reference";
 import { defineModel } from "./base";
 import type { UserSchema } from "./user";
@@ -257,8 +257,8 @@ class Post extends PostBase {
 
 	/** Content hash field — supplied by the `Hashable<"body">` capacity. The
 	 *  `Hashable` mixin STAMPS it from `body` at construction (and `update`
-	 *  re-derives it), so it is always the real BLAKE3 digest of `body`. */
-	declare readonly contentHash: string & Blake3;
+	 *  re-derives it), so it is always the real SHA-256 digest of `body`. */
+	declare readonly contentHash: string & Sha256;
 
 	// ---- instance methods (prototype) ---------------------------------------
 

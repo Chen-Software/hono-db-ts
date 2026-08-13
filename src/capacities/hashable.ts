@@ -1,8 +1,7 @@
-import { blake3 } from "@noble/hashes/blake3.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { createHash } from "node:crypto";
 import typia from "typia";
 import type { CapacityComposer } from "./compose";
-import type { Blake3 } from "../tags/format-string-blake3";
+import type { Sha256 } from "../tags/format-string-sha256";
 import type { ImmutableSchema } from "./immutable";
 import { createUpdate } from "./immutable";
 import type { Identifiable } from "./identifiable";
@@ -21,11 +20,11 @@ import { versionableUpdate, withVersionBump } from "./versionable";
 type ContentField<K extends string> = { readonly [P in K]: string };
 
 /**
- * Hashable — the CAPACITY for entities that carry a content-derived BLAKE3
+ * Hashable — the CAPACITY for entities that carry a content-derived SHA-256
  * digest (the `contentHash` field) alongside a named content payload.
  *
  * This capacity owns the *hash* concern: the type of the `contentHash` field
- * (`string & Blake3`), the hashing primitives (`hashContent`,
+ * (`string & Sha256`), the hashing primitives (`hashContent`,
  * `verifyContentAddress`, `withContentHash`, `createAssertHash`), and the
  * format-level validators. It does NOT know about versioning or where the
  * content lives semantically — that is layered on by model wiring (the
@@ -51,13 +50,13 @@ type ContentField<K extends string> = { readonly [P in K]: string };
  */
 export type Hashable<K extends string = "content"> = ImmutableSchema &
 	ContentField<K> & {
-		/** BLAKE3 content hash (lowercase 64-hex) of the content field. */
-		readonly contentHash: string & Blake3;
+		/** SHA-256 content hash (lowercase 64-hex) of the content field. */
+		readonly contentHash: string & Sha256;
 	};
 
 /**
  * Instance API the {@link Hashable} mixin surfaces on every adorned model:
- * `hash()` (recompute the BLAKE3 digest), `verify()` (integrity check) and
+ * `hash()` (recompute the SHA-256 digest), `verify()` (integrity check) and
  * `address()` (the stored content hash). Declared as a standalone interface so
  * the capacity's *return type* can carry it — which means a model that lists
  * `Hashable` inherits `hash`/`verify`/`address` automatically and does NOT have
@@ -65,9 +64,9 @@ export type Hashable<K extends string = "content"> = ImmutableSchema &
  * which folds this into the composed model type.)
  */
 export interface HashableInstance {
-	/** Recompute + return the BLAKE3 content digest from the content field. */
+	/** Recompute + return the SHA-256 content digest from the content field. */
 	hash(): string;
-	/** Integrity check: does `contentHash` equal blake3(content)? */
+	/** Integrity check: does `contentHash` equal sha256(content)? */
 	verify(): boolean;
 	/** The content address — the stored `contentHash` field. */
 	address(): string;
@@ -78,7 +77,7 @@ export interface HashableInstance {
  *  capacity's return type carries them — so a model that lists `Hashable`
  *  inherits them automatically and does NOT have to re-declare them. */
 export interface HashableStatic {
-	/** BLAKE3 content hash (lowercase 64-hex) of a content record. */
+	/** SHA-256 content hash (lowercase 64-hex) of a content record. */
 	hashContent(data: string): string;
 	/** Verify a record's `contentHash` matches its content. */
 	verifyContentAddress(data: Record<string, unknown>, key?: string): boolean;
@@ -89,17 +88,18 @@ export interface HashableStatic {
 // ---------------------------------------------------------------------------
 
 /**
- * Compute the canonical 32-byte BLAKE3 digest of `content`, hex-encoded as a
- * lowercase 64-character string — exactly the form accepted by `Blake3`.
+ * Compute the canonical 32-byte SHA-256 digest of `content`, hex-encoded as a
+ * lowercase 64-character string — exactly the form accepted by `Sha256`.
  *
- * This is the *address* of the content: equal content → equal hash.
+ * Uses Bun/Node's built-in `node:crypto` (no external dependency). This is the
+ * *address* of the content: equal content → equal hash.
  */
 export function hashContent(content: string): string {
-	return bytesToHex(blake3(utf8ToBytes(content)));
+	return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
 /**
- * Verify that `entity.contentHash` is the correct BLAKE3 digest of the content
+ * Verify that `entity.contentHash` is the correct SHA-256 digest of the content
  * stored under `contentKey`. Returns `false` if the content was tampered with,
  * the hash is stale, or the content field is missing — the core integrity
  * guarantee of content-hashing.
@@ -119,7 +119,7 @@ export function verifyContentAddress<K extends string>(
 }
 
 /**
- * Attach the correct BLAKE3 hash to a content payload, recomputing it from
+ * Attach the correct SHA-256 hash to a content payload, recomputing it from
  * `contentKey` and OVERWRITING any incoming `contentHash`. Returns the
  * fully-addressed object. This is the primitive behind `createAssertHash`
  * (construction) and `updateHash` (update).
@@ -141,7 +141,7 @@ export function withContentHash<K extends string, D extends Record<K, string>>(
 
 /**
  * createAssertHash — bind a content field name and return a function that STAMPS
- * the correct BLAKE3 hash onto a payload, recomputing it from `key` and ignoring
+ * the correct SHA-256 hash onto a payload, recomputing it from `key` and ignoring
  * any caller-supplied hash. This is the construction-time counterpart to
  * `updateHash`: wire it into a model's `from`/`constructor` so every new
  * instance is correctly addressed without callers having to compute the hash.
@@ -175,7 +175,7 @@ export const validateHashable = typia.createValidate<Hashable>();
  * IMMUTABLE update function that, on EVERY call:
  *   1. applies `patch` and bumps the version via the shared `Versionable`
  *      capacity (same `id`, strictly-later `updated_at`), then
- *   2. recomputes the BLAKE3 hash from `key` (idempotent when the content is
+ *   2. recomputes the SHA-256 hash from `key` (idempotent when the content is
  *      unchanged) so the address can never drift from the content.
  *
  * The hash is recomputed HERE (not merely delegated to `from`) so the result is
@@ -233,7 +233,7 @@ export function updateHash<
  */
 export function createContentAddressing<K extends string>(key: K) {
 	return {
-		/** Stamp the correct BLAKE3 hash from `key` — use inside `from`. */
+		/** Stamp the correct SHA-256 hash from `key` — use inside `from`. */
 		assertHash: createAssertHash(key),
 
 		/**
@@ -308,7 +308,7 @@ export function Hashable<
 		}
 
 		/**
-		 * Return the content-derived BLAKE3 digest — recomputed from the content
+		 * Return the content-derived SHA-256 digest — recomputed from the content
 		 * field named by `key` (defaults to `"content"`). Recomputing (rather
 		 * than reading the stored `contentHash`) means this can NEVER return a
 		 * stale value even if the entity were somehow mutated.
@@ -320,7 +320,7 @@ export function Hashable<
 				: ((this as Record<string, unknown>).contentHash as string);
 		}
 
-		/** Integrity check: does `contentHash` equal blake3(content)? */
+		/** Integrity check: does `contentHash` equal sha256(content)? */
 		verify(): boolean {
 			return verifyContentAddress(this, key);
 		}

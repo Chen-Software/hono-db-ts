@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import typia from "typia";
 
-import type { Blake3 } from "../tags/format-string-blake3";
+import type { Sha256 } from "../tags/format-string-sha256";
 import {
 	type Hashable,
 	createAssertHash,
@@ -14,36 +14,36 @@ import {
 	withContentHash,
 } from "./hashable";
 
-// Canonical BLAKE3 of the empty string (32 bytes → 64 lowercase hex).
-// Sourced from the BLAKE3 reference test vectors; proves `hashContent` is a
-// genuine BLAKE3 and not a stub.
-const EMPTY_BLAKE3 =
-	"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+// Canonical SHA-256 of the empty string (32 bytes → 64 lowercase hex).
+// The well-known FIPS 180-4 test vector; proves `hashContent` is a genuine
+// SHA-256 and not a stub.
+const EMPTY_SHA256 =
+	"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 // A valid 64-hex placeholder — passes the FORMAT check but is NOT the real
 // hash of any specific content.
 const PLACEHOLDER = "a".repeat(64);
 
-describe("Blake3 custom tag (FORMAT-only)", () => {
+describe("Sha256 custom tag (FORMAT-only)", () => {
 	it("accepts a valid 64-char lowercase hex hash", () => {
-		const validate = typia.createValidate<{ contentHash: string & Blake3 }>();
-		expect(validate({ contentHash: EMPTY_BLAKE3 }).success).toBe(true);
+		const validate = typia.createValidate<{ contentHash: string & Sha256 }>();
+		expect(validate({ contentHash: EMPTY_SHA256 }).success).toBe(true);
 	});
 
 	it("rejects a hash of the wrong length", () => {
-		const validate = typia.createValidate<{ contentHash: string & Blake3 }>();
+		const validate = typia.createValidate<{ contentHash: string & Sha256 }>();
 		expect(validate({ contentHash: "abc" }).success).toBe(false);
 	});
 
 	it("rejects uppercase hex", () => {
-		const validate = typia.createValidate<{ contentHash: string & Blake3 }>();
-		expect(validate({ contentHash: EMPTY_BLAKE3.toUpperCase() }).success).toBe(
+		const validate = typia.createValidate<{ contentHash: string & Sha256 }>();
+		expect(validate({ contentHash: EMPTY_SHA256.toUpperCase() }).success).toBe(
 			false,
 		);
 	});
 
 	it("rejects non-hex characters", () => {
-		const validate = typia.createValidate<{ contentHash: string & Blake3 }>();
+		const validate = typia.createValidate<{ contentHash: string & Sha256 }>();
 		expect(validate({ contentHash: "g".repeat(64) }).success).toBe(false);
 	});
 });
@@ -51,44 +51,44 @@ describe("Blake3 custom tag (FORMAT-only)", () => {
 describe("Hashable default 'content' key", () => {
 	it("requires the 'content' field (not 'body')", () => {
 		expect(
-			validateHashable({ body: "x", contentHash: EMPTY_BLAKE3 }).success,
+			validateHashable({ body: "x", contentHash: EMPTY_SHA256 }).success,
 		).toBe(false);
 		// contentHash must be FORMAT-valid; the canonical empty-string vector is.
 		expect(
-			validateHashable({ content: "x", contentHash: EMPTY_BLAKE3 }).success,
+			validateHashable({ content: "x", contentHash: EMPTY_SHA256 }).success,
 		).toBe(true);
 	});
 
 	it("isHashable narrows correctly", () => {
-		expect(isHashable({ content: "x", contentHash: EMPTY_BLAKE3 })).toBe(true);
-		expect(isHashable({ body: "x", contentHash: EMPTY_BLAKE3 })).toBe(false);
+		expect(isHashable({ content: "x", contentHash: EMPTY_SHA256 })).toBe(true);
+		expect(isHashable({ body: "x", contentHash: EMPTY_SHA256 })).toBe(false);
 	});
 });
 
 describe('Hashable<"body"> key (Post-style)', () => {
 	it("requires 'body' and ignores 'content'", () => {
 		const validate = typia.createValidate<Hashable<"body">>();
-		expect(validate({ content: "x", contentHash: EMPTY_BLAKE3 }).success).toBe(
+		expect(validate({ content: "x", contentHash: EMPTY_SHA256 }).success).toBe(
 			false,
 		);
-		expect(validate({ body: "x", contentHash: EMPTY_BLAKE3 }).success).toBe(
+		expect(validate({ body: "x", contentHash: EMPTY_SHA256 }).success).toBe(
 			true,
 		);
 	});
 });
 
 describe("FORMAT-only vs SEMANTIC correctness — the two layers", () => {
-	// `Blake3` is purely syntactic: a well-formed string passes regardless of
-	// whether it actually equals blake3(content). Semantic correctness is the
+	// `Sha256` is purely syntactic: a well-formed string passes regardless of
+	// whether it actually equals sha256(content). Semantic correctness is the
 	// job of the runtime helpers (createAssertHash / updateHash /
 	// verifyContentAddress), NOT of a tag.
-	type FormatOnly = { contentHash: string & Blake3 };
+	type FormatOnly = { contentHash: string & Sha256 };
 	const validateFormatOnly = typia.createValidate<FormatOnly>();
 
 	it("Format-only tag ACCEPTS a well-formed but content-wrong hash", () => {
-		// EMPTY_BLAKE3 is valid 64-hex, so the format passes — even though it
-		// is NOT blake3("x"). This proves Blake3 is syntactic only.
-		expect(validateFormatOnly({ contentHash: EMPTY_BLAKE3 }).success).toBe(
+		// EMPTY_SHA256 is valid 64-hex, so the format passes — even though it
+		// is NOT sha256("x"). This proves Sha256 is syntactic only.
+		expect(validateFormatOnly({ contentHash: EMPTY_SHA256 }).success).toBe(
 			true,
 		);
 	});
@@ -109,8 +109,8 @@ describe("FORMAT-only vs SEMANTIC correctness — the two layers", () => {
 });
 
 describe("hashContent", () => {
-	it("matches the canonical BLAKE3 empty-string vector", () => {
-		expect(hashContent("")).toBe(EMPTY_BLAKE3);
+	it("matches the canonical SHA-256 empty-string vector", () => {
+		expect(hashContent("")).toBe(EMPTY_SHA256);
 	});
 
 	it("is deterministic", () => {

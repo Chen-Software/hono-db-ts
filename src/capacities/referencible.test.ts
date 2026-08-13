@@ -13,7 +13,7 @@ import { defaultIdentityMap } from "../storage/identity-map";
  */
 
 // 64-hex placeholder — `Hashable` recomputes the real hash from
-// `body`, so this only needs to satisfy the `Blake3` format check at the
+// `body`, so this only needs to satisfy the `Sha256` format check at the
 // boundary (mirrors `post.test.ts`).
 const HASH_PLACEHOLDER = "a".repeat(64);
 

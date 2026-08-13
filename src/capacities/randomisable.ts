@@ -36,7 +36,7 @@ export interface RandomisableOptions {
  * `random()`:
  *   Returns **raw data**, NOT a validated instance. typia's `createRandom`
  *   (`SchemaModule.random`) honours the *shape* of the schema but does **not**
- *   honour format constraints (`uuid`, `email`, `Format<"blake3">`, …). Piping
+ *   honour format constraints (`uuid`, `email`, `Format<"sha256">`, …). Piping
  *   that payload straight through `from()`/`new Ctor()` (which `classify`)
  *   therefore throws on the first format field — and, worse, on *nested* ones
  *   (`author.id`, `author.email`) that a generic capacity cannot patch. So the
@@ -48,7 +48,7 @@ export interface RandomisableOptions {
  *   const data = Post.random();
  *   data.id = crypto.randomUUID();           // fix uuid
  *   data.authorId = user.id; data.author = user;
- *   data = withContentHash(data, "body");    // fix blake3 contentHash
+ *   data = withContentHash(data, "body");    // fix sha256 contentHash
  *   const post = Post.from(data);            // now validates
  *
  * **Determinism caveat.** `SchemaModule.random` is typia's `createRandom`, which
