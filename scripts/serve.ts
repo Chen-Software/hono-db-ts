@@ -189,13 +189,14 @@ const routes: Array<[RegExp, (m: RegExpMatchArray, u: URL) => Promise<Response>]
 			const id = m[1];
 			const limit = num(u.searchParams.get("limit"), 50);
 			const cursor = u.searchParams.get("cursor");
-			const cw = cursorWhere('"created_at"', cursor, "asc");
+			// Qualify with `r.` — the join brings in `users.created_at` too.
+			const cw = cursorWhere('r."created_at"', cursor, "asc");
 			const q =
 				`SELECT r.id, r."threadId", r."authorId", r."parentId", r.body, r."created_at", ` +
 				`u.name AS author_name ` +
 				`FROM "replies" r LEFT JOIN "users" u ON u.id = r."authorId" ` +
 				`WHERE r."threadId" = '${id}' ${cw ? `AND ${cw}` : ""} ` +
-				`ORDER BY ${cursorOrder('"created_at"', "asc")} LIMIT ${limit}`;
+				`ORDER BY ${cursorOrder('r."created_at"', "asc")} LIMIT ${limit}`;
 			const rows = await fetchAll(q);
 			const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
 			return json({ rows, nextCursor });
@@ -213,44 +214,47 @@ const routes: Array<[RegExp, (m: RegExpMatchArray, u: URL) => Promise<Response>]
 		},
 	],
 
-	// GET /users/:id/threads
+	// GET /users/:id/threads?limit=
 	[
 		/^\/users\/([0-9a-f-]{36})\/threads$/,
-		async (m) => {
+		async (m, u) => {
 			const id = m[1];
+			const limit = num(u.searchParams.get("limit"), 50);
 			const rows = await fetchAll(
-				`SELECT * FROM "threads" WHERE "authorId" = ? ORDER BY "updated_at" DESC LIMIT 50`,
-				[id],
+				`SELECT * FROM "threads" WHERE "authorId" = ? ORDER BY "updated_at" DESC LIMIT ?`,
+				[id, limit],
 			);
 			return json(rows);
 		},
 	],
 
-	// GET /users/:id/posts — the "latest posts" question at the SQL layer
+	// GET /users/:id/posts?limit= — the "latest posts" question at the SQL layer
 	[
 		/^\/users\/([0-9a-f-]{36})\/posts$/,
-		async (m) => {
+		async (m, u) => {
 			const id = m[1];
+			const limit = num(u.searchParams.get("limit"), 50);
 			const rows = await fetchAll(
 				`SELECT id, title, body, "authorId", "contentHash", published, "created_at", "updated_at" ` +
 				`FROM "posts" WHERE "authorId" = ? AND published = 1 ` +
-				`ORDER BY "updated_at" DESC LIMIT 50`,
-				[id],
+				`ORDER BY "updated_at" DESC LIMIT ?`,
+				[id, limit],
 			);
 			return json(rows);
 		},
 	],
 
-	// GET /users/:id/replies
+	// GET /users/:id/replies?limit=
 	[
 		/^\/users\/([0-9a-f-]{36})\/replies$/,
-		async (m) => {
+		async (m, u) => {
 			const id = m[1];
+			const limit = num(u.searchParams.get("limit"), 50);
 			const rows = await fetchAll(
 				`SELECT r.id, r."threadId", r.body, r."created_at", t.title AS thread_title ` +
 				`FROM "replies" r LEFT JOIN "threads" t ON t.id = r."threadId" ` +
-				`WHERE r."authorId" = ? ORDER BY r."created_at" DESC LIMIT 50`,
-				[id],
+				`WHERE r."authorId" = ? ORDER BY r."created_at" DESC LIMIT ?`,
+				[id, limit],
 			);
 			return json(rows);
 		},
