@@ -71,12 +71,17 @@ export interface BaseModelStatics<T> {
 export type BaseModel<T = unknown> = CapacityComposer<T> &
 	BaseModelStatics<T>;
 
-/** Run lifecycle middleware for a phase against `target`. */
+/**
+ * Run lifecycle middleware for a phase against `target`. Hooks are declared as
+ * `(target) => any` but some (e.g. `Derivable`'s `onUpdate`) also read a
+ * second `patch` argument; forward it when present.
+ */
 function runHooks(
-	hooks: readonly ((target: any) => any)[] | undefined,
+	hooks: readonly ((...args: any[]) => any)[] | undefined,
 	target: any,
+	patch?: Record<string, unknown>,
 ): void {
-	for (const fn of hooks ?? []) fn(target);
+	for (const fn of hooks ?? []) fn(target, patch);
 }
 
 export function defineModel<T, const S extends CapacityList>(
@@ -126,12 +131,13 @@ export function defineModel<T>(
 
 		/**
 		 * Base MUTABLE update — merges the patch in place, then runs the
-		 * `onUpdate` hooks (e.g. `Validatable`'s enforcement). `Immutable` and
+		 * `onUpdate` hooks (e.g. `Validatable`'s enforcement, `Derivable`'s
+		 * recompute) with the patch so hooks see what changed. `Immutable` and
 		 * `Versionable` override this with their reconstruction-based update.
 		 */
 		update(patch: Record<string, unknown>): this {
 			Object.assign(this, patch);
-			runHooks((this.constructor as any).hooks?.onUpdate, this);
+			runHooks((this.constructor as any).hooks?.onUpdate, this, patch);
 			return this;
 		}
 	}
