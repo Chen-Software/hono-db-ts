@@ -78,7 +78,7 @@ function num(v: string | null | undefined, def: number): number {
 /** Keyset cursor helper: `WHERE sortKey < cursor ORDER BY sortKey DESC LIMIT n`. */
 function cursorWhere(
 	col: string,
-	cursor: string | null,
+	cursor: string | null | undefined,
 	dir: "asc" | "desc" = "desc",
 ): string {
 	if (!cursor) return "";
