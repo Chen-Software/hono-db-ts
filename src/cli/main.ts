@@ -52,6 +52,15 @@ Commands:
                           Worker (inlines the generated migration SQL). Depends on
                           db:generate (regenerates drizzle/*.sql from the models).
                           See wrangler.jsonc / scripts/cf-build.ts.
+
+  wrangler-config          Generate wrangler.jsonc from wrangler.config.ts, using the
+                          DATABASE_TYPE macro: adds a D1 binding (env.DB) when
+                          DATABASE_TYPE=d1, nodejs_compat + :memory: otherwise.
+
+  generate                Generate EVERYTHING in one pass: models:build → db:generate
+                          [dialect] → wrangler-config → cf-build. The one command for a
+                          complete deployable artifact (models.json + drizzle/*.sql +
+                          wrangler.jsonc + dist/worker.js).
 `);
 }
 
@@ -149,6 +158,26 @@ export async function run(argv = process.argv.slice(2)) {
 			// bundle the worker.
 			await runScript("model-build.ts");
 			await runScript("db-generate.ts", ["sqlite"]);
+			await runScript("cf-build.ts");
+			break;
+		}
+
+		case "wrangler-config": {
+			// Regenerate wrangler.jsonc from wrangler.config.ts (macro-driven:
+			// DATABASE_TYPE=d1 adds the D1 binding).
+			await runScript("../wrangler.config.ts");
+			break;
+		}
+
+		case "generate": {
+			// One pass over the whole generation chain — models → migrations →
+			// worker config → worker bundle. The dialect argument (default
+			// "sqlite") drives db:generate; the worker config adapts via the
+			// DATABASE_TYPE macro.
+			const dialect = args[0] ?? "sqlite";
+			await runScript("model-build.ts");
+			await runScript("db-generate.ts", [dialect]);
+			await runScript("../wrangler.config.ts");
 			await runScript("cf-build.ts");
 			break;
 		}
