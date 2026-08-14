@@ -43,10 +43,11 @@ describe("mountBetterAuth", () => {
 	it("signs up a user and resolves the session via the session cookie", async () => {
 		const { app } = await buildApp();
 
-		// GET /api/auth/session with no cookie → unauthenticated.
-		const anon = await app.request("/api/auth/session");
+		// GET /api/auth/get-session with no cookie → unauthenticated (null).
+		// (better-auth 1.6 serves the session at /get-session; /session is 404.)
+		const anon = await app.request("/api/auth/get-session");
 		expect(anon.status).toBe(200);
-		expect(await anon.json()).toEqual({ session: null, user: null });
+		expect(await anon.json()).toBeNull();
 
 		// Sign up (email + password).
 		const signUp = await app.request("/api/auth/sign-up/email", {
@@ -67,8 +68,8 @@ describe("mountBetterAuth", () => {
 			?.match(/better-auth\.session_token=([^;]+)/)?.[1];
 		expect(cookie).toBeTruthy();
 
-		// GET /api/auth/session with the cookie → authenticated.
-		const session = await app.request("/api/auth/session", {
+		// GET /api/auth/get-session with the cookie → authenticated.
+		const session = await app.request("/api/auth/get-session", {
 			headers: { cookie: `better-auth.session_token=${cookie}` },
 		});
 		expect(session.status).toBe(200);
@@ -98,6 +99,6 @@ describe("mountBetterAuth", () => {
 			headers: { "content-type": "application/json" },
 			body,
 		});
-		expect(second.status).toBe(400);
+		expect(second.status).toBe(422); // EMAIL_ALREADY_EXISTS in better-auth 1.6
 	});
 });

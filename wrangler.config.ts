@@ -29,6 +29,7 @@ import { resolve } from "node:path";
 
 import {
 	allowedOrigin,
+	betterAuthUrl,
 	d1Database,
 	d1DatabaseId,
 	databaseType,
@@ -143,10 +144,11 @@ export function buildWranglerConfig(): WranglerConfig {
 		["WORKER_URL", workerUrl()],
 		["ALLOWED_ORIGIN", allowedOrigin()],
 		// Better Auth public base URL — the auth endpoints are served under
-		// /api/auth/*, so this is typically the worker's own URL. Set via
-		// BETTER_AUTH_URL in the env file; BETTER_AUTH_SECRET is a SECRET
-		// binding (never a var) — set it with `wrangler secret put`.
-		["BETTER_AUTH_URL", process.env.BETTER_AUTH_URL ?? workerUrl()],
+		// /api/auth/*, so this is typically the worker's own URL. Read through the
+		// `betterAuthUrl()` macro (inlined from BETTER_AUTH_URL at build time);
+		// BETTER_AUTH_SECRET is a SECRET binding (never a var) — set it with
+		// `wrangler secret put`.
+		["BETTER_AUTH_URL", betterAuthUrl() ?? workerUrl()],
 	];
 	for (const [key, value] of refs) {
 		if (value) config.vars![key] = value;

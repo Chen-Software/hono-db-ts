@@ -177,6 +177,11 @@ function otelServiceName(): string | undefined {
  * literal, so `if (betterAuthEnabled()) { … }` lets the bundler dead-code
  * eliminate the entire auth module (better-auth + drizzle adapter) from a
  * build that opts out.
+ *
+ * Every consumer of the `BETTER_AUTH_*` env vars should go through this macro
+ * family (`betterAuthEnabled` / `betterAuthUrl` / `betterAuthSecret`) instead
+ * of reading `process.env` directly — that is what makes the auth subtree
+ * tree-shakeable for builds with `BETTER_AUTH_ENABLED=false`.
  */
 function betterAuthEnabled(): boolean {
 	return process.env.BETTER_AUTH_ENABLED !== "false";
@@ -187,7 +192,16 @@ function betterAuthUrl(): string | undefined {
 	return process.env.BETTER_AUTH_URL;
 }
 
-/** Better Auth signing secret (>= 32 chars). A Cloudflare secret binding in prod. */
+/**
+ * Better Auth signing secret (>= 32 chars). A Cloudflare secret binding in prod.
+ *
+ * SECURITY — like `apiToken()`, this macro inlines the secret into any bundle
+ * that calls it. Keep it OUT of deployed code: the worker paths read the
+ * secret at runtime from the `env.BETTER_AUTH_SECRET` Cloudflare secret
+ * binding (`authEnvFromBindings`), never from this macro. The macro is only
+ * used by local-only code (`authEnvFromProcessEnv`, the `serve`/CLI path)
+ * where the build-time env value is the same dev secret.
+ */
 function betterAuthSecret(): string | undefined {
 	return process.env.BETTER_AUTH_SECRET;
 }
