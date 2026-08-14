@@ -96,7 +96,7 @@ auth subtree is dropped. The Vite UI builds use the equivalent
 
 | Variable | Used for | Example |
 |---|---|---|
-| `BETTER_AUTH_ENABLED` | Compile-time gate (DCE). Anything but `"false"` → on. | `false` |
+| `BETTER_AUTH_ENABLED` | Compile-time gate (DCE). **The literal `"false"` → off; anything else — *including unset* — → on.** | `false` |
 | `BETTER_AUTH_URL` | Public base URL of the auth endpoints. | `http://localhost:8787` (local) |
 | `BETTER_AUTH_SECRET` | Signing secret (**≥ 32 chars**). **Never commit it.** | `dev-only-secret-…` (local) |
 
@@ -105,6 +105,47 @@ auth subtree is dropped. The Vite UI builds use the equivalent
 - Production: set `BETTER_AUTH_URL` (your worker URL) as a var, and
   `BETTER_AUTH_SECRET` via **`wrangler secret put BETTER_AUTH_SECRET`** — it is
   read at runtime from `env.BETTER_AUTH_SECRET`, never from a committed value.
+
+> [!CAUTION]
+> **Removing the Better Auth env vars does NOT disable auth.** The flag is
+> `process.env.BETTER_AUTH_ENABLED !== "false"`, so when it is **unset it
+> defaults to ON (enabled)**. If you strip `BETTER_AUTH_URL` / `BETTER_AUTH_SECRET`
+> / `BETTER_AUTH_ENABLED` from `.env.production`, the worker builds **with auth
+> compiled back in but misconfigured** (no URL/secret → auth requests fail at
+> runtime). To run a no-auth deployment you must set `BETTER_AUTH_ENABLED=false`
+> **explicitly**; the other auth vars can then be absent.
+
+### Deploying without auth (no-auth build)
+
+`BETTER_AUTH_ENABLED` is a **build-time** flag (not a runtime toggle on the
+deployed worker). For the Cloudflare Workers build it is read by
+`vite.ui.cf.config.ts` (`__BETTER_AUTH_ENABLED__` `define`) at config-eval time,
+so set it in the **build environment** — i.e. in `.env.production` (loaded by
+Bun under `NODE_ENV=production`) or inline in the build command — before running
+`bun run scripts/ui-cf-build.ts`. The local Bun server (`scripts/serve.ts`) reads
+the same flag at runtime, so you can flip it just by restarting with a different
+env var.
+
+When the flag is `false`:
+
+- the `if (__BETTER_AUTH_ENABLED__)` block in `app/server.cf.ts` inlines to
+  `if (false)` and Rollup drops the **entire** Better Auth subtree from the
+  worker bundle (the `/api/auth/*` handler, `better-auth`, the drizzle adapter,
+  and `getSession`/`setSession` are all gone);
+- the `users/[id]` guard is removed, so that route becomes a **public**,
+  enumerable profile endpoint;
+- the sign-in / sign-up pages and the nav `AuthButton` render nothing (their JSX
+  is guarded by the same flag), so the `better-auth` client is also tree-shaken
+  from the browser bundle.
+
+`BETTER_AUTH_SECRET` is **optional** in a no-auth build — it is only referenced
+inside the auth mount/`getSession` path, which is eliminated, so you can deploy
+without setting it. (When auth *is* enabled, the secret is mandatory or Better
+Auth fails to initialize.)
+
+This repo's `.env.production` currently does **not** set `BETTER_AUTH_ENABLED`,
+so the production worker builds **with auth enabled** (the flag is `!== "false"`,
+and unset → on). Set it explicitly to `false` to ship a no-auth deployment.
 
 ---
 
@@ -187,9 +228,9 @@ curl http://localhost:8787/api/auth/get-session
 ## 6. Protecting a route (example: `users/[id]`)
 
 Yes — the file-based route is easily gated. The **shipped** `app/routes/users/[id].tsx`
-resolves the session and **redirects to `/sign-in`** when absent. As shipped it
-gates *authentication* only — i.e. **any** signed-in user may view any profile;
-it does **not** enforce ownership:
+resolves the session and **redirects to `/sign-in`** when absent. It also enforces
+**ownership**: a signed-in user may only view *their own* profile, and any other
+`id` is rejected with `403`:
 
 ```tsx
 // app/routes/users/[id].tsx (shipped)
@@ -199,27 +240,29 @@ import { getSession } from "@/auth/context";
 export default createRoute(async (c) => {
   const id = c.req.param("id");
 
-  // Auth gate. `__BETTER_AUTH_ENABLED__` is the Vite build-time flag; a
-  // `BETTER_AUTH_ENABLED=false` build inlines `if (false)` and dead-code-
+  // Auth + owner gate. `__BETTER_AUTH_ENABLED__` is the Vite build-time flag;
+  // a `BETTER_AUTH_ENABLED=false` build inlines `if (false)` and dead-code-
   // eliminates the guard (and the `getSession` import it pulls).
   if (__BETTER_AUTH_ENABLED__) {
     const session = await getSession(c);
     if (!session?.user) return c.redirect(`/sign-in?next=/users/${id}`);
+    if (session.user.id !== id) return c.json({ error: "forbidden" }, 403);
   }
 
   // … render the profile from `c.env.sql` …
 });
 ```
 
-**Optional hardening — owner-only.** To restrict a profile to its own owner,
-add an authorization check after the auth gate (this is currently a comment in
-the shipped file, not yet enforced):
+The owner check is enforced in the shipped route above. Drop the
+`if (session.user.id !== id)` line if you'd rather let any authenticated user
+view any profile.
 
-```tsx
-  const session = await getSession(c);
-  if (!session?.user) return c.redirect(`/sign-in?next=/users/${id}`);
-  if (session.user.id !== id) return c.json({ error: "forbidden" }, 403);
-```
+The same auth-aware control also lives in the **site nav**: every page now
+renders `app/components/site-header.tsx`, which includes a self-contained
+`AuthButton` island (`app/islands/auth-button.tsx`). It shows **Sign in** when
+logged out and **Sign out** (calling `getAuthClient().signOut()`) when logged in,
+and is gated behind `__BETTER_AUTH_ENABLED__` so it is tree-shaken out of
+auth-disabled builds.
 
 To protect **any** route, the same two-line gate at the top of the handler is
 all you need — no route-specific middleware is required because the session
@@ -271,4 +314,4 @@ hand-edited SQL to drift.
 | Current user (server) | `getSession(c)` → `session?.user` or `null` |
 | Current user (client) | `getAuthClient().getSession()` / `useSession()` |
 | Protect a route | `if (!(await getSession(c))?.user) return c.redirect('/sign-in')` |
-| Disable auth entirely | `BETTER_AUTH_ENABLED=false` at build time (DCE) |
+| Disable auth entirely | `BETTER_AUTH_ENABLED=false` at **build time** (DCE). Leave it unset and auth is ON — only the literal `false` disables. |
