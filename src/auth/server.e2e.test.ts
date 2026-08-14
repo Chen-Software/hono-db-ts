@@ -14,6 +14,7 @@
  *   3. `sign-up/email` sets a session cookie and `get-session` resolves it.
  *   4. `sign-in/email` returns a session for the created credentials.
  *   5. Duplicate email sign-up is rejected (422).
+ *   6. `sign-out` invalidates the session (what the nav's AuthButton calls).
  *
  * For a real over-the-wire check (sign-in page in a browser, etc.) run
  * `scripts/verify-auth-server.ts` on a machine without the sandbox memory cap.
@@ -96,6 +97,36 @@ describe("Better Auth over the real mount path", () => {
 		});
 		expect(signIn.status).toBe(200);
 		expect(sessionCookie(signIn.headers.get("set-cookie"))).toBeTruthy();
+	});
+
+	it("signs out and invalidates the session", async () => {
+		const signUp = await app.request("/api/auth/sign-up/email", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				email: "signout@example.com",
+				password: "password123",
+				name: "Sign Out User",
+			}),
+		});
+		const cookie = sessionCookie(signUp.headers.get("set-cookie"));
+
+		// Session is live before sign-out.
+		const before = await app.request("/api/auth/get-session", { headers: { cookie } });
+		expect((await before.json())?.user?.email).toBe("signout@example.com");
+
+		// Sign out — Better Auth clears the session server-side and sends a
+		// Set-Cookie that expires the session_token.
+		const signOut = await app.request("/api/auth/sign-out", {
+			method: "POST",
+			headers: { cookie },
+		});
+		expect(signOut.status).toBe(200);
+		expect(signOut.headers.get("set-cookie") ?? "").toContain("better-auth.session_token=");
+
+		// The same cookie no longer resolves a session.
+		const after = await app.request("/api/auth/get-session", { headers: { cookie } });
+		expect(await after.json()).toBeNull();
 	});
 
 	it("rejects a duplicate email sign-up (422)", async () => {

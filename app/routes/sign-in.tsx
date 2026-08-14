@@ -1,9 +1,8 @@
+import { SiteHeader } from "../components/site-header";
 import { css } from "../../design-system/css";
 import { createRoute } from "honox/factory";
-import { Anchor, Card, Heading, Stack, Text } from "../components/ui";
-import { Header as LayoutHeader } from "../components/ui/layout";
+import { Card, Heading, Stack, Text } from "../components/ui";
 import AuthForm from "../islands/auth-form";
-import ThemeSwitcher from "../islands/theme-switcher";
 
 const FONT =
 	"ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -27,28 +26,7 @@ export default createRoute(async (c) => {
 		<div class={css({ minHeight: "100vh", bg: "#f7f7f8", color: "ink", fontFamily: FONT })}>
 			<title>Sign in · BBS</title>
 
-			<LayoutHeader sticky>
-				<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
-					<Anchor
-						href="/"
-						variant="plain"
-						class={css({ fontSize: "lg", fontWeight: 800, color: "ink" })}
-					>
-						<span class={css({ display: "inline-block", w: 3, h: 3, rounded: "sm", bg: "accent" })} />
-						BBS Forum
-					</Anchor>
-					<Stack direction="horizontal" align="center" gap="3" class={css({ ml: "auto" })}>
-						<ThemeSwitcher />
-						<Anchor
-							href="/sign-up"
-							class={css({ fontSize: "sm", fontWeight: 600, color: "ink" })}
-						>
-							Sign up
-						</Anchor>
-					</Stack>
-				</Stack>
-			</LayoutHeader>
-
+			<SiteHeader variant="app" />
 			<main class={css({ maxWidth: "md", mx: "auto", px: 6, py: 16 })}>
 				<Card>
 					<div class={css({ p: 8 })}>

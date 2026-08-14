@@ -12,7 +12,6 @@
  */
 
 import { Hono } from "hono";
-import { mountBetterAuthFromBindings } from "@/auth/mount";
 import { buildQueryApp } from "@/http/app";
 import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
@@ -40,6 +39,7 @@ export const backend: WorkerBackend = {
 		// (better-auth + drizzle adapter) from the deployed worker.
 		if (betterAuthEnabled()) {
 			const { drizzle } = await import("drizzle-orm/d1");
+			const { mountBetterAuthFromBindings } = await import("@/auth/mount");
 			// Better Auth first — `/api/auth/*` must win over the query app's `/api`.
 			mountBetterAuthFromBindings(app, env, drizzle(env.DB));
 		}

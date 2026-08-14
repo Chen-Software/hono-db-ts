@@ -1,10 +1,7 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
-import { Header as LayoutHeader } from '../../components/ui/layout'
 import { SiteHeader } from '../../components/site-header'
-import SearchBox from '../../islands/search'
-import ThemeSwitcher from '../../islands/theme-switcher'
 import { getSession } from '../../../src/auth/context'
 
 /**
@@ -70,18 +67,21 @@ function timeAgo(iso: string): string {
 export default createRoute(async (c) => {
 	const id = c.req.param('id')
 
-	// Authenticated-only gate. `__BETTER_AUTH_ENABLED__` is the Vite build-time
-	// flag (see vite.ui.config.ts / vite.ui.cf.config.ts): with
+	// Authenticated + owner-only gate. `__BETTER_AUTH_ENABLED__` is the Vite
+	// build-time flag (see vite.ui.config.ts / vite.ui.cf.config.ts): with
 	// `BETTER_AUTH_ENABLED=false`, this `if` inlines to `if (false)`, so the
 	// guard — and the `getSession` import / better-auth it pulls — is
 	// dead-code-eliminated and the page stays public. Otherwise, a missing or
 	// invalid session cookie sends the visitor to sign-in (remembering where
-	// they were). To restrict to the OWNER only, add:
-	//   if (session.user.id !== id) return c.json({ error: 'forbidden' }, 403)
+	// they were), and a session that does not belong to this profile id is
+	// rejected with 403 (you may only view your own profile).
 	if (__BETTER_AUTH_ENABLED__) {
 		const session = await getSession(c)
 		if (!session?.user) {
 			return c.redirect(`/sign-in?next=/users/${id}`)
+		}
+		if (session.user.id !== id) {
+			return c.json({ error: "forbidden" }, 403)
 		}
 	}
 
@@ -318,34 +318,5 @@ export default createRoute(async (c) => {
 
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
-	return (
-		<LayoutHeader sticky>
-			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
-				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
-					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-					BBS Forum
-				</Anchor>
-
-				<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-					<Anchor href="/boards" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-						Boards
-					</Anchor>
-					<Anchor href="/threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-						Threads
-					</Anchor>
-					<Anchor href="/posts" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-						Posts
-					</Anchor>
-				</nav>
-
-				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
-					<SearchBox />
-					<ThemeSwitcher />
-					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
-						New thread
-					</Button>
-				</Stack>
-			</Stack>
-		</LayoutHeader>
-	)
+	return <SiteHeader />
 }

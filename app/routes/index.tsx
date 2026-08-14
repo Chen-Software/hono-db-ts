@@ -10,9 +10,7 @@ import {
 	Stack,
 	Text,
 } from '../components/ui'
-import { Header as LayoutHeader } from '../components/ui/layout'
-import SearchBox from '../islands/search'
-import ThemeSwitcher from '../islands/theme-switcher'
+import { SiteHeader } from '../components/site-header'
 
 /**
  * BBS home page — a forum-style landing UI rendered entirely on the server.
@@ -186,34 +184,7 @@ export default createRoute(async (c) => {
 			<title>BBS Forum</title>
 
 			{/* ---------- Nav ---------- */}
-			<LayoutHeader sticky>
-				<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
-					<Anchor href="/" variant="plain" class={css({ fontSize: 'lg', fontWeight: 800, color: 'ink' })}>
-						<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-						BBS Forum
-					</Anchor>
-
-					<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-						<Anchor href="#boards" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-							Boards
-						</Anchor>
-						<Anchor href="#threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-							Threads
-						</Anchor>
-						<Anchor href="#posts" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
-							Posts
-						</Anchor>
-					</nav>
-
-					<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
-						<SearchBox />
-						<ThemeSwitcher />
-						<Button as="a" href="#boards" colorPalette="orange" size="sm">
-							New thread
-						</Button>
-					</Stack>
-				</Stack>
-			</LayoutHeader>
+			<SiteHeader variant="home" />
 
 			{/* ---------- Hero / stats ---------- */}
 			<section class={css({ px: 6, py: 14, bg: '#111827', color: 'white' })}>
