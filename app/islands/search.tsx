@@ -122,7 +122,7 @@ export default function SearchBox() {
 									{result.posts.map((p) => (
 										<a
 											key={p.id}
-											href={`/api/posts/${p.id}`}
+											href={`/posts/${p.id}`}
 											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', color: 'ink', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
 										>
 											{p.title}
