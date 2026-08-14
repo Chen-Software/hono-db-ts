@@ -512,6 +512,18 @@ export function Servable<TBase extends CapacityComposer>(
 				entity["updated_at"] = now;
 			}
 
+			// Fill DEFAULTS for omitted columns so a create with only the
+			// meaningful fields (e.g. UI forms posting {title,board,author})
+			// still validates: booleans → false. Optional/nullable columns are
+			// left UNSET — typia accepts `undefined` for `field?` (but rejects
+			// `null`), and `toRow` skips unset fields, so the storage side
+			// (DB column nullability / DEFAULT) covers them. Genuinely required
+			// non-boolean values (title, FKs) stay missing and `assert` 400s.
+			for (const col of plan.columns) {
+				if (col.isId || entity[col.name] != null) continue;
+				if (col.kind === "boolean") entity[col.name] = false;
+			}
+
 			// Validatable guard (strictest): a bad create never reaches SQL.
 			if (assertFn) {
 				try {

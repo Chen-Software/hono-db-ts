@@ -6,13 +6,13 @@
  * `workerUrl()`, `allowedOrigin()`) so the generated file adapts to the
  * selected `DATABASE_TYPE`:
  *
- *   - `DATABASE_TYPE=sqlite` (default dev/prod-in-memory) → no D1 binding,
- *     `nodejs_compat` for `bun:sqlite`.
+ *   - `DATABASE_TYPE=sqlite` (default dev/prod-in-memory) → no D1 binding.
  *   - `DATABASE_TYPE=d1`      → adds the `d1_databases` binding (`env.DB`,
- *     database name from `D1_DATABASE` / `db`), uses the D1-compatible
- *     compatibility flags, and DROPS `nodejs_compat` (no `bun:sqlite`).
- *   - `DATABASE_TYPE=turso`   → no D1 binding (external libSQL), keeps
- *     `nodejs_compat`.
+ *     database name from `D1_DATABASE` / `db`).
+ *   - `DATABASE_TYPE=turso`   → no D1 binding (external libSQL).
+ *
+ * `nodejs_compat` is always enabled: the Honox UI worker (`dist/ui-cf/index.js`)
+ * imports `node:async_hooks` (via honox/Hono) regardless of the database type.
  *
  * Usage:
  *   bun run wrangler.config.ts                 # writes ./wrangler.jsonc
@@ -30,6 +30,7 @@ import { resolve } from "node:path";
 import {
 	allowedOrigin,
 	d1Database,
+	d1DatabaseId,
 	databaseType,
 	env,
 	isD1,
@@ -40,11 +41,16 @@ import {
 export interface WranglerConfig {
 	$schema: string;
 	name: string;
+	// Force the Cloudflare account (CF_ACCOUNT_ID). Wrangler otherwise auto-picks
+	// from the OAuth token, which can select a stale/different account.
+	account_id?: string;
 	main: string;
 	compatibility_date: string;
 	compatibility_flags: string[];
-	// Static assets (Workers Static Assets) — serves the Honox UI's built
-	// client files (`dist/static/*`) at `/static/*`.
+	// Static assets (Workers Static Assets). The honox manifest emits URLs like
+	// `/static/*` and `/favicon.ico`, so the assets directory must be `dist` —
+	// Workers Static Assets maps the directory to the URL root, so `dist/static/*`
+	// becomes `/static/*` and `dist/favicon.ico` becomes `/favicon.ico`.
 	assets?: {
 		directory: string;
 		binding: string;
@@ -75,17 +81,24 @@ export function buildWranglerConfig(): WranglerConfig {
 	const config: WranglerConfig = {
 		$schema: "./node_modules/wrangler/config-schema.json",
 		name: "bbs-query",
+		// CF_ACCOUNT_ID pins the target account (see the interface comment).
+		account_id: process.env.CF_ACCOUNT_ID || undefined,
 		// The Honox UI worker (`app/server.cf.ts` via `vite.ui.cf.config.ts`)
 		// serves SSR HTML at `/` AND the JSON query app at `/api/...`.
 		main: "dist/ui-cf/index.js",
-		// Serve the built client assets (`dist/static/*` — hashed CSS/JS from
-		// the Honox client build) at `/static/*`.
+		// Serve the built client assets. The honox manifest emits `/static/*`
+		// URLs, and Workers Static Assets maps the assets directory to the URL
+		// root — so `dist/static/*` → `/static/*` (and `dist/favicon.ico` →
+		// `/favicon.ico`) requires the directory to be `dist`, not `dist/static`.
 		assets: {
-			directory: "dist/static",
+			directory: "dist",
 			binding: "ASSETS",
 		},
 		compatibility_date: "2026-01-01",
-		compatibility_flags: [],
+		// nodejs_compat is ALWAYS required — the Honox UI worker bundle
+		// (`dist/ui-cf/index.js`) imports `node:async_hooks` (via honox/Hono),
+		// regardless of the database type.
+		compatibility_flags: ["nodejs_compat"],
 		vars: {
 			ENVIRONMENT: env(),
 			DATABASE_TYPE: type,
@@ -93,14 +106,15 @@ export function buildWranglerConfig(): WranglerConfig {
 	};
 
 	if (d1) {
-		// D1 — no bun:sqlite, so nodejs_compat is unnecessary (D1 is a Workers
-		// native binding). The migration SQL is applied by `wrangler d1
-		// migrations apply` from the drizzle/ dir.
+		// D1 binding — the migration SQL is applied by `wrangler d1 migrations
+		// apply` from the drizzle/ dir. nodejs_compat stays enabled (UI worker).
 		config.d1_databases = [
 			{
 				binding: "DB",
 				database_name: dbName,
-				database_id: prod ? "00000000000000000000000000000000" : "local",
+				// Real D1 database ID (D1_DATABASE_ID) or the placeholder; wrangler
+				// needs the actual ID to bind (it does NOT auto-resolve by name).
+				database_id: prod ? (d1DatabaseId() ?? "00000000000000000000000000000000") : "local",
 				preview_database_id: "local",
 				migrations_dir: "./drizzle",
 			},
@@ -111,8 +125,7 @@ export function buildWranglerConfig(): WranglerConfig {
 		};
 	} else {
 		// sqlite / turso — the worker opens its own database (in-memory sqlite
-		// or libSQL); nodejs_compat keeps the built-in modules available.
-		config.compatibility_flags = ["nodejs_compat"];
+		// or libSQL).
 		config.vars = {
 			...config.vars,
 			DATABASE_URL:

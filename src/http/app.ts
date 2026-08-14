@@ -20,11 +20,6 @@ import { Hono } from "hono";
 
 import type { SqlQueryExecutor } from "@/capacities/servable";
 import * as Models from "@/models";
-Models.Board.Board
-Models.Post.Post
-Models.Reply.Reply
-Models.Thread.Thread
-Models.User.User
 
 /** UUID path segment — matches the id shape every table uses. */
 const UUID = "[0-9a-f-]{36}";
@@ -231,84 +226,18 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 	});
 
 	// ------------------------------------------------------------------
-	// Write endpoints — Thread CRUD (used by the UI forms AND the JSON API).
-	// All values are `?`-bound; identifiers are quoted. Booleans are stored
-	// as 0/1 (sqlite), matching the schema.
+	// Generated CRUD — every model that composes Servable contributes its
+	// full per-model surface (GET list + GET byId + POST / PUT / DELETE)
+	// here, so the app gets automatic CRUD (including Update) for free:
+	//   User.serve   → /users        Board.serve  → /boards
+	//   Thread.serve → /threads      Reply.serve  → /replies
+	// The hand-written routes above stay for the JOIN-heavy "good queries"
+	// (moderator / author+board+replyCount / hot / search / latest-posts).
+	// Hono registers routes in order, so a hand-written route registered
+	// before Model.serve wins for the same path+method — the rich by-id
+	// reads keep their joins while the generic list / write routes fill
+	// the rest. Thread.serve's DELETE cascades to replies.
 	// ------------------------------------------------------------------
-
-	// POST /threads — create a thread. Body: { title, boardId, authorId, pinned?, locked? }
-	app.post("/threads", async (c) => {
-		const body = await c.req.json().catch(() => null);
-		const title = typeof body?.title === "string" ? body.title.trim() : "";
-		const boardId = typeof body?.boardId === "string" ? body.boardId : "";
-		const authorId = typeof body?.authorId === "string" ? body.authorId : "";
-		if (!title || !boardId || !authorId) {
-			return fail("title, boardId and authorId are required");
-		}
-		const board = (await fetchAll(`SELECT id FROM "boards" WHERE "id" = ?`, [boardId]))[0];
-		if (!board) return fail("board not found", 404);
-		const author = (await fetchAll(`SELECT id FROM "users" WHERE "id" = ?`, [authorId]))[0];
-		if (!author) return fail("user not found", 404);
-
-		const id = crypto.randomUUID();
-		const now = new Date().toISOString();
-		const pinned = body?.pinned ? 1 : 0;
-		const locked = body?.locked ? 1 : 0;
-		await fetchAll(
-			`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
-				`VALUES (?,?,?,?,?,?,?,?)`,
-			[id, now, now, boardId, authorId, title, pinned, locked],
-		);
-		const row = (await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id]))[0];
-		return json(row, 201);
-	});
-
-	// PUT /threads/:id — update title / pinned / locked (partial). Body: { title?, pinned?, locked? }
-	app.put(`/threads/:id{${UUID}}`, async (c) => {
-		const id = c.req.param("id");
-		const existing = (await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id]))[0];
-		if (!existing) return fail("thread not found", 404);
-
-		const body = await c.req.json().catch(() => null) ?? {};
-		const sets: string[] = [];
-		const params: unknown[] = [];
-		const patch = { ...existing };
-		if (typeof body.title === "string" && body.title.trim()) {
-			sets.push(`"title" = ?`);
-			params.push(body.title.trim());
-			patch.title = body.title.trim();
-		}
-		if (typeof body.pinned === "boolean") {
-			const v = body.pinned ? 1 : 0;
-			sets.push(`"pinned" = ?`);
-			params.push(v);
-			patch.pinned = v;
-		}
-		if (typeof body.locked === "boolean") {
-			const v = body.locked ? 1 : 0;
-			sets.push(`"locked" = ?`);
-			params.push(v);
-			patch.locked = v;
-		}
-		if (sets.length === 0) return json(patch);
-		sets.push(`"updated_at" = ?`);
-		params.push(new Date().toISOString());
-		params.push(id);
-		await fetchAll(`UPDATE "threads" SET ${sets.join(", ")} WHERE "id" = ?`, params);
-		const row = (await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id]))[0];
-		return json(row);
-	});
-
-	// DELETE /threads/:id — delete the thread (and its replies first, since
-	// SQLite/D1 do not enforce FK cascades by default).
-	app.delete(`/threads/:id{${UUID}}`, async (c) => {
-		const id = c.req.param("id");
-		const existing = (await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id]))[0];
-		if (!existing) return fail("thread not found", 404);
-		await fetchAll(`DELETE FROM "replies" WHERE "threadId" = ?`, [id]);
-		await fetchAll(`DELETE FROM "threads" WHERE "id" = ?`, [id]);
-		return json({ id, deleted: true });
-	});
 
 	// GET /latest-posts — globally latest published posts
 	app.get("/latest-posts", async (c) => {

@@ -114,6 +114,11 @@ function d1Database(): string | undefined {
 	return process.env.D1_DATABASE;
 }
 
+/** Deployed D1 database ID (reference only — wrangler needs it in the binding). */
+function d1DatabaseId(): string | undefined {
+	return process.env.D1_DATABASE_ID;
+}
+
 /** Optional CORS allow-list origin (also a Cloudflare secret binding). */
 function allowedOrigin(): string | undefined {
 	return process.env.ALLOWED_ORIGIN;
@@ -180,6 +185,7 @@ export {
 	workerUrl,
 	r2Bucket,
 	d1Database,
+	d1DatabaseId,
 	allowedOrigin,
 	apiToken,
 	tursoUrl,

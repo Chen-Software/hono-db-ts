@@ -69,7 +69,7 @@ export interface DerivableOptions {
  */
 function Derivable<TBase extends CapacityComposer>(
 	Base: TBase,
-	_mod?: any,
+	_mod: any,
 	options: DerivableOptions,
 	_ctx?: any,
 ): TBase {
