@@ -1,0 +1,134 @@
+import { defineSlotRecipe } from "@pandacss/dev";
+
+export const pagination = defineSlotRecipe({
+	className: "pagination",
+	slots: [
+		"root",
+		"item",
+		"ellipsis",
+		"prevTrigger",
+		"nextTrigger",
+		"firstTrigger",
+		"lastTrigger",
+	],
+	base: {
+		root: {
+			display: "flex",
+			alignItems: "center",
+			gap: "1",
+			width: "full",
+			justifyContent: "center",
+		},
+		item: {
+			borderRadius: "l2",
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			h: "10",
+			minW: "10",
+			fontWeight: "semibold",
+			textStyle: "sm",
+			transition: "colors",
+			_hover: {
+				bg: "bg.subtle",
+			},
+			_selected: {
+				bg: "colorPalette.solid.bg",
+				color: "colorPalette.solid.fg",
+				cursor: "default",
+				pointerEvents: "none",
+				_hover: {
+					bg: "colorPalette.solid.bg",
+				},
+			},
+			_disabled: {
+				layerStyle: "disabled",
+			},
+		},
+		ellipsis: {
+			alignItems: "center",
+			color: "fg.muted",
+			display: "inline-flex",
+			justifyContent: "center",
+			fontWeight: "semibold",
+			h: "10",
+			minW: "10",
+		},
+		prevTrigger: {
+			borderRadius: "l2",
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			h: "10",
+			minW: "10",
+			transition: "colors",
+			_hover: {
+				bg: "bg.subtle",
+			},
+			_disabled: {
+				layerStyle: "disabled",
+				opacity: 0.4,
+				cursor: "not-allowed",
+			},
+		},
+		nextTrigger: {
+			borderRadius: "l2",
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			h: "10",
+			minW: "10",
+			transition: "colors",
+			_hover: {
+				bg: "bg.subtle",
+			},
+			_disabled: {
+				layerStyle: "disabled",
+				opacity: 0.4,
+				cursor: "not-allowed",
+			},
+		},
+		firstTrigger: {
+			borderRadius: "l2",
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			h: "10",
+			minW: "10",
+			transition: "colors",
+			_hover: {
+				bg: "bg.subtle",
+			},
+			_disabled: {
+				layerStyle: "disabled",
+				opacity: 0.4,
+				cursor: "not-allowed",
+			},
+		},
+		lastTrigger: {
+			borderRadius: "l2",
+			cursor: "pointer",
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			h: "10",
+			minW: "10",
+			transition: "colors",
+			_hover: {
+				bg: "bg.subtle",
+			},
+			_disabled: {
+				layerStyle: "disabled",
+				opacity: 0.4,
+				cursor: "not-allowed",
+			},
+		},
+	},
+	defaultVariants: {
+		colorPalette: "gray",
+	},
+});
