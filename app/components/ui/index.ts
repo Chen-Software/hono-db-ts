@@ -4,7 +4,6 @@ export {
 } from "./absolute-center";
 export { Alert, AlertIcon, type AlertProps } from "./alert";
 export { Anchor, type AnchorProps } from "./anchor";
-export { AuthStatus, type AuthStatusProps } from "./auth-status";
 export { Avatar, type AvatarProps } from "./avatar";
 export { Badge, type BadgeProps } from "./badge";
 export {
@@ -53,14 +52,9 @@ export * as FileUploadPrimitive from "./file-upload-primitive";
 export { Grid, type GridProps } from "./grid";
 export { Group, type GroupProps } from "./group";
 export { Heading, type HeadingProps } from "./heading";
-export { HoverCard, type HoverCardProps } from "./hover-card";
 export { Icon, type IconProps } from "./icon";
 export { Layout, type LayoutProps } from "./layout";
 export { Loader, type LoaderProps } from "./loader";
-export {
-	PagePlayground,
-	type PagePlaygroundProps,
-} from "./page-playground";
 export { PaginatedTable } from "./paginated-table";
 export { Pagination, type PaginationProps } from "./pagination";
 export { PinField, type PinFieldProps } from "./pin-field";
@@ -87,15 +81,7 @@ export { Spinner, type SpinnerProps } from "./spinner";
 export { type PanelConfig, Splitter, type SplitterProps } from "./splitter";
 export { Stack, type StackProps } from "./stack";
 export { Switch, type SwitchProps } from "./switch";
-export {
-	Table,
-	type TableColumn,
-	type TableProps,
-	type TableRow,
-} from "./table";
 export { Tabs, type TabsProps } from "./tabs";
-export { TagsField, type TagsFieldProps } from "./tags-field";
-export * as TagsFieldPrimitive from "./tags-field-primitive";
 export { Text, type TextProps } from "./text";
 export { Textarea, type TextareaProps } from "./textarea";
 export * as Toast from "./toast";
