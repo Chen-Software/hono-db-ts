@@ -14,15 +14,15 @@
  *
  * ## Serving the UI
  *
- * When `dist/ui/` exists (built with `bun run src/main.ts ui:build`), the
+ * When `dist/index.js` exists (built with `bun run src/main.ts ui:build`), the
  * Honox UI in `/app` is mounted at the root (`/`) and the JSON query app under
  * `/api`. So the same port serves:
  *
  *   - `GET /`            — the Honox UI (SSR HTML, islands, /static/* assets)
  *   - `GET /api/stats` … — the "good BBS queries" JSON API
  *
- * If `dist/ui/` is missing, `serve` prints a hint and serves the JSON API only
- * (mounted at both `/` and `/api` for compatibility with existing clients).
+ * If `dist/index.js` is missing, `serve` prints a hint and serves the JSON API
+ * only (mounted at both `/` and `/api` for compatibility with existing clients).
  *
  * The `DATABASE_URL` target is resolved deliberately — it may be an in-memory
  * DB, a local file, or (in the Worker) a Cloudflare D1 / Turso remote:
@@ -94,21 +94,21 @@ const app = new Hono();
 // The JSON query API is ALWAYS available under /api — independent of the UI.
 app.route("/api", queryApp);
 
-// Try to load the built Honox UI (dist/ui/index.js). It's a self-contained
+// Try to load the built Honox UI (dist/index.js). It's a self-contained
 // Hono app (SSR + /static/* + favicon) produced by `bun run src/main.ts ui:build`.
-const UI_BUNDLE = resolve(import.meta.dir, "../dist/ui/index.js");
+const UI_BUNDLE = resolve(import.meta.dir, "../dist/index.js");
 const hasUi = existsSync(UI_BUNDLE);
 if (hasUi) {
 	const { default: uiApp } = await import(UI_BUNDLE);
 	// Mount the UI at the root (it owns /, /static/*, /favicon.ico).
 	app.route("/", uiApp as Hono);
-	console.log("serve: Honox UI mounted at / (from dist/ui/index.js).");
+	console.log("serve: Honox UI mounted at / (from dist/index.js).");
 } else {
 	// No UI build — keep the JSON API ALSO at the root so `/boards` etc. keep
 	// working for clients that hit the API without the /api prefix.
 	app.route("/", queryApp);
 	console.log(
-		"serve: no dist/ui/index.js — serving the JSON API at / AND /api.\n" +
+		"serve: no dist/index.js — serving the JSON API at / AND /api.\n" +
 			"  Build the UI with: bun run src/main.ts ui:build",
 	);
 }

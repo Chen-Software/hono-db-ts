@@ -51,10 +51,10 @@ Commands:
                           at / when it has been built (see ui:build). Without a UI
                           build, the API is ALSO exposed at / for back-compat.
 
-  ui:build                Build the Honox UI in /app -> dist/ui/index.js
-                          (vite.ui.config.ts: honox routes/islands + ttsc + Panda
-                          CSS, via @hono/vite-build/bun). Run this BEFORE serve
-                          to get the UI.
+  ui:build                Build the Honox UI in /app -> dist/index.js (+ static
+                          client assets + .vite manifest). Two-phase vite build:
+                          client then SSR (honox routes/islands + ttsc + Panda
+                          CSS, via @hono/vite-build/bun). Run BEFORE serve.
 
   ui:dev                  Run the Honox UI dev server (vite, HMR on :8787).
 

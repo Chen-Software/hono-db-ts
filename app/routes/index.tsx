@@ -1,4 +1,5 @@
 import { css } from '../../styled-system/css'
+import { Fragment } from 'hono/jsx'
 import { createRoute } from 'honox/factory'
 import SearchBox from '../islands/search'
 
@@ -68,6 +69,11 @@ export default createRoute(async (c) => {
 	let threads: Thread[] = []
 	let posts: Post[] = []
 	let hot: (Thread & { reply_count: number })[] = []
+	// Options for the "new thread" form.
+	let allBoards: { id: string; name: string }[] = []
+	let authors: { id: string; name: string }[] = []
+	// When `?edit=<id>` is set, that thread renders its inline title editor.
+	const editId = c.req.query('edit') ?? null
 
 	try {
 		const sql = c.env.sql
@@ -121,6 +127,14 @@ export default createRoute(async (c) => {
 				 ORDER BY reply_count DESC, t."updated_at" DESC
 				 LIMIT 6`,
 			)) as (Thread & { reply_count: number })[]
+
+			allBoards = (await sql.unsafe(
+				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
+			)) as { id: string; name: string }[]
+
+			authors = (await sql.unsafe(
+				`SELECT id, name FROM "users" ORDER BY "created_at" DESC LIMIT 20`,
+			)) as { id: string; name: string }[]
 		}
 	} catch {
 		stats = null
@@ -128,6 +142,8 @@ export default createRoute(async (c) => {
 		threads = []
 		posts = []
 		hot = []
+		allBoards = []
+		authors = []
 	}
 
 	const hasDb = stats !== null
@@ -421,14 +437,109 @@ export default createRoute(async (c) => {
 							)}
 						</section>
 
+						{/* New thread */}
+						{hasDb && allBoards.length > 0 && authors.length > 0 ? (
+							<section id="new-thread">
+								<h2 class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>New thread</h2>
+								<form
+									method="post"
+									action="/"
+									class={css({
+										rounded: 'xl',
+										border: '1px solid token(colors.border)',
+										bg: 'white',
+										p: 5,
+										spaceY: 3,
+									})}
+								>
+									<input type="hidden" name="action" value="create" />
+									<input
+										name="title"
+										placeholder="Thread title…"
+										required
+										maxLength={300}
+										class={css({
+											w: 'full',
+											px: 3,
+											py: 2,
+											rounded: 'md',
+											border: '1px solid token(colors.border)',
+											fontSize: 'sm',
+											outline: 'none',
+											_focus: { borderColor: 'accent' },
+										})}
+									/>
+									<div class={css({ display: 'flex', gap: 3 })}>
+										<select
+											name="boardId"
+											required
+											class={css({
+												flex: 1,
+												px: 3,
+												py: 2,
+												rounded: 'md',
+												border: '1px solid token(colors.border)',
+												fontSize: 'sm',
+												bg: 'white',
+											})}
+										>
+											<option value="">Board…</option>
+											{allBoards.map((b) => (
+												<option key={b.id} value={b.id}>
+													{b.name}
+												</option>
+											))}
+										</select>
+										<select
+											name="authorId"
+											required
+											class={css({
+												flex: 1,
+												px: 3,
+												py: 2,
+												rounded: 'md',
+												border: '1px solid token(colors.border)',
+												fontSize: 'sm',
+												bg: 'white',
+											})}
+										>
+											<option value="">Author…</option>
+											{authors.map((u) => (
+												<option key={u.id} value={u.id}>
+													{u.name}
+												</option>
+											))}
+										</select>
+									</div>
+									<button
+										type="submit"
+										class={css({
+											px: 4,
+											py: 2,
+											rounded: 'md',
+											bg: 'accent',
+											color: 'white',
+											fontSize: 'sm',
+											fontWeight: 600,
+											border: 'none',
+											cursor: 'pointer',
+											_hover: { bg: '#ea580c' },
+										})}
+									>
+										Post thread
+									</button>
+								</form>
+							</section>
+						) : null}
+
 						{/* Recent threads */}
 						<section id="threads">
 							<h2 class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>Recent activity</h2>
 							{threads.length > 0 ? (
 								<div class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', overflow: 'hidden' })}>
 									{threads.map((t, i) => (
+										<Fragment key={t.id}>
 										<article
-											key={t.id}
 											class={css({
 												px: 5,
 												py: 4,
@@ -504,6 +615,145 @@ export default createRoute(async (c) => {
 												{t.reply_count}
 											</div>
 										</article>
+
+										{/* Inline title editor (shown when ?edit=<id>) */}
+										{t.id === editId ? (
+											<form
+												method="post"
+												action="/"
+												class={css({
+													px: 5,
+													py: 3,
+													borderTop: '1px solid token(colors.border)',
+													bg: '#fff7ed',
+													display: 'flex',
+													gap: 3,
+												})}
+											>
+												<input type="hidden" name="action" value="update-title" />
+												<input type="hidden" name="id" value={t.id} />
+												<input
+													name="title"
+													defaultValue={t.title}
+													maxLength={300}
+													class={css({
+														flex: 1,
+														px: 3,
+														py: 1.5,
+														rounded: 'md',
+														border: '1px solid token(colors.border)',
+														fontSize: 'sm',
+														outline: 'none',
+														_focus: { borderColor: 'accent' },
+													})}
+												/>
+												<button
+													type="submit"
+													class={css({
+														px: 3,
+														py: 1.5,
+														rounded: 'md',
+														bg: 'accent',
+														color: 'white',
+														fontSize: 'xs',
+														fontWeight: 600,
+														border: 'none',
+														cursor: 'pointer',
+													})}
+												>
+													Save
+												</button>
+												<a
+													href="/"
+													class={css({
+														px: 3,
+														py: 1.5,
+														rounded: 'md',
+														border: '1px solid token(colors.border)',
+														fontSize: 'xs',
+														color: 'muted',
+														textDecoration: 'none',
+													})}
+												>
+													Cancel
+												</a>
+											</form>
+										) : null}
+
+										{/* Row actions */}
+										<div
+											class={css({
+												px: 5,
+												pb: 3,
+												borderTop: i === 0 ? 'none' : 'none',
+												display: 'flex',
+												alignItems: 'center',
+												gap: 2,
+												fontSize: 'xs',
+											})}
+										>
+											<a
+												href={`/?edit=${t.id}`}
+												class={css({ color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}
+											>
+												Edit
+											</a>
+											<form method="post" action="/" class={css({ m: 0 })}>
+												<input type="hidden" name="action" value="toggle-pin" />
+												<input type="hidden" name="id" value={t.id} />
+												<button
+													type="submit"
+													class={css({
+														bg: 'transparent',
+														border: 'none',
+														p: 0,
+														fontSize: 'xs',
+														color: 'muted',
+														cursor: 'pointer',
+														_hover: { color: 'accent' },
+													})}
+												>
+													{t.pinned === 1 ? 'Unpin' : 'Pin'}
+												</button>
+											</form>
+											<form method="post" action="/" class={css({ m: 0 })}>
+												<input type="hidden" name="action" value="toggle-lock" />
+												<input type="hidden" name="id" value={t.id} />
+												<button
+													type="submit"
+													class={css({
+														bg: 'transparent',
+														border: 'none',
+														p: 0,
+														fontSize: 'xs',
+														color: 'muted',
+														cursor: 'pointer',
+														_hover: { color: 'accent' },
+													})}
+												>
+													{t.locked === 1 ? 'Unlock' : 'Lock'}
+												</button>
+											</form>
+											<form method="post" action="/" class={css({ m: 0 })}>
+												<input type="hidden" name="action" value="delete" />
+												<input type="hidden" name="id" value={t.id} />
+												<button
+													type="submit"
+													class={css({
+														bg: 'transparent',
+														border: 'none',
+														p: 0,
+														fontSize: 'xs',
+														color: '#dc2626',
+														cursor: 'pointer',
+														_hover: { color: '#b91c1c' },
+													})}
+												>
+													Delete
+												</button>
+											</form>
+										</div>
+										</Fragment>
 									))}
 								</div>
 							) : (
@@ -627,4 +877,60 @@ export default createRoute(async (c) => {
 			</footer>
 		</div>
 	)
+})
+
+/**
+ * POST / — handle the thread CRUD forms (create / update-title / toggle-pin /
+ * toggle-lock / delete). Pure SSR: every action is a `<form method="post">`
+ * submit, so no client JS is required. On success it redirects back to `/`.
+ */
+export const POST = createRoute(async (c) => {
+	const sql = c.env.sql
+	if (!sql) return c.redirect('/')
+
+	const body = await c.req.parseBody()
+	const action = typeof body.action === 'string' ? body.action : ''
+	const id = typeof body.id === 'string' ? body.id : ''
+
+	try {
+		if (action === 'create') {
+			const title = typeof body.title === 'string' ? body.title.trim() : ''
+			const boardId = typeof body.boardId === 'string' ? body.boardId : ''
+			const authorId = typeof body.authorId === 'string' ? body.authorId : ''
+			if (!title || !boardId || !authorId) return c.redirect('/')
+
+			const newId = crypto.randomUUID()
+			const now = new Date().toISOString()
+			await sql.unsafe(
+				`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
+					`VALUES (?,?,?,?,?,?,0,0)`,
+				[newId, now, now, boardId, authorId, title],
+			)
+		} else if (action === 'update-title' && id) {
+			const title = typeof body.title === 'string' ? body.title.trim() : ''
+			if (title) {
+				await sql.unsafe(
+					`UPDATE "threads" SET "title" = ?, "updated_at" = ? WHERE "id" = ?`,
+					[title, new Date().toISOString(), id],
+				)
+			}
+		} else if (action === 'toggle-pin' && id) {
+			await sql.unsafe(
+				`UPDATE "threads" SET "pinned" = CASE "pinned" WHEN 1 THEN 0 ELSE 1 END, "updated_at" = ? WHERE "id" = ?`,
+				[new Date().toISOString(), id],
+			)
+		} else if (action === 'toggle-lock' && id) {
+			await sql.unsafe(
+				`UPDATE "threads" SET "locked" = CASE "locked" WHEN 1 THEN 0 ELSE 1 END, "updated_at" = ? WHERE "id" = ?`,
+				[new Date().toISOString(), id],
+			)
+		} else if (action === 'delete' && id) {
+			await sql.unsafe(`DELETE FROM "replies" WHERE "threadId" = ?`, [id])
+			await sql.unsafe(`DELETE FROM "threads" WHERE "id" = ?`, [id])
+		}
+	} catch {
+		// Keep the UX simple: any failure just bounces back to the list.
+	}
+
+	return c.redirect('/')
 })

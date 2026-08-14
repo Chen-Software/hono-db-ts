@@ -33,12 +33,27 @@ export default defineConfig({
       client: { input: ['/app/client.ts', '/app/style.css'] },
     }),
     build({
-      outputDir: resolve(import.meta.dir, 'dist/ui'),
-      emptyOutDir: true,
-      staticRoot: resolve(import.meta.dir, 'app/public'),
+      // NOTE: honox's Link/Script read the manifest from the vite root at
+      // `/dist/.vite/manifest.json`, so the UI must build to `dist/` (the
+      // @hono/vite-build default). This coexists with the CLI (`dist/main.js`)
+      // and worker (`dist/worker.js`) builds.
+      //
+      // staticRoot = dist so the generated `serveStatic({ root })` for the
+      // `/static/*` route resolves `/static/x` → `dist/static/x` (the client
+      // bundle). Vite also copies app/public → dist, so `/favicon.ico` works.
+      staticRoot: resolve(process.cwd(), 'dist'),
     }),
   ],
+  build: {
+    outDir: resolve(process.cwd(), 'dist'),
+    emptyOutDir: false,
+  },
   server: {
     port: 8787,
+  },
+  ssr: {
+    // `bun` (SQL) is a Bun runtime builtin — keep it external in the dev SSR
+    // pipeline so Vite doesn't try to resolve it from node_modules.
+    external: ['bun'],
   },
 })

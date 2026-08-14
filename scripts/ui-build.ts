@@ -3,22 +3,30 @@
  *
  *     bun run scripts/ui-build.ts      (or via CLI: bun run src/main.ts ui:build)
  *
- * Uses the dedicated Vite config (`vite.ui.config.ts`):
+ * Honox production builds run in TWO phases:
  *
- *   - the honox plugin wires the file-system routes + islands,
- *   - `@hono/vite-build/bun` emits `dist/ui/index.js` — a Hono app that serves
- *     SSR HTML + static assets via `hono/bun`'s `serveStatic`,
- *   - the `ttsc` plugin runs the typia transform so the `@/macros` build-time
- *     macros resolve at build time,
- *   - Panda CSS (postcss.config.mjs) compiles the utilities into `app/style.css`.
+ *   1. Client build (`mode: "client"`) — bundles `app/client.ts` + `app/style.css`
+ *      into `dist/static/*` and writes `dist/.vite/manifest.json`.
+ *   2. SSR build — bundles `app/server.ts` into `dist/index.js`; the honox
+ *      `Link`/`Script` components read `dist/.vite/manifest.json` to emit the
+ *      hashed `/static/...` asset URLs, and `@hono/vite-build/bun` wires
+ *      `serveStatic` for them.
  *
- * Output is `dist/ui/` — `scripts/serve.ts` mounts it at `/` alongside the JSON
- * query app at `/api`.
+ * Each phase also runs the `ttsc` typia transform (for `@/macros`) and Panda CSS.
+ *
+ * Output is `dist/` — `scripts/serve.ts` mounts `dist/index.js` at `/` alongside
+ * the JSON query app at `/api`. (honox hardcodes the manifest path at
+ * `<root>/dist/.vite/manifest.json`, so the UI must build to `dist/`; this
+ * coexists with the CLI `dist/main.js` and worker `dist/worker.js` builds.)
  */
 
 import { build } from "vite";
 
-await build({ configFile: "vite.ui.config.ts" });
+// Phase 1 — client assets (static bundle + manifest).
+await build({ configFile: "vite.ui.config.ts", mode: "client" });
+console.log("ui-build: client bundle built.");
 
-console.log("ui-build: built the Honox UI to dist/ui/");
+// Phase 2 — the SSR Hono app (dist/index.js).
+await build({ configFile: "vite.ui.config.ts" });
+console.log("ui-build: SSR app built to dist/.");
 console.log("ui-build: serve it with `bun run src/main.ts serve`");
