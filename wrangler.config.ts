@@ -43,6 +43,12 @@ export interface WranglerConfig {
 	main: string;
 	compatibility_date: string;
 	compatibility_flags: string[];
+	// Static assets (Workers Static Assets) — serves the Honox UI's built
+	// client files (`dist/static/*`) at `/static/*`.
+	assets?: {
+		directory: string;
+		binding: string;
+	};
 	// D1 database binding — present ONLY when DATABASE_TYPE=d1.
 	d1_databases?: Array<{
 		binding: string;
@@ -69,7 +75,15 @@ export function buildWranglerConfig(): WranglerConfig {
 	const config: WranglerConfig = {
 		$schema: "./node_modules/wrangler/config-schema.json",
 		name: "bbs-query",
-		main: "dist/worker.js",
+		// The Honox UI worker (`app/server.cf.ts` via `vite.ui.cf.config.ts`)
+		// serves SSR HTML at `/` AND the JSON query app at `/api/...`.
+		main: "dist/ui-cf/index.js",
+		// Serve the built client assets (`dist/static/*` — hashed CSS/JS from
+		// the Honox client build) at `/static/*`.
+		assets: {
+			directory: "dist/static",
+			binding: "ASSETS",
+		},
 		compatibility_date: "2026-01-01",
 		compatibility_flags: [],
 		vars: {

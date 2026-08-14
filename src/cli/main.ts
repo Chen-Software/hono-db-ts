@@ -56,11 +56,22 @@ Commands:
                           client then SSR (honox routes/islands + ttsc + Panda
                           CSS, via @hono/vite-build/bun). Run BEFORE serve.
 
+  ui:cf-build             Build the Honox UI into a Cloudflare Worker entry:
+                          dist/ui-cf/index.js (SSR + /api, D1-backed) plus
+                          dist/static/* for Workers Static Assets. Same ttsc +
+                          Panda pipeline as ui:build, via
+                          @hono/vite-build/cloudflare-workers.
+
   ui:dev                  Run the Honox UI dev server (vite, HMR on :8787).
 
 To serve the UI locally:
-  bun run src/main.ts ui:build   # build the UI -> dist/ui/_worker.js
+  bun run src/main.ts ui:build   # build the UI -> dist/ (index.js + static + manifest)
   bun run src/main.ts serve      # UI at /, JSON API at /api, on :8787
+
+To deploy the UI to Cloudflare Workers:
+  bun run src/main.ts ui:cf-build   # -> dist/ui-cf/index.js + dist/static
+  bun run src/main.ts wrangler-config  # wrangler.jsonc: main + assets + D1 binding
+  wrangler deploy                    # upload the worker + static assets
 
   cf-build                Bundle src/worker.ts into dist/worker.js for a Cloudflare
                           Worker (inlines the generated migration SQL). Depends on
@@ -168,6 +179,15 @@ export async function run(argv = process.argv.slice(2)) {
 
 		case "ui:build": {
 			await runScript("ui-build.ts");
+			break;
+		}
+
+		case "ui:cf-build": {
+			// Build the Honox UI into a Cloudflare Worker entry (D1-backed,
+			// serves SSR HTML + /api). Same two-phase pipeline as ui:build but
+			// with `app/server.cf.ts` + the @hono/vite-build/cloudflare-workers
+			// adapter → dist/ui-cf/index.js (+ dist/static for Workers Assets).
+			await runScript("ui-cf-build.ts");
 			break;
 		}
 
