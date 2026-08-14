@@ -502,9 +502,8 @@ export default createRoute(async (c) => {
 												</Button>
 												<Anchor
 													href="/"
-													variant="outline"
-													size="xs"
-													class={css({ border: '1px solid token(colors.border)', color: 'muted' })}
+													variant="plain"
+													class={css({ border: '1px solid token(colors.border)', color: 'muted', fontSize: 'xs' })}
 												>
 													Cancel
 												</Anchor>
