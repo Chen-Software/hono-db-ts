@@ -7,10 +7,10 @@ import {
 	Button,
 	Card,
 	Heading,
-	Layout,
 	Stack,
 	Text,
 } from '../components/ui'
+import { Header as LayoutHeader } from '../components/ui/layout'
 import SearchBox from '../islands/search'
 
 /**
@@ -185,7 +185,7 @@ export default createRoute(async (c) => {
 			<title>BBS Forum</title>
 
 			{/* ---------- Nav ---------- */}
-			<Layout.Header sticky>
+			<LayoutHeader sticky>
 				<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
 					<Anchor href="/" variant="plain" class={css({ fontSize: 'lg', fontWeight: 800, color: 'ink' })}>
 						<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
@@ -211,12 +211,12 @@ export default createRoute(async (c) => {
 						</Button>
 					</Stack>
 				</Stack>
-			</Layout.Header>
+			</LayoutHeader>
 
 			{/* ---------- Hero / stats ---------- */}
 			<section class={css({ px: 6, py: 14, bg: '#111827', color: 'white' })}>
 				<div class={css({ maxWidth: '6xl', mx: 'auto' })}>
-					<Badge colorPalette="orange" size="sm" class={css({ textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+					<Badge colorPalette="orange" class={css({ textTransform: 'uppercase', letterSpacing: '0.05em' })}>
 						Model-driven community
 					</Badge>
 					<Heading as="h1" class={css({ mt: 4, fontSize: '4xl', fontWeight: 800, letterSpacing: '-0.02em', color: 'white' })}>
@@ -288,7 +288,6 @@ export default createRoute(async (c) => {
 									{boards.map((b) => (
 										<Anchor key={b.id} href={`/boards/${b.id}`} variant="plain">
 											<Card
-												clickable
 												class={css({
 													p: 5,
 													width: 'full',
@@ -310,7 +309,7 @@ export default createRoute(async (c) => {
 													{b.description}
 												</Text>
 												<Stack direction="horizontal" align="center" gap="3" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
-													<Badge colorPalette="orange" size="sm" variant="subtle">
+													<Badge colorPalette="orange" variant="subtle">
 														/{b.slug}
 													</Badge>
 													<Text as="span">{b.thread_count} threads</Text>
@@ -430,12 +429,12 @@ export default createRoute(async (c) => {
 											<div class={css({ flex: 1, minWidth: 0 })}>
 												<Stack direction="horizontal" align="center" gap="2">
 													{t.pinned === 1 && (
-														<Badge colorPalette="amber" size="sm" variant="subtle">
+														<Badge colorPalette="amber" variant="subtle">
 															Pin
 														</Badge>
 													)}
 													{t.locked === 1 && (
-														<Badge colorPalette="red" size="sm" variant="subtle">
+														<Badge colorPalette="red" variant="subtle">
 															Locked
 														</Badge>
 													)}
@@ -707,14 +706,14 @@ export const POST = createRoute(async (c) => {
 	if (!sql) return c.redirect('/')
 
 	const body = await c.req.parseBody()
-	const action = typeof body.action === 'string' ? body.action : ''
-	const id = typeof body.id === 'string' ? body.id : ''
+	const action = typeof body['action'] === 'string' ? body['action'] : ''
+	const id = typeof body['id'] === 'string' ? body['id'] : ''
 
 	try {
 		if (action === 'create') {
-			const title = typeof body.title === 'string' ? body.title.trim() : ''
-			const boardId = typeof body.boardId === 'string' ? body.boardId : ''
-			const authorId = typeof body.authorId === 'string' ? body.authorId : ''
+			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+			const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
+			const authorId = typeof body['authorId'] === 'string' ? body['authorId'] : ''
 			if (!title || !boardId || !authorId) return c.redirect('/')
 
 			const newId = crypto.randomUUID()
@@ -725,7 +724,7 @@ export const POST = createRoute(async (c) => {
 				[newId, now, now, boardId, authorId, title],
 			)
 		} else if (action === 'update-title' && id) {
-			const title = typeof body.title === 'string' ? body.title.trim() : ''
+			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
 			if (title) {
 				await sql.unsafe(
 					`UPDATE "threads" SET "title" = ?, "updated_at" = ? WHERE "id" = ?`,
