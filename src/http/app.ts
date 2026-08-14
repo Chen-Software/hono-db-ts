@@ -19,6 +19,12 @@
 import { Hono } from "hono";
 
 import type { SqlQueryExecutor } from "@/capacities/servable";
+import * as Models from "@/models";
+Models.Board.Board
+Models.Post.Post
+Models.Reply.Reply
+Models.Thread.Thread
+Models.User.User
 
 /** UUID path segment — matches the id shape every table uses. */
 const UUID = "[0-9a-f-]{36}";
@@ -319,6 +325,16 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 
 	// Anything unmatched — 404.
 	app.notFound((c) => fail(`no route for ${c.req.method} ${c.req.path}`, 404));
+
+	// Generated per-model CRUD (GET list + GET byId + POST / PUT / DELETE).
+	// Registered AFTER the hand-written rich queries, so the latter win on
+	// identical path+method (Hono: first registration wins) — the generic
+	// list routes (Queriable filters + keyset cursor) and the write routes
+	// (which have no hand-written counterpart) take effect.
+	(Models.User.User as any).serve(app, client);
+	(Models.Board.Board as any).serve(app, client);
+	(Models.Thread.Thread as any).serve(app, client);
+	(Models.Reply.Reply as any).serve(app, client);
 
 	return app;
 }

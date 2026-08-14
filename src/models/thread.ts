@@ -132,12 +132,18 @@ const ThreadModel = defineModel<ThreadSchema>({
 			capacity: Siftable,
 			options: { sort: { field: "updated_at", dir: "desc" } },
 		},
-		// Servable: generates the SQL-backed Hono routes `GET /threads` +
-		// `GET /threads/:id` via `Thread.serve(app, client)`, with the same
-		// `updated_at` desc sort Siftable uses.
+		// Servable: generates the SQL-backed Hono routes via
+		// `Thread.serve(app, client)` — `GET /threads` + `GET /threads/:id`
+		// (with the same `updated_at` desc sort Siftable uses) AND the write
+		// routes `POST /threads` / `PUT /threads/:id` / `DELETE /threads/:id`.
+		// `cascadeDelete` removes the thread's replies first (SQLite/D1 don't
+		// enforce ON DELETE CASCADE by default); `Validatable` asserts bodies.
 		{
 			capacity: Servable,
-			options: { sort: { field: "updated_at", dir: "desc" } },
+			options: {
+				sort: { field: "updated_at", dir: "desc" },
+				cascadeDelete: [{ table: "replies", column: "threadId" }],
+			},
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Thread" } },

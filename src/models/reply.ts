@@ -8,6 +8,7 @@ import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
 import { Queriable } from "@/capacities/queriable";
 import { Randomisable } from "@/capacities/randomisable";
 import { Referencible } from "@/capacities/referencible";
+import { Servable } from "@/capacities/servable";
 import { Siftable } from "@/capacities/siftable";
 import { Validatable } from "@/capacities/validatable";
 import {
@@ -131,6 +132,18 @@ const ReplyModel = defineModel<ReplySchema>({
 		{
 			capacity: Siftable,
 			options: { sort: { field: "created_at", dir: "asc" } },
+		},
+		// Servable: generates SQL-backed Hono routes via `Reply.serve(app, client)`
+		// — `GET /replies` + `GET /replies/:id` AND the write routes
+		// `POST /replies` / `PUT /replies/:id` / `DELETE /replies/:id`.
+		// `cascadeDelete` removes a reply's nested children (the `parentId`
+		// self-reference) first; `Validatable` asserts bodies.
+		{
+			capacity: Servable,
+			options: {
+				sort: { field: "created_at", dir: "asc" },
+				cascadeDelete: [{ table: "replies", column: "parentId" }],
+			},
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Reply" } },

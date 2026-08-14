@@ -22,17 +22,32 @@
  *                              (cursor) pagination + sort (default `updated_at`
  *                              desc, exactly like `Siftable`).
  *   GET /<table>/:id         — one row by primary key (404 when absent).
+ *   POST /<table>            — create: body is a domain object (JSON); it is
+ *                              encoded through `SqlSerialisable.toRow`, missing
+ *                              `id` / `created_at` / `updated_at` are generated,
+ *                              and the row is inserted (201 with the decoded row).
+ *   PUT /<table>/:id         — partial update: body is a field patch; the
+ *                              existing row is merged, `updated_at` refreshed,
+ *                              and ONLY the provided columns are `SET` (the
+ *                              `toRow` mapper skips absent fields — no null
+ *                              clobbering). Returns the updated row.
+ *   DELETE /<table>/:id      — delete by primary key (404 when absent; returns
+ *                              `{ id, deleted: true }`).
  *
  * The response envelope mirrors the hand-written server
  * (`{ ok: true, data }` / `{ ok: false, data: { error } }`), and rows are
  * decoded through the `SqlSerialisable` `fromRow` mapper, so booleans / JSON
  * columns come back as domain values, not storage encodings.
  *
+ * Validation: when the model also composes `Validatable`, the static `assert`
+ * (the strictest guard `Validatable` lifts) is run on the CREATE body and on
+ * the MERGED update object before any write — a bad payload never reaches SQL.
+ * This is what gives "every Servable model gets CRUD" its safety net.
+ *
  * Design constraints (prototype):
- *   - READ-ONLY by design: it generates the two generic read routes only. The
- *     join-heavy "good BBS queries" (`/boards/:id/hot`, `/threads/:id` with
+ *   - The join-heavy "good BBS queries" (`/boards/:id/hot`, `/threads/:id` with
  *     author+count, `/search`) are multi-model read models — they stay as
- *     explicit handlers; `Servable` covers the per-model CRUD-ish surface.
+ *     explicit handlers; `Servable` covers the per-model CRUD surface.
  *   - Composition order matters: `SqlSerialisable` MUST be declared BEFORE
  *     `Servable` (it lifts `table` / `fromRow` the capacity reads).
  *   - The SQL is built with `?` bind params (safe), quoting every identifier.
@@ -98,6 +113,17 @@ export interface ServableOptions {
 	dialect?: SqlDialect;
 	/** Emit the `GET /<table>/:id` route. Default `true`. */
 	byId?: boolean;
+	/**
+	 * Emit the write routes `POST /<table>`, `PUT /<table>/:id`,
+	 * `DELETE /<table>/:id`. Default `true`.
+	 */
+	write?: boolean;
+	/**
+	 * Foreign-key child tables to delete BEFORE the row itself, so a delete
+	 * succeeds when SQLite/D1 do not enforce `ON DELETE CASCADE` by default.
+	 * e.g. `Thread` → `{ table: "replies", column: "threadId" }`.
+	 */
+	cascadeDelete?: Array<{ table: string; column: string }>;
 }
 
 /** The introspection surface `routeSpec()` returns — what a route accepts. */
@@ -114,6 +140,8 @@ export interface ServableRouteSpec {
 		mode: string;
 		isDate: boolean;
 	}>;
+	/** Whether write routes (POST/PUT/DELETE) are generated. */
+	write: boolean;
 }
 
 /** The static API {@link Servable} contributes to the adorned class. */
@@ -443,6 +471,152 @@ export function Servable<TBase extends CapacityComposer>(
 		}
 	}
 
+	// -----------------------------------------------------------------------
+	// Write routes — the CRUD "U" (and C/D) for every Servable model.
+	//
+	//   POST   <path>      → create   (201 + decoded row)
+	//   PUT    <path>/:id  → partial update (only provided columns are SET)
+	//   DELETE <path>/:id  → delete   ({ id, deleted: true })
+	//
+	// Bodies are DOMAIN objects: they go through `toRow` (the same mapper
+	// `SqlSerialisable` uses), so booleans → 0/1, objects → JSON text, and
+	// absent fields are skipped (partial update never null-clobbers). When the
+	// model composes `Validatable`, the static `assert` guards the CREATE body
+	// and the MERGED update object before any write.
+	// -----------------------------------------------------------------------
+	const toRow = (Base as any).toRow as
+		| ((e: Record<string, unknown>) => Record<string, unknown>)
+		| undefined;
+	const assertFn = (Base as any).assert as
+		| ((input: unknown) => unknown)
+		| undefined;
+	const withWrites = options.write !== false;
+	const cascades = options.cascadeDelete ?? [];
+
+	async function runCreate(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+		try {
+			const body = await c.req.json();
+			if (!body || typeof body !== "object" || Array.isArray(body)) {
+				return fail("body must be a JSON object");
+			}
+
+			const entity: Record<string, unknown> = { ...body };
+			if (entity[idCol] == null || entity[idCol] === "") {
+				entity[idCol] = crypto.randomUUID();
+			}
+			const now = new Date().toISOString();
+			if (kinds.has("created_at") && entity["created_at"] == null) {
+				entity["created_at"] = now;
+			}
+			if (kinds.has("updated_at") && entity["updated_at"] == null) {
+				entity["updated_at"] = now;
+			}
+
+			// Validatable guard (strictest): a bad create never reaches SQL.
+			if (assertFn) {
+				try {
+					assertFn(entity);
+				} catch (err) {
+					return fail(`invalid ${tableName}: ${(err as Error).message}`, 400);
+				}
+			}
+
+			const row = toRow ? toRow(entity) : entity;
+			const cols = Object.keys(row);
+			if (cols.length === 0) return fail("no columns to insert");
+			const placeholders = cols.map(() => "?").join(", ");
+			await exec.unsafe(
+				`INSERT INTO ${quote(tableName)} (${cols.map(quote).join(", ")}) ` +
+					`VALUES (${placeholders})`,
+				cols.map((k) => row[k]),
+			);
+
+			const created = (
+				(await exec.unsafe(
+					`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
+					[entity[idCol]],
+				)) as Record<string, unknown>[]
+			)[0];
+			return json(fromRow ? fromRow(created) : created, 201);
+		} catch (err) {
+			return fail(`servable POST ${basePath}: ${(err as Error).message}`, 500);
+		}
+	}
+
+	async function runUpdate(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+		try {
+			const id = c.req.param("id");
+			const rows = (await exec.unsafe(
+				`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
+				[id],
+			)) as Record<string, unknown>[];
+			if (!rows[0]) return fail(`${basePath}/${id} not found`, 404);
+
+			const body = await c.req.json();
+			if (!body || typeof body !== "object" || Array.isArray(body)) {
+				return fail("body must be a JSON object");
+			}
+
+			// Merge the patch onto the current row (domain values, so `fromRow`
+			// first), refresh `updated_at`, then encode — `toRow` skips absent
+			// fields, so ONLY the provided columns (plus the timestamp) are SET.
+			const current = (fromRow ? fromRow(rows[0]) : rows[0]) as Record<string, unknown>;
+			const merged = { ...current, ...body };
+			merged[idCol] = id;
+			if (kinds.has("updated_at")) merged["updated_at"] = new Date().toISOString();
+
+			if (assertFn) {
+				try {
+					assertFn(merged);
+				} catch (err) {
+					return fail(`invalid ${tableName}: ${(err as Error).message}`, 400);
+				}
+			}
+
+			const row = toRow ? toRow(merged) : merged;
+			const sets = Object.keys(row).filter((k) => k !== idCol);
+			if (sets.length === 0) return json(current);
+			await exec.unsafe(
+				`UPDATE ${quote(tableName)} SET ${sets.map((k) => `${quote(k)} = ?`).join(", ")} ` +
+					`WHERE ${quote(idCol)} = ?`,
+				[...sets.map((k) => row[k]), id],
+			);
+
+			const updated = (
+				(await exec.unsafe(
+					`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
+					[id],
+				)) as Record<string, unknown>[]
+			)[0];
+			return json(fromRow ? fromRow(updated) : updated);
+		} catch (err) {
+			return fail(`servable PUT ${basePath}/:id: ${(err as Error).message}`, 500);
+		}
+	}
+
+	async function runDelete(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+		try {
+			const id = c.req.param("id");
+			const rows = (await exec.unsafe(
+				`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
+				[id],
+			)) as Record<string, unknown>[];
+			if (!rows[0]) return fail(`${basePath}/${id} not found`, 404);
+
+			// Delete FK children first when SQLite/D1 won't cascade for us.
+			for (const child of cascades) {
+				await exec.unsafe(
+					`DELETE FROM ${quote(child.table)} WHERE ${quote(child.column)} = ?`,
+					[id],
+				);
+			}
+			await exec.unsafe(`DELETE FROM ${quote(tableName)} WHERE ${quote(idCol)} = ?`, [id]);
+			return json({ id, deleted: true });
+		} catch (err) {
+			return fail(`servable DELETE ${basePath}/:id: ${(err as Error).message}`, 500);
+		}
+	}
+
 	// ---- LIFT the serving surface onto the class (in place). --------------
 	(Base as any).serve = function serve(
 		app: Hono,
@@ -457,6 +631,11 @@ export function Servable<TBase extends CapacityComposer>(
 		}
 		app.get(basePath, (c) => runList(c, exec));
 		if (withById) app.get(`${basePath}/:id`, (c) => runById(c, exec));
+		if (withWrites) {
+			app.post(basePath, (c) => runCreate(c, exec));
+			app.put(`${basePath}/:id`, (c) => runUpdate(c, exec));
+			app.delete(`${basePath}/:id`, (c) => runDelete(c, exec));
+		}
 	};
 
 	(Base as any).routeSpec = function routeSpec(): ServableRouteSpec {
@@ -473,8 +652,9 @@ export function Servable<TBase extends CapacityComposer>(
 				mode: fp.mode,
 				isDate: fp.isDate,
 			})),
-		};
-	};
+			write: withWrites,
+			};
+			};
 
 	return Base;
 }
