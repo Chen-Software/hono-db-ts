@@ -4,6 +4,7 @@ import { hashContent } from '../../../../src/capacities/hashable'
 import { Anchor, Button, Card, Heading, Stack, Text } from '../../../components/ui'
 import { Header as LayoutHeader } from '../../../components/ui/layout'
 import SearchBox from '../../../islands/search'
+import ThemeSwitcher from '../../../islands/theme-switcher'
 
 /**
  * Post edit page — `/posts/:uuid/edit`.
@@ -178,6 +179,7 @@ function Nav() {
 
 				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
 					<SearchBox />
+					<ThemeSwitcher />
 					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
 						New thread
 					</Button>

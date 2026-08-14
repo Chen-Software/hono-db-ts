@@ -12,6 +12,7 @@ import {
 } from '../components/ui'
 import { Header as LayoutHeader } from '../components/ui/layout'
 import SearchBox from '../islands/search'
+import ThemeSwitcher from '../islands/theme-switcher'
 
 /**
  * BBS home page — a forum-style landing UI rendered entirely on the server.
@@ -206,6 +207,7 @@ export default createRoute(async (c) => {
 
 					<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
 						<SearchBox />
+						<ThemeSwitcher />
 						<Button as="a" href="#boards" colorPalette="orange" size="sm">
 							New thread
 						</Button>

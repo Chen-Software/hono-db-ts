@@ -20,15 +20,24 @@ try {
 
 export default jsxRenderer(({ children }) => {
   return (
-    <html lang="en">
+    <html lang="en" data-palette="gray">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="icon" href="/favicon.ico" />
         <Link href="/app/style.css" rel="stylesheet" prod={true} manifest={manifest} />
         <Script src="/app/client.ts" async prod={true} manifest={manifest} />
+        {/*
+          Restore the persisted accent palette BEFORE first paint — a tiny
+          inline boot script so there is no flash between the SSR `gray`
+          default and the user's saved choice. The interactive switcher
+          (app/islands/theme-switcher.tsx) then just mutates data-palette.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT }} />
       </head>
       <body>{children}</body>
     </html>
   )
 })
+
+const SCRIPT = `(function(){try{var p=localStorage.getItem("bbs.palette");if(p){document.documentElement.dataset.palette=p;}}catch(e){}})();`
