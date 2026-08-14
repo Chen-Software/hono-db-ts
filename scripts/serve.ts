@@ -3,6 +3,7 @@
  * Honox UI.
  *
  *     bun run scripts/serve.ts [port]     (default :8787)
+ *     PORT=3001 bun run src/main.ts serve (PORT env overrides the arg)
  *
  * The Hono app lives in `src/http/app.ts` (`buildQueryApp`) and is reused by
  * the Cloudflare Worker (`src/worker.ts`); this script just binds it to a
@@ -113,8 +114,11 @@ if (hasUi) {
 	);
 }
 
+// Port resolution precedence: PORT env var → positional arg → 8787 default.
+const port = Number(process.env.PORT) || Number(process.argv[2]) || 8787;
+
 const server = Bun.serve({
-	port: Number(process.argv[2]) || 8787,
+	port,
 	fetch: app.fetch,
 });
 
