@@ -14,16 +14,17 @@ import ttsc from '@ttsc/unplugin/vite'
  *     the client bundle (`app/client.ts` + `app/style.css`).
  *   - Panda CSS (via `postcss.config.mjs` + `@pandacss/postcss`) compiles the
  *     utilities from `panda.config.ts` into `app/style.css`.
- *   - `@hono/vite-build/bun` emits `dist/ui/index.js` (a Hono app that serves
- *     SSR HTML + static assets via `hono/bun`'s `serveStatic`). `outputDir` is
- *     set here (the plugin overrides the top-level `build.outDir`).
+ *   - `@hono/vite-build/bun` emits `dist/index.js` (a Hono app that serves SSR
+ *     HTML + static assets via `hono/bun`'s `serveStatic`). The UI must build
+ *     to `dist/` because honox's `Link`/`Script` read the manifest from
+ *     `<root>/dist/.vite/manifest.json`.
  *
  * The project root stays the repo root so honox's `/app/routes/**` globs and
  * the `@/*` → `src/*` alias resolve as they do everywhere else.
  *
  * Usage:
- *   bun run src/main.ts ui:build        (or)   vite build -c vite.ui.config.ts
- *   bun run src/main.ts ui:dev          (or)   vite --config vite.ui.config.ts
+ *   bun run src/main.ts ui:build        (two-phase: client then SSR)
+ *   bun run src/main.ts ui:dev          (dev server, HMR)
  */
 export default defineConfig({
   plugins: [

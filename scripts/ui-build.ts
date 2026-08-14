@@ -20,6 +20,8 @@
  * coexists with the CLI `dist/main.js` and worker `dist/worker.js` builds.)
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { build } from "vite";
 
 // Phase 1 — client assets (static bundle + manifest).
@@ -29,4 +31,16 @@ console.log("ui-build: client bundle built.");
 // Phase 2 — the SSR Hono app (dist/index.js).
 await build({ configFile: "vite.ui.config.ts" });
 console.log("ui-build: SSR app built to dist/.");
-console.log("ui-build: serve it with `bun run src/main.ts serve`");
+
+// Guard: `serve` looks for dist/index.js — fail loudly if the SSR phase
+// silently produced nothing (e.g. an interrupted build leaves only static/).
+const uiBundle = resolve(import.meta.dir, "../dist/index.js");
+if (!existsSync(uiBundle)) {
+	console.error(
+		"ui-build: ERROR — dist/index.js was NOT produced by the SSR phase.\n" +
+			"  Check the build output above for errors; `serve` needs this file.",
+	);
+	process.exit(1);
+}
+
+console.log("ui-build: dist/index.js present — serve it with `bun run src/main.ts serve`");

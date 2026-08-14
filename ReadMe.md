@@ -29,9 +29,13 @@ bun run src/main.ts query users '{"role":"admin"}' --limit 5
 bun run src/main.ts serve                # JSON API at http://localhost:8787/api/...
 
 # 5. (Optional) Serve the Honox UI in /app
-bun run src/main.ts ui:build             # build the UI -> dist/index.js
-bun run src/main.ts serve                # UI at / , JSON API at /api, on :8787
+bun run src/main.ts ui:build             # two-phase build -> dist/index.js (+ dist/static)
+bun run src/main.ts serve                # UI at / , JSON API at /api, on :8787 (or PORT=)
 #   dev server with HMR instead:  bun run src/main.ts ui:dev
+
+# NOTE: `serve` only mounts the UI when dist/index.js exists. After ui:build,
+# verify both `dist/index.js` AND `dist/static/` are present — an interrupted
+# build leaves only the client bundle and no UI. Re-run ui:build if missing.
 
 # 6. (Optional) Deploy UI + API to Cloudflare Workers
 bun run src/main.ts ui:cf-build          # -> dist/ui-cf/index.js + dist/static/*
