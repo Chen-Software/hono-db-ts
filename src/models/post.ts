@@ -108,6 +108,7 @@ const PostSchemaModule = {
 	assertClone: typia.plain.createAssertClone<PostData>(),
 	isClone: typia.plain.createIsClone<PostData>(),
 	validateClone: typia.plain.createValidateClone<PostData>(),
+	prune: typia.plain.createPrune<PostData>(),
 	// validators
 	is: typia.createIs<PostData>(),
 	assert: typia.createAssert<PostData>(),

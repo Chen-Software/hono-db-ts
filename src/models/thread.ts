@@ -64,6 +64,7 @@ const ThreadSchemaModule: SqlSchemaModule<ThreadSchema> = {
 	assertClone: typia.plain.createAssertClone<ThreadSchema>(),
 	isClone: typia.plain.createIsClone<ThreadSchema>(),
 	validateClone: typia.plain.createValidateClone<ThreadSchema>(),
+	prune: typia.plain.createPrune<ThreadSchema>(),
 	is: typia.createIs<ThreadSchema>(),
 	assert: typia.createAssert<ThreadSchema>(),
 	assertGuard: typia.createAssertGuard<ThreadSchema>(),

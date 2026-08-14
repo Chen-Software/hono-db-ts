@@ -145,6 +145,20 @@ export function defineModel<T>(
 			Object.assign(this, candidate);
 			return this;
 		}
+
+		/**
+		 * Unwrap this instance into a plain value object shaped to the schema.
+		 *
+		 * Deep-clones the instance WITHOUT constructing a new model, so the
+		 * result is a clean, schema-shaped value record (any non-schema /
+		 * mixin-injected property is dropped by the clone). The result never
+		 * aliases the instance, so it is safe to mutate even when the instance
+		 * is `Immutable`-frozen. Useful when a call site needs the raw *data*
+		 * shape (e.g. `M.random().toValueObject()`).
+		 */
+		toValueObject(): T {
+			return schemaModule.clone(this) as T;
+		}
 	}
 
 	ModelBase.schemaName = schemaName;

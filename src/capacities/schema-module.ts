@@ -139,6 +139,10 @@ export interface SchemaModule<T = unknown> {
 	/** `createValidateClone` — non-throwing; `IValidation<T>`. */
 	validateClone: (input: any) => IValidation<any>;
 
+	// --- PRUNE (typia.plain.createPrune) ------------------------------------
+	/** `createPrune` — remove excess/non-schema properties in place. */
+	prune: (input: any) => void;
+
 	// --- VALIDATORS (typia.create*) -----------------------------------------
 	/** `createIs` — boolean type guard. */
 	is: (input: any) => input is T;

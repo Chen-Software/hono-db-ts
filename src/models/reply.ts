@@ -61,6 +61,7 @@ const ReplySchemaModule: SqlSchemaModule<ReplySchema> = {
 	assertClone: typia.plain.createAssertClone<ReplySchema>(),
 	isClone: typia.plain.createIsClone<ReplySchema>(),
 	validateClone: typia.plain.createValidateClone<ReplySchema>(),
+	prune: typia.plain.createPrune<ReplySchema>(),
 	is: typia.createIs<ReplySchema>(),
 	assert: typia.createAssert<ReplySchema>(),
 	assertGuard: typia.createAssertGuard<ReplySchema>(),

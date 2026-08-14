@@ -78,6 +78,8 @@ const UserSchemaModule: SqlSchemaModule<UserSchema> = {
 	assertClone: typia.plain.createAssertClone<UserSchema>(),
 	isClone: typia.plain.createIsClone<UserSchema>(),
 	validateClone: typia.plain.createValidateClone<UserSchema>(),
+	// prune (drop non-schema props — used by toValueObject)
+	prune: typia.plain.createPrune<UserSchema>(),
 	// validators
 	is: typia.createIs<UserSchema>(),
 	assert: typia.createAssert<UserSchema>(),

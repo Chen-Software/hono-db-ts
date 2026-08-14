@@ -68,6 +68,7 @@ const BoardSchemaModule: SqlSchemaModule<BoardSchema> = {
 	assertClone: typia.plain.createAssertClone<BoardSchema>(),
 	isClone: typia.plain.createIsClone<BoardSchema>(),
 	validateClone: typia.plain.createValidateClone<BoardSchema>(),
+	prune: typia.plain.createPrune<BoardSchema>(),
 	is: typia.createIs<BoardSchema>(),
 	assert: typia.createAssert<BoardSchema>(),
 	assertGuard: typia.createAssertGuard<BoardSchema>(),

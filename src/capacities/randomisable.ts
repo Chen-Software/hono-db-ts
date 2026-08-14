@@ -27,33 +27,34 @@ export interface RandomisableOptions {
 
 /**
  * Randomisable — equips a class with `random()` / `randomSeed()`, a static
- * factory pair that materialises a random, *shape-valid* payload for the model.
+ * factory pair that materialises a random, *validated instance* for the model.
  *
  * Adds to the adorned class:
- *   - `static random()`        — a raw, schema-shaped random payload.
+ *   - `static random()`        — a **validated model instance** (via `new Ctor()`).
  *   - `static randomSeed()`     — draw a fresh, well-distributed 32-bit seed.
  *
  * `random()`:
- *   Returns **raw data**, NOT a validated instance. typia's `createRandom`
- *   (`SchemaModule.random`) honours the *shape* of the schema but does **not**
- *   honour format constraints (`uuid`, `email`, `Format<"sha256">`, …). Piping
- *   that payload straight through `from()`/`new Ctor()` (which `classify`)
- *   therefore throws on the first format field — and, worse, on *nested* ones
- *   (`author.id`, `author.email`) that a generic capacity cannot patch. So the
- *   contract here is: give the caller a correct-shaped base, and let them stamp
- *   the few format-bound fields before classifying. This is exactly how typia's
- *   `createRandom` is meant to be consumed (tests, seed scripts, fixtures).
+ *   Returns a fully-constructed **instance**, NOT raw data: it pipes typia's
+ *   `createRandom` payload (`SchemaModule.random`) through `new this(...)`, so
+ *   every capacity that hooks construction — `Validatable`, `Immutable`
+ *   (freeze), `Versionable`, … — applies. When the model wears `Immutable`, the
+ *   returned instance is already frozen.
  *
- * Typical usage (see `scripts/seed.ts`):
- *   const data = Post.random();
- *   data.id = crypto.randomUUID();           // fix uuid
- *   data.authorId = user.id; data.author = user;
- *   data = withContentHash(data, "body");    // fix sha256 contentHash
- *   const post = Post.from(data);            // now validates
+ *   Because it classifies, the payload must satisfy the schema's **format**
+ *   constraints (`uuid`, `email`, `Format<"sha256">`, …). For models whose
+ *   `createRandom` does not emit format-valid fields (e.g. `Post`'s `contentHash`),
+ *   bind a corrected generator in the schema module (`random: () => …`) or supply
+ *   the overrides after drawing — the seam (`mod.random`) is the correct place to
+ *   fix format-bound values.
+ *
+ * Typical usage:
+ *   const post = Post.random();              // validated instance (frozen if Immutable)
+ *   const data = post.toValueObject();       // unwrap to a plain mutable record
+ *   const next = Post.from({ ...data, title: "x" });
  *
  * **Determinism caveat.** `SchemaModule.random` is typia's `createRandom`, which
- * is *not* seedable — so `random(seed)`'s payload is never reproducible. If you
- * need determinism, bind a seeded generator in your schema module
+ * is *not* seedable — so `random()`'s payload is never reproducible. If you need
+ * determinism, bind a seeded generator in your schema module
  * (`random: () => seededFoo(seed)`) and have `random()` consume it; the seam
  * (`mod.random`) is already here.
  */
@@ -65,13 +66,12 @@ function Randomisable<TBase extends CapacityComposer>(Base: TBase): TBase {
 		implements RandomisableSchema
 	{
 		static random = () => {
-			// Return RAW, unvalidated random schema data. typia's `createRandom`
-			// honours the *shape* of the schema but NOT format constraints
-			// (uuid, email, …), so funneling this through `from`/`classify` would
-			// throw on the first format field. Returning the raw payload lets the
-			// caller (seed scripts, tests) use it as a base and override only the
-			// few constrained fields before classifying.
-			return Base.prototype.schemaModule.random();
+			// Draw the raw typia payload, then construct a validated instance so
+			// ALL construction-time capacities apply — `Validatable` (assert),
+			// `Immutable` (freeze → the instance is frozen), `Versionable`, etc.
+			// Callers that need the raw shape unwrap with `.toValueObject()`.
+			const data = Base.prototype.schemaModule.random();
+			return new RandomisableClass(data);
 		};
 	};
 
