@@ -40,5 +40,18 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noPropertyAccessFromIndexSignature": true
-	}
+	},
+	// Explicit include — @ttsc/unplugin generates a temp tsconfig in /tmp that
+	// `extends` this one; without `include`, TypeScript resolves the default
+	// `["**/*"]` against the temp dir and finds no inputs (TS18003). Relative
+	// `include` paths resolve against THIS file's location, so `src` etc. work.
+	"include": [
+		"src/**/*.ts",
+		"scripts/**/*.ts",
+		"app/**/*.ts",
+		"app/**/*.tsx",
+		"*.config.ts",
+		"wrangler.config.ts",
+		"panda.config.ts"
+	]
 }
