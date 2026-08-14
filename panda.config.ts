@@ -13,7 +13,7 @@ import { defineConfig } from "@pandacss/dev";
 export default defineConfig({
 	// Entry points Panda scans for `css()`/`styled()` usage.
 	include: ["app/**/*.{ts,tsx}"],
-	outdir: "styled-system",
+	outdir: "design-system",
 	jsxFramework: "react",
 	theme: {
 		extend: {
