@@ -4,11 +4,11 @@ import { defineConfig } from "@pandacss/dev";
  * Panda CSS config for the Honox UI (in /app).
  *
  * Generates the atomic CSS utilities (`css()`, `styled()`, tokens, patterns)
- * into `styled-system/` and the stylesheet into `app/style.css` at build/dev
+ * into `design-system/` and the stylesheet into `app/style.css` at build/dev
  * time via the Panda vite plugin (see `vite.ui.config.ts`).
  *
- * `outdir` is the repo-root `styled-system/` so the app imports
- * `../../styled-system/css` from anywhere under `app/`.
+ * `outdir` is the repo-root `design-system/` so the app imports
+ * `../../design-system/css` from anywhere under `app/`.
  */
 export default defineConfig({
 	// Entry points Panda scans for `css()`/`styled()` usage. Unit tests are

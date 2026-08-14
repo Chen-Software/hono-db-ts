@@ -87,7 +87,7 @@ scripts/
 app/              Honox UI (routes/, islands/, client.ts, style.css — Panda CSS)
   server.ts       local UI server entry (bun:sql, mounts /api)
   server.cf.ts    CF Worker UI entry (D1, mounts /api)
-panda.config.ts   Panda CSS config (tokens + utilities -> styled-system/)
+panda.config.ts   Panda CSS config (tokens + utilities -> design-system/)
 vite.ui.config.ts     Vite config for the local UI build (@hono/vite-build/bun)
 vite.ui.cf.config.ts  Vite config for the CF Worker UI build (@hono/vite-build/cloudflare-workers)
 wrangler.config.ts    generates wrangler.jsonc (main + assets + D1 binding)

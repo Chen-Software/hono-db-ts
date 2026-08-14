@@ -1,4 +1,4 @@
-import { css } from '../../styled-system/css'
+import { css } from '../../design-system/css'
 import { Fragment } from 'hono/jsx'
 import { createRoute } from 'honox/factory'
 import {

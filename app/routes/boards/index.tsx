@@ -1,4 +1,4 @@
-import { css } from '../../../styled-system/css'
+import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Layout, Stack, Text } from '../../components/ui'
 import SearchBox from '../../islands/search'

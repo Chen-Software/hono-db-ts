@@ -1,4 +1,4 @@
-import { css } from '../../styled-system/css'
+import { css } from '../../design-system/css'
 import { useState } from 'hono/jsx'
 
 type SearchResult = {

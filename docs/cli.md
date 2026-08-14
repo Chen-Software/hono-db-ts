@@ -208,7 +208,7 @@ Build the Honox UI (in `/app`) into `dist/index.js` via the dedicated
 Vite config (`vite.ui.config.ts`): a two-phase build — client bundle
 (`dist/static/*` + `dist/.vite/manifest.json`) then SSR app (`dist/index.js`),
 wiring honox routes/islands + the `ttsc` typia transform + Panda CSS
-(`panda.config.ts` → `styled-system/`), emitted with `@hono/vite-build/bun`.
+(`panda.config.ts` → `design-system/`), emitted with `@hono/vite-build/bun`.
 Run this **before** `serve` to get the UI at `/`.
 
 ### `ui:cf-build`
