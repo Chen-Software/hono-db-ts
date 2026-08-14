@@ -12,9 +12,8 @@
  */
 
 import { Hono } from "hono";
-
-import { buildQueryApp } from "@/http/app";
 import { mountBetterAuthFromBindings } from "@/auth/mount";
+import { buildQueryApp } from "@/http/app";
 import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
 

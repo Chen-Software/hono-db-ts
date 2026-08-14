@@ -2,7 +2,6 @@ import { drizzle } from 'drizzle-orm/d1'
 import { createApp } from 'honox/server'
 import { createAuth } from '../src/auth'
 import { authEnvFromBindings } from '../src/auth/hono'
-import { betterAuthEnabled } from '../src/macros/envs' with { type: 'macro' }
 import { buildQueryApp } from '../src/http/app'
 import type { SqlQueryExecutor } from '../src/capacities/servable'
 import { D1Executor } from '../src/worker/d1'
@@ -66,7 +65,10 @@ const app = createApp({
 
 		// Better Auth — mounted BEFORE the query app's `/api` so `/api/auth/*`
 		// routes to the auth handler. Per-request instance (env.DB + secrets).
-		if (betterAuthEnabled()) {
+		// `__BETTER_AUTH_ENABLED__` is a Vite `define` literal (Bun macros are
+		// not understood by this Workers build), so `if (false)` here drops the
+		// entire Better Auth subtree from the deployed bundle.
+		if (__BETTER_AUTH_ENABLED__) {
 			server.on(['GET', 'POST'], '/api/auth/*', (c) => {
 				const db = (c.env as { DB?: D1Database }).DB
 				if (!db) return c.json({ error: 'auth: no D1 binding' }, 500)

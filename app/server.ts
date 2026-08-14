@@ -3,7 +3,7 @@ import { showRoutes } from 'hono/dev'
 import { createApp } from 'honox/server'
 import { buildQueryApp } from '../src/http/app'
 import { ensureSchema, resolveDatabaseTarget } from '../src/http/schema'
-import { betterAuthEnabled, databaseType, databaseUrl } from '../src/macros/envs' with { type: 'macro' }
+import { databaseType, databaseUrl } from '../src/macros/envs' with { type: 'macro' }
 
 /**
  * Honox server entry — the UI app.
@@ -53,8 +53,11 @@ if (sql) {
 // then just mounted inside `init`.
 // ---------------------------------------------------------------------------
 import { mountBetterAuth } from '../src/auth/mount'
-let authMount: (server: import('hono').Hono<any>) => void = () => {}
-if (betterAuthEnabled() && sql) {
+let authMount: (server: import('hono').Hono<import('hono').Env>) => void = () => {}
+// `__BETTER_AUTH_ENABLED__` is a Vite `define` literal (Bun macros are not
+// understood by this UI build), so `if (false)` drops the Better Auth mount —
+// and its better-auth + drizzle-adapter imports — from the bundle.
+if (__BETTER_AUTH_ENABLED__ && sql) {
 	authMount = await mountBetterAuth(sql)
 }
 

@@ -25,10 +25,9 @@ import { betterAuthUrl } from "@/macros/envs" with { type: "macro" };
 // `location` exists in the browser/Worker global but not in Bun/Node typings,
 // so read it through a typed cast rather than `globalThis.location`. In a
 // non-browser build the base URL comes from the `betterAuthUrl()` macro.
-const loc = (globalThis as unknown as { location?: { origin: string } }).location;
-const baseURL = loc
-	? loc.origin
-	: (betterAuthUrl() ?? "http://localhost:8787");
+const loc = (globalThis as unknown as { location?: { origin: string } })
+	.location;
+const baseURL = loc ? loc.origin : (betterAuthUrl() ?? "http://localhost:8787");
 
 /** The shared, typed Better Auth client. */
 export const authClient = createAuthClient({ baseURL });

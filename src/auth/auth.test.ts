@@ -12,14 +12,12 @@
  *
  * Uses an in-memory bun:sqlite DB, same as `serve` with `DATABASE_URL=:memory:`.
  */
+
+import { describe, expect, it } from "bun:test";
 import { SQL } from "bun";
 import { Hono } from "hono";
-import { describe, expect, it } from "bun:test";
 
 import { mountBetterAuth } from "./mount";
-
-const AUTH_URL = "http://localhost:8787";
-const AUTH_SECRET = "test-secret-0123456789abcdef-0123456789";
 
 /** Build a fresh in-memory app with Better Auth mounted at /api/auth/*. */
 async function buildApp() {

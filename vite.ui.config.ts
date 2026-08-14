@@ -45,6 +45,14 @@ export default defineConfig({
       staticRoot: resolve(process.cwd(), 'dist'),
     }),
   ],
+  // `with { type: "macro" }` (Bun macros) is NOT understood by this Vite/Rollup
+  // pipeline, so `betterAuthEnabled()` would stay a runtime call and never
+  // dead-code-eliminate. Inject the same build-time flag as a literal via
+  // `define` so `if (__BETTER_AUTH_ENABLED__)` inlines to `if (false)` when
+  // disabled and Better Auth is dropped from the local UI bundle too.
+  define: {
+    __BETTER_AUTH_ENABLED__: JSON.stringify(process.env.BETTER_AUTH_ENABLED !== 'false'),
+  },
   build: {
     outDir: resolve(process.cwd(), 'dist'),
     emptyOutDir: false,

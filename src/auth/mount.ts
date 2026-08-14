@@ -14,13 +14,12 @@
  * enabled.
  */
 
-import { SQL } from "bun";
+import type { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
-
-import { createAuth } from "./index";
-import { authEnvFromBindings, authEnvFromProcessEnv } from "./hono";
-import { ensureAuthSchema } from "./migrate";
 import type { SqlQueryExecutor } from "@/capacities/servable";
+import { authEnvFromBindings, authEnvFromProcessEnv } from "./hono";
+import { createAuth } from "./index";
+import { ensureAuthSchema } from "./migrate";
 
 /**
  * Build a Better Auth instance + mount function for a local (bun:sqlite) app.
@@ -30,9 +29,9 @@ import type { SqlQueryExecutor } from "@/capacities/servable";
  * → the auth handler. Call `await mountBetterAuth(sql)` once at startup, then
  * call the returned function inside honox's synchronous `init` callback.
  */
-export async function mountBetterAuth(
+export async function mountBetterAuth<E extends import("hono").Env>(
 	client: SqlQueryExecutor | SQL,
-): Promise<(app: import("hono").Hono<any>) => void> {
+): Promise<(app: import("hono").Hono<E>) => void> {
 	await ensureAuthSchema(client as SqlQueryExecutor);
 	const auth = createAuth(
 		drizzle.sqlite({ client: client as SQL }),
@@ -44,8 +43,8 @@ export async function mountBetterAuth(
 }
 
 /** Mount Better Auth on a Hono app from Worker bindings + an already-wired drizzle db. */
-export function mountBetterAuthFromBindings(
-	app: import("hono").Hono<any>,
+export function mountBetterAuthFromBindings<E extends import("hono").Env>(
+	app: import("hono").Hono<E>,
 	env: { BETTER_AUTH_URL?: string; BETTER_AUTH_SECRET?: string },
 	db: import("./index").AuthDatabase,
 ): void {

@@ -33,6 +33,15 @@ export default defineConfig({
 			staticRoot: resolve(rootDir, 'app/public'),
 		}),
 	],
+	// `with { type: "macro" }` (Bun macros) is NOT understood by the Vite/Rollup
+	// pipeline that builds this Workers entry, so `betterAuthEnabled()` would
+	// stay a runtime call and never dead-code-eliminate here. Inject the same
+	// build-time flag as a literal via `define` so `if (__BETTER_AUTH_ENABLED__)`
+	// inlines to `if (false)` when disabled and the entire Better Auth subtree
+	// (better-auth + drizzle adapter) is dropped from the deployed bundle.
+	define: {
+		__BETTER_AUTH_ENABLED__: JSON.stringify(process.env.BETTER_AUTH_ENABLED !== 'false'),
+	},
 	// The app imports the Panda design-system via the bare specifier
 	// `design-system/*` — alias it to the generated outdir at the repo root
 	// (same as vite.ui.config.ts).

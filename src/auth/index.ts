@@ -22,12 +22,11 @@
  * called once per request on Workers, once at startup locally.
  */
 
+import type { BetterAuthOptions } from "better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import type { BetterAuthOptions } from "better-auth";
-
-import { authSchema } from "./schema";
 import { betterAuthOptions } from "./options";
+import { authSchema } from "./schema";
 
 /** Runtime pieces Better Auth needs that differ per deployment. */
 export interface AuthEnv {
@@ -61,5 +60,5 @@ export function createAuth(
 	});
 }
 
-export { authSchema, betterAuthOptions };
 export type { BetterAuthOptions };
+export { authSchema, betterAuthOptions };

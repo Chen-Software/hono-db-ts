@@ -16,8 +16,10 @@
 
 import type { Context, Hono } from "hono";
 
-import { betterAuthSecret, betterAuthUrl } from "@/macros/envs" with { type: "macro" };
-import { createAuth, type AuthEnv } from "./index";
+import { betterAuthSecret, betterAuthUrl } from "@/macros/envs" with {
+	type: "macro",
+};
+import type { AuthEnv, createAuth } from "./index";
 
 /** Builds the (per-request or shared) Better Auth instance. */
 export type AuthFactory = (c: Context) => ReturnType<typeof createAuth>;
