@@ -1,14 +1,20 @@
 import { defineConfig } from "@pandacss/dev";
+import { config as theme, conditions, globalCss } from "./app/theme";
 
 /**
  * Panda CSS config for the Honox UI (in /app).
  *
- * Generates the atomic CSS utilities (`css()`, `styled()`, tokens, patterns)
- * into `design-system/` and the stylesheet into `app/style.css` at build/dev
- * time via the Panda vite plugin (see `vite.ui.config.ts`).
+ * The design system lives in `app/theme/` (a Park UI-style local theme: 55+
+ * recipes, tokens, semantic tokens, keyframes, text/layer styles) and is wired
+ * in here via the `config` export of `app/theme/index.ts`.
  *
- * `outdir` is the repo-root `design-system/` so the app imports
- * `../../design-system/css` from anywhere under `app/`.
+ * Codegen writes the generated modules to the repo-root `design-system/` so the
+ * app can import `design-system/css`, `design-system/recipes`,
+ * `design-system/patterns` from anywhere under `app/` (aliased in
+ * `vite.ui.config.ts` and `app/tsconfig.json`).
+ *
+ * `jsxFramework: "react"` + `styled-system`-style `css()` helpers are consumed
+ * by the honox (hono/jsx) components in `app/components/ui`.
  */
 export default defineConfig({
 	// Entry points Panda scans for `css()`/`styled()` usage. Unit tests are
@@ -23,17 +29,9 @@ export default defineConfig({
 	],
 	outdir: "design-system",
 	jsxFramework: "react",
+	conditions,
+	globalCss,
 	theme: {
-		extend: {
-			tokens: {
-				colors: {
-					accent: { value: "#f97316" }, // orange-500
-					ink: { value: "#111827" }, // gray-900
-					muted: { value: "#6b7280" }, // gray-500
-					faint: { value: "#9ca3af" }, // gray-400
-					border: { value: "#e5e7eb" }, // gray-200
-				},
-			},
-		},
+		extend: theme,
 	},
 });
