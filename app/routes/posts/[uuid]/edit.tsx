@@ -1,6 +1,8 @@
 import { css } from '../../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { hashContent } from '../../../../src/capacities/hashable'
+import { Anchor, Button, Card, Heading, Stack, Text } from '../../../components/ui'
+import { Header as LayoutHeader } from '../../../components/ui/layout'
 import SearchBox from '../../../islands/search'
 
 /**
@@ -46,16 +48,13 @@ export default createRoute(async (c) => {
 				<title>Post not found · BBS</title>
 				<Nav />
 				<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 16, textAlign: 'center' })}>
-					<h1 class={css({ fontSize: '2xl', fontWeight: 800 })}>Post not found</h1>
-					<p class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
+					<Heading class={css({ fontSize: '2xl', fontWeight: 800 })}>Post not found</Heading>
+					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No post with id <code>{uuid}</code>.
-					</p>
-					<a
-						href="/posts"
-						class={css({ display: 'inline-block', mt: 6, px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none' })}
-					>
+					</Text>
+					<Button as="a" href="/posts" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
 						Back to posts
-					</a>
+					</Button>
 				</main>
 			</div>,
 		)
@@ -68,25 +67,25 @@ export default createRoute(async (c) => {
 
 			<main class={css({ maxWidth: '3xl', mx: 'auto', px: 6, py: 10 })}>
 				{/* Breadcrumb */}
-				<nav class={css({ display: 'flex', alignItems: 'center', gap: 2, fontSize: 'sm', color: 'muted', mb: 6 })}>
-					<a href="/posts" class={css({ color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}>
+				<Stack direction="horizontal" align="center" gap="2" class={css({ fontSize: 'sm', color: 'muted', mb: 6 })}>
+					<Anchor href="/posts" variant="plain" class={css({ color: 'muted' })}>
 						Posts
-					</a>
+					</Anchor>
 					<span aria-hidden>›</span>
-					<a href={`/posts/${post.id}`} class={css({ color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}>
+					<Anchor href={`/posts/${post.id}`} variant="plain" class={css({ color: 'muted' })}>
 						{post.title}
-					</a>
+					</Anchor>
 					<span aria-hidden>›</span>
-					<span class={css({ color: 'ink', fontWeight: 500 })}>Edit</span>
-				</nav>
+					<Text class={css({ color: 'ink', fontWeight: 500 })}>Edit</Text>
+				</Stack>
 
 				{/* Edit form */}
-				<section class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 6 })}>
-					<h1 class={css({ fontSize: 'xl', fontWeight: 800 })}>Edit post</h1>
-					<p class={css({ mt: 1, fontSize: 'sm', color: 'muted' })}>
+				<Card class={css({ p: 6, width: 'full' })}>
+					<Heading class={css({ fontSize: 'xl', fontWeight: 800 })}>Edit post</Heading>
+					<Text class={css({ mt: 1, fontSize: 'sm', color: 'muted' })}>
 						Editing the body recomputes the content address (SHA-256). The author
 						is fixed at creation.
-					</p>
+					</Text>
 
 					<form method="post" action={`/posts/${post.id}/edit`} class={css({ mt: 6, spaceY: 5 })}>
 						<input type="hidden" name="action" value="save" />
@@ -136,22 +135,20 @@ export default createRoute(async (c) => {
 						</label>
 
 						{/* Actions */}
-						<div class={css({ pt: 2, display: 'flex', alignItems: 'center', gap: 3 })}>
-							<button
-								type="submit"
-								class={css({ px: 5, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, border: 'none', cursor: 'pointer', _hover: { bg: '#ea580c' } })}
-							>
+						<Stack direction="horizontal" align="center" gap="3" class={css({ pt: 2 })}>
+							<Button type="submit" colorPalette="orange" size="md">
 								Save changes
-							</button>
-							<a
+							</Button>
+							<Anchor
 								href={`/posts/${post.id}`}
-								class={css({ px: 4, py: 2, rounded: 'md', border: '1px solid token(colors.border)', fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
+								variant="plain"
+								class={css({ px: 4, py: 2, rounded: 'md', border: '1px solid token(colors.border)', fontSize: 'sm', color: 'muted' })}
 							>
 								Cancel
-							</a>
-						</div>
+							</Anchor>
+						</Stack>
 					</form>
-				</section>
+				</Card>
 			</main>
 		</div>,
 	)
@@ -160,50 +157,33 @@ export default createRoute(async (c) => {
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
 	return (
-		<header
-			class={css({
-				position: 'sticky',
-				top: 0,
-				zIndex: 10,
-				display: 'flex',
-				alignItems: 'center',
-				gap: 6,
-				px: 6,
-				h: 16,
-				bg: 'white',
-				borderBottom: '1px solid token(colors.border)',
-			})}
-		>
-			<a
-				href="/"
-				class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', textDecoration: 'none', color: 'ink' })}
-			>
-				<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-				BBS Forum
-			</a>
+		<LayoutHeader sticky>
+			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
+				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
+					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
+					BBS Forum
+				</Anchor>
 
-			<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-				<a href="/boards" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Boards
-				</a>
-				<a href="/threads" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Threads
-				</a>
-				<a href="/posts" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Posts
-				</a>
-			</nav>
+				<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
+					<Anchor href="/boards" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Boards
+					</Anchor>
+					<Anchor href="/threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Threads
+					</Anchor>
+					<Anchor href="/posts" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Posts
+					</Anchor>
+				</nav>
 
-			<div class={css({ display: 'flex', alignItems: 'center', gap: 3, ml: 'auto' })}>
-				<SearchBox />
-				<a
-					href="/#new-thread"
-					class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none', _hover: { bg: '#ea580c' } })}
-				>
-					New thread
-				</a>
-			</div>
-		</header>
+				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
+					<SearchBox />
+					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+						New thread
+					</Button>
+				</Stack>
+			</Stack>
+		</LayoutHeader>
 	)
 }
 
@@ -218,10 +198,10 @@ export const POST = createRoute(async (c) => {
 	if (!sql) return c.redirect(`/posts/${uuid}`)
 
 	const body = await c.req.parseBody()
-	if (body.action === 'save') {
-		const title = typeof body.title === 'string' ? body.title.trim() : ''
-		const postBody = typeof body.body === 'string' ? body.body : ''
-		const published = body.published === '1' ? 1 : 0
+	if (body['action'] === 'save') {
+		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+		const postBody = typeof body['body'] === 'string' ? body['body'] : ''
+		const published = body['published'] === '1' ? 1 : 0
 
 		if (title && postBody) {
 			try {

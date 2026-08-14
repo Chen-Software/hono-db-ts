@@ -1,6 +1,8 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { hashContent } from '../../../src/capacities/hashable'
+import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
+import { Header as LayoutHeader } from '../../components/ui/layout'
 import SearchBox from '../../islands/search'
 
 /**
@@ -69,16 +71,13 @@ export default createRoute(async (c) => {
 				<title>Post not found · BBS</title>
 				<Nav />
 				<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 16, textAlign: 'center' })}>
-					<h1 class={css({ fontSize: '2xl', fontWeight: 800 })}>Post not found</h1>
-					<p class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
+					<Heading class={css({ fontSize: '2xl', fontWeight: 800 })}>Post not found</Heading>
+					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No post with id <code>{uuid}</code>.
-					</p>
-					<a
-						href="/posts"
-						class={css({ display: 'inline-block', mt: 6, px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none' })}
-					>
+					</Text>
+					<Button as="a" href="/posts" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
 						Back to posts
-					</a>
+					</Button>
 				</main>
 			</div>,
 		)
@@ -96,46 +95,47 @@ export default createRoute(async (c) => {
 
 			<main class={css({ maxWidth: '3xl', mx: 'auto', px: 6, py: 10 })}>
 				{/* Breadcrumb */}
-				<nav class={css({ display: 'flex', alignItems: 'center', gap: 2, fontSize: 'sm', color: 'muted', mb: 6 })}>
-					<a href="/posts" class={css({ color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}>
+				<Stack direction="horizontal" align="center" gap="2" class={css({ fontSize: 'sm', color: 'muted', mb: 6 })}>
+					<Anchor href="/posts" variant="plain" class={css({ color: 'muted' })}>
 						Posts
-					</a>
+					</Anchor>
 					<span aria-hidden>›</span>
-					<span class={css({ color: 'faint', truncate: true, maxWidth: '20rem' })}>{post.title}</span>
-				</nav>
+					<Text class={css({ color: 'faint', truncate: true, maxWidth: '20rem' })}>{post.title}</Text>
+				</Stack>
 
 				{/* Post */}
-				<article class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 8 })}>
+				<Card class={css({ p: 8, width: 'full' })}>
 					{/* Meta row */}
-					<div class={css({ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' })}>
+					<Stack direction="horizontal" align="center" gap="2" wrap>
 						{post.published === 0 ? (
-							<span class={css({ px: 2, py: 0.5, rounded: 'full', bg: '#f3f4f6', color: '#6b7280', fontSize: 'xs', fontWeight: 600 })}>
+							<Badge colorPalette="gray" variant="subtle">
 								Draft
-							</span>
+							</Badge>
 						) : (
-							<span class={css({ px: 2, py: 0.5, rounded: 'full', bg: '#d1fae5', color: '#065f46', fontSize: 'xs', fontWeight: 600 })}>
+							<Badge colorPalette="green" variant="subtle">
 								Published
-							</span>
+							</Badge>
 						)}
-						<span class={css({ fontSize: 'xs', color: 'faint' })}>
+						<Text as="span" class={css({ fontSize: 'xs', color: 'faint' })}>
 							{post.author_name ?? 'unknown'} {post.author_email ? `· ${post.author_email}` : ''}
-						</span>
-						<span class={css({ fontSize: 'xs', color: 'faint' })}>Updated {timeAgo(post.updated_at)}</span>
-						<a
+						</Text>
+						<Text as="span" class={css({ fontSize: 'xs', color: 'faint' })}>Updated {timeAgo(post.updated_at)}</Text>
+						<Anchor
 							href={`/posts/${post.id}/edit`}
-							class={css({ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, fontSize: 'xs', color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}
+							variant="plain"
+							class={css({ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, fontSize: 'xs', color: 'muted' })}
 						>
 							<span aria-hidden>✏️</span>
 							Edit
-						</a>
-					</div>
+						</Anchor>
+					</Stack>
 
-					<h1 class={css({ mt: 4, fontSize: '3xl', fontWeight: 800, letterSpacing: '-0.02em' })}>
+					<Heading class={css({ mt: 4, fontSize: '3xl', fontWeight: 800, letterSpacing: '-0.02em' })}>
 						{post.title}
-					</h1>
+					</Heading>
 
 					<div class={css({ mt: 6, borderTop: '1px solid token(colors.border)', pt: 6 })}>
-						<p class={css({ fontSize: 'md', lineHeight: 1.8, whiteSpace: 'pre-wrap' })}>{post.body}</p>
+						<Text class={css({ fontSize: 'md', lineHeight: 1.8, whiteSpace: 'pre-wrap' })}>{post.body}</Text>
 					</div>
 
 					{/* Content address (integrity) */}
@@ -151,33 +151,35 @@ export default createRoute(async (c) => {
 							color: 'muted',
 						})}
 					>
-						<div class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 600, color: 'ink' })}>
+						<Stack direction="horizontal" align="center" gap="2" class={css({ fontWeight: 600, color: 'ink' })}>
 							<span aria-hidden>{intact ? '🔗' : '⚠️'}</span>
-							Content address
+							<Text as="span">Content address</Text>
 							{intact ? (
-								<span class={css({ px: 1.5, py: 0.5, rounded: 'full', bg: '#d1fae5', color: '#065f46', fontWeight: 600 })}>
+								<Badge colorPalette="green" variant="subtle">
 									verified
-								</span>
+								</Badge>
 							) : (
-								<span class={css({ px: 1.5, py: 0.5, rounded: 'full', bg: '#fee2e2', color: '#991b1b', fontWeight: 600 })}>
+								<Badge colorPalette="red" variant="subtle">
 									hash mismatch
-								</span>
+								</Badge>
 							)}
-						</div>
-						<div class={css({ mt: 2, fontFamily: 'monospace', color: 'faint', wordBreak: 'break-all' })}>
+						</Stack>
+						<Text class={css({ mt: 2, fontFamily: 'monospace', color: 'faint', wordBreak: 'break-all' })}>
 							stored sha256: {post.contentHash}
-						</div>
-						<div class={css({ mt: 1, fontFamily: 'monospace', color: 'faint', wordBreak: 'break-all' })}>
+						</Text>
+						<Text class={css({ mt: 1, fontFamily: 'monospace', color: 'faint', wordBreak: 'break-all' })}>
 							computed sha256: {computedHash}
+						</Text>
 						</div>
-					</div>
-				</article>
-			</main>
+						</Card>
+						</main>
 
 			<footer class={css({ mt: 4, borderTop: '1px solid token(colors.border)', bg: 'white', px: 6, py: 8 })}>
-				<div class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
-					<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
-				</div>
+				<Stack direction="horizontal" class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
+					<Text>
+						<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
+					</Text>
+				</Stack>
 			</footer>
 		</div>,
 	)
@@ -186,49 +188,32 @@ export default createRoute(async (c) => {
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
 	return (
-		<header
-			class={css({
-				position: 'sticky',
-				top: 0,
-				zIndex: 10,
-				display: 'flex',
-				alignItems: 'center',
-				gap: 6,
-				px: 6,
-				h: 16,
-				bg: 'white',
-				borderBottom: '1px solid token(colors.border)',
-			})}
-		>
-			<a
-				href="/"
-				class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', textDecoration: 'none', color: 'ink' })}
-			>
-				<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-				BBS Forum
-			</a>
+		<LayoutHeader sticky>
+			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
+				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
+					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
+					BBS Forum
+				</Anchor>
 
-			<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-				<a href="/boards" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Boards
-				</a>
-				<a href="/threads" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Threads
-				</a>
-				<a href="/posts" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Posts
-				</a>
-			</nav>
+				<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
+					<Anchor href="/boards" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Boards
+					</Anchor>
+					<Anchor href="/threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Threads
+					</Anchor>
+					<Anchor href="/posts" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Posts
+					</Anchor>
+				</nav>
 
-			<div class={css({ display: 'flex', alignItems: 'center', gap: 3, ml: 'auto' })}>
-				<SearchBox />
-				<a
-					href="/#new-thread"
-					class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none', _hover: { bg: '#ea580c' } })}
-				>
-					New thread
-				</a>
-			</div>
-		</header>
+				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
+					<SearchBox />
+					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+						New thread
+					</Button>
+				</Stack>
+			</Stack>
+		</LayoutHeader>
 	)
 }
