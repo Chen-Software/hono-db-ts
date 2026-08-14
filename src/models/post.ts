@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import { Clonable } from "@/capacities/clonable";
@@ -139,7 +140,20 @@ const PostSchemaModule = {
 	less: postLess,
 	more: (x: any, y: any) => postLess(y, x),
 	// random
-	random: typia.createRandom<PostData>(),
+	// typia's `createRandom<PostData>` honours the schema SHAPE but not the
+	// format tags — it emits non-UUID `id`s, invalid `authorId`s, and a nested
+	// `author` whose `uuid`/`email` fields fail classify. So `Post.random()` is
+	// wrapped to stamp the format-bound fields with real values; the contentHash
+	// is stamped by the `Hashable` capacity at construction time.
+	random: () => {
+		const raw = typia.createRandom<PostData>()();
+		return {
+			...raw,
+			id: randomUUID(),
+			authorId: randomUUID(),
+			author: raw.author ? { ...raw.author, id: randomUUID() } : undefined,
+		} as PostData;
+	},
 	// http ingest slice (typia.http.* — pure decode, no network). Lets handlers
 	// turn a raw query string / headers object / path param into typed DTOs
 	// with automatic string→number|boolean coercion.
