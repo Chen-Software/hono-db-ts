@@ -171,6 +171,27 @@ function otelServiceName(): string | undefined {
 	return process.env.OTEL_SERVICE_NAME;
 }
 
+/**
+ * Whether Better Auth is compiled in. TRUE unless `BETTER_AUTH_ENABLED` is
+ * explicitly "false" at BUILD time. Like the other macros this inlines to a
+ * literal, so `if (betterAuthEnabled()) { … }` lets the bundler dead-code
+ * eliminate the entire auth module (better-auth + drizzle adapter) from a
+ * build that opts out.
+ */
+function betterAuthEnabled(): boolean {
+	return process.env.BETTER_AUTH_ENABLED !== "false";
+}
+
+/** Public base URL of the Better Auth endpoints, e.g. https://bbs.example.workers.dev. */
+function betterAuthUrl(): string | undefined {
+	return process.env.BETTER_AUTH_URL;
+}
+
+/** Better Auth signing secret (>= 32 chars). A Cloudflare secret binding in prod. */
+function betterAuthSecret(): string | undefined {
+	return process.env.BETTER_AUTH_SECRET;
+}
+
 export {
 	env,
 	isDev,
@@ -194,4 +215,7 @@ export {
 	otelEndpoint,
 	otelHeaders,
 	otelServiceName,
+	betterAuthEnabled,
+	betterAuthUrl,
+	betterAuthSecret,
 };

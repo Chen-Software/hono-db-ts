@@ -59,7 +59,11 @@ import { resolve } from "node:path";
 import { Hono } from "hono";
 import { SQL } from "bun";
 
-import { databaseType, databaseUrl } from "../src/macros/envs" with { type: "macro" };
+import {
+	betterAuthEnabled,
+	databaseType,
+	databaseUrl,
+} from "../src/macros/envs" with { type: "macro" };
 import { buildQueryApp } from "../src/http/app";
 import { ensureSchema, resolveDatabaseTarget } from "../src/http/schema";
 
@@ -98,6 +102,20 @@ const queryApp = buildQueryApp(client);
 
 // The combined server: /api → JSON queries; / → Honox UI (per mode).
 const app = new Hono();
+
+// Better Auth is OPTIONAL. `betterAuthEnabled()` is a Bun macro that inlines
+// to a literal, so setting `BETTER_AUTH_ENABLED=false` collapses this `if` to
+// dead code and the bundler drops the `mountBetterAuth` import (and the whole
+// better-auth / drizzle-adapter bundle) from this script.
+import { mountBetterAuth } from "../src/auth/mount";
+let mountAuth: ((app: Hono) => void) | null = null;
+if (betterAuthEnabled()) {
+	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
+	// The auth instance is wired to the same SQLite database via the drizzle
+	// adapter (the auth tables are in drizzle/*_auth_sqlite_create.sql).
+	mountAuth = await mountBetterAuth(client);
+}
+if (mountAuth) mountAuth(app);
 
 // --- CLI args: [port] [mode]  OR  --port=  --mode=  /  --port / --mode
 const rawArgs = process.argv.slice(2);

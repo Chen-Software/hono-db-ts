@@ -14,6 +14,10 @@ import type { SqlQueryExecutor } from "@/capacities/servable";
 /** Worker bindings — the D1 database is `env.DB`. */
 export interface WorkerEnv {
 	DB?: D1Database;
+	/** Public auth base URL (Better Auth). Defaults to the worker URL. */
+	BETTER_AUTH_URL?: string;
+	/** Better Auth signing secret — set as a Cloudflare secret binding. */
+	BETTER_AUTH_SECRET?: string;
 }
 
 /** The shape every backend module exports. */

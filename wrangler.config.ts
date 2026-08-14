@@ -142,6 +142,11 @@ export function buildWranglerConfig(): WranglerConfig {
 	const refs = [
 		["WORKER_URL", workerUrl()],
 		["ALLOWED_ORIGIN", allowedOrigin()],
+		// Better Auth public base URL — the auth endpoints are served under
+		// /api/auth/*, so this is typically the worker's own URL. Set via
+		// BETTER_AUTH_URL in the env file; BETTER_AUTH_SECRET is a SECRET
+		// binding (never a var) — set it with `wrangler secret put`.
+		["BETTER_AUTH_URL", process.env.BETTER_AUTH_URL ?? workerUrl()],
 	];
 	for (const [key, value] of refs) {
 		if (value) config.vars![key] = value;

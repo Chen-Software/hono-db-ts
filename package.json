@@ -24,9 +24,11 @@
 		"cf:build": "bun run scripts/cf-build.ts",
 		"cf:dev": "wrangler dev",
 		"cf:deploy": "wrangler deploy",
-		"cf:types": "wrangler types"
+		"cf:types": "wrangler types",
+		"better-auth:generate": "better-auth generate --config ./better-auth.config.ts --output ./src/auth/schema.ts"
 	},
 	"devDependencies": {
+		"@better-auth/cli": "^1.4.21",
 		"@biomejs/biome": "latest",
 		"@hono/vite-build": "^1.11.1",
 		"@hono/vite-dev-server": "^0.26.1",

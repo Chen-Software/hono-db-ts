@@ -11,7 +11,11 @@
  * worker bundle is Workers-runtime clean.
  */
 
+import { Hono } from "hono";
+
 import { buildQueryApp } from "@/http/app";
+import { mountBetterAuthFromBindings } from "@/auth/mount";
+import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
 
 /** Adapter turning the Workers D1 binding into the `SqlQueryExecutor` shape. */
@@ -26,10 +30,23 @@ export class D1Executor implements SqlQueryExecutor {
 }
 
 export const backend: WorkerBackend = {
-	init(env: WorkerEnv) {
+	async init(env: WorkerEnv) {
 		if (!env.DB) {
 			throw new Error("worker: DATABASE_TYPE=d1 but env.DB binding is missing");
 		}
-		return buildQueryApp(new D1Executor(env.DB));
+		const app = new Hono();
+
+		// Better Auth is OPTIONAL. `betterAuthEnabled()` inlines to a literal at
+		// build time, so `BETTER_AUTH_ENABLED=false` drops the auth bundle
+		// (better-auth + drizzle adapter) from the deployed worker.
+		if (betterAuthEnabled()) {
+			const { drizzle } = await import("drizzle-orm/d1");
+			// Better Auth first — `/api/auth/*` must win over the query app's `/api`.
+			mountBetterAuthFromBindings(app, env, drizzle(env.DB));
+		}
+
+		// The query app (BBS read routes + generated CRUD) under /api.
+		app.route("/api", buildQueryApp(new D1Executor(env.DB)));
+		return app;
 	},
 };

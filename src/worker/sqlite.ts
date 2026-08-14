@@ -11,8 +11,11 @@
  */
 
 import { SQL } from "bun";
+import { Hono } from "hono";
 
+import { mountBetterAuth } from "@/auth/mount";
 import { buildQueryApp } from "@/http/app";
+import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
 import type { WorkerBackend, WorkerEnv } from "./types";
 
 /**
@@ -38,6 +41,18 @@ export const backend: WorkerBackend = {
 		for (const stmt of splitStatements(__MIGRATIONS_SQL__)) {
 			await client.unsafe(stmt);
 		}
-		return buildQueryApp(client);
+
+		const app = new Hono();
+
+		// Better Auth is OPTIONAL. `betterAuthEnabled()` inlines to a literal at
+		// build time, so `BETTER_AUTH_ENABLED=false` drops the auth bundle from
+		// the sqlite worker too.
+		if (betterAuthEnabled()) {
+			// Better Auth first — `/api/auth/*` must win over the query app's `/api`.
+			(await mountBetterAuth(client))(app);
+		}
+
+		app.route("/api", buildQueryApp(client));
+		return app;
 	},
 };

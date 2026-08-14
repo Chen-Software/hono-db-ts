@@ -28,5 +28,8 @@ export {
 	otelEndpoint,
 	otelHeaders,
 	otelServiceName,
+	betterAuthEnabled,
+	betterAuthUrl,
+	betterAuthSecret,
 	workerUrl,
 } from "./envs";
