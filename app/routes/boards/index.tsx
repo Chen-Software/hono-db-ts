@@ -1,5 +1,6 @@
 import { css } from '../../../styled-system/css'
 import { createRoute } from 'honox/factory'
+import { Anchor, Badge, Button, Card, Heading, Layout, Stack, Text } from '../../components/ui'
 import SearchBox from '../../islands/search'
 
 /**
@@ -98,98 +99,103 @@ export default createRoute(async (c) => {
 
 			<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 10 })}>
 				{/* Heading */}
-				<div class={css({ mb: 8, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 })}>
+				<Stack direction="horizontal" justify="between" align="flex-end" wrap gap="4" class={css({ mb: 8 })}>
 					<div>
-						<p class={css({ fontSize: 'xs', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'accent' })}>
+						<Text class={css({ fontSize: 'xs', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'accent' })}>
 							Browse communities
-						</p>
-						<h1 class={css({ mt: 1, fontSize: '2xl', fontWeight: 800 })}>Boards</h1>
-						<p class={css({ mt: 1, fontSize: 'sm', color: 'muted' })}>
+						</Text>
+						<Heading class={css({ mt: 1, fontSize: '2xl', fontWeight: 800 })}>Boards</Heading>
+						<Text class={css({ mt: 1, fontSize: 'sm', color: 'muted' })}>
 							{total.toLocaleString()} board{total === 1 ? '' : 's'} · ordered by activity
-						</p>
+						</Text>
 					</div>
-					<a
-						href="/#new-thread"
-						class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none', _hover: { bg: '#ea580c' } })}
-					>
+					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
 						New thread
-					</a>
-				</div>
+					</Button>
+				</Stack>
 
 				{/* Board grid */}
 				{boards.length > 0 ? (
 					<div class={css({ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 })}>
 						{boards.map((b) => (
-							<a
-								key={b.id}
-								href={`/boards/${b.id}`}
-								class={css({
-									p: 5,
-									rounded: 'xl',
-									border: '1px solid token(colors.border)',
-									bg: 'white',
-									textDecoration: 'none',
-									color: 'ink',
-									transition: 'box-shadow 150ms, transform 150ms',
-									_hover: {
-										boxShadow: '0 8px 24px rgba(17,24,39,0.08)',
-										transform: 'translateY(-2px)',
-									},
-								})}
-							>
-								<div class={css({ display: 'flex', alignItems: 'center', gap: 2 })}>
-									<span class={css({ w: 2, h: 2, rounded: 'full', bg: 'accent', flexShrink: 0 })} />
-									<h3 class={css({ fontWeight: 700, fontSize: 'md', truncate: true })}>{b.name}</h3>
-								</div>
-								<p class={css({ mt: 2, fontSize: 'sm', color: 'muted', lineClamp: 2, minHeight: '2.5rem' })}>
-									{b.description}
-								</p>
-								<div class={css({ mt: 3, display: 'flex', alignItems: 'center', gap: 2, fontSize: 'xs', color: 'faint' })}>
-									<span class={css({ px: 1.5, py: 0.5, rounded: 'full', bg: '#fff7ed', color: '#c2410c', fontWeight: 500 })}>
-										/{b.slug}
-									</span>
-								</div>
-								<div class={css({ mt: 3, pt: 3, borderTop: '1px solid token(colors.border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'xs', color: 'faint' })}>
-									<span>
-										<strong class={css({ color: 'ink', fontWeight: 700 })}>{b.thread_count}</strong> threads
-									</span>
-									<span class={css({ truncate: true, maxWidth: '9rem' })}>
-										{b.last_activity ? `active ${timeAgo(b.last_activity)}` : 'no threads'}
-									</span>
-								</div>
-							</a>
+							<Anchor key={b.id} href={`/boards/${b.id}`} variant="plain">
+								<Card
+									clickable
+									class={css({
+										p: 5,
+										width: 'full',
+										boxShadow: 'md',
+										transition: 'box-shadow 150ms, transform 150ms',
+										_hover: {
+											boxShadow: '0 8px 24px rgba(17,24,39,0.08)',
+											transform: 'translateY(-2px)',
+										},
+									})}
+								>
+									<Stack direction="horizontal" align="center" gap="2">
+										<span class={css({ w: 2, h: 2, rounded: 'full', bg: 'accent', flexShrink: 0 })} />
+										<Heading as="h3" class={css({ fontWeight: 700, fontSize: 'md', truncate: true, color: 'ink' })}>
+											{b.name}
+										</Heading>
+									</Stack>
+									<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted', lineClamp: 2, minHeight: '2.5rem' })}>
+										{b.description}
+									</Text>
+									<Stack direction="horizontal" gap="2" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
+										<Badge colorPalette="orange" size="sm" variant="subtle">
+											/{b.slug}
+										</Badge>
+									</Stack>
+									<Stack
+										direction="horizontal"
+										justify="between"
+										align="center"
+										class={css({ mt: 3, pt: 3, borderTop: '1px solid token(colors.border)', fontSize: 'xs', color: 'faint' })}
+									>
+										<Text as="span">
+											<strong class={css({ color: 'ink', fontWeight: 700 })}>{b.thread_count}</strong> threads
+										</Text>
+										<Text as="span" class={css({ truncate: true, maxWidth: '9rem' })}>
+											{b.last_activity ? `active ${timeAgo(b.last_activity)}` : 'no threads'}
+										</Text>
+									</Stack>
+								</Card>
+							</Anchor>
 						))}
 					</div>
 				) : (
 					<div class={css({ py: 16, textAlign: 'center', rounded: 'xl', border: '1px dashed token(colors.border)', bg: 'white' })}>
-						<p class={css({ fontSize: 'sm', color: 'muted' })}>No boards yet.</p>
+						<Text class={css({ fontSize: 'sm', color: 'muted' })}>No boards yet.</Text>
 					</div>
 				)}
 
 				{/* Pagination */}
-				<div class={css({ mt: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' })}>
+				<Stack direction="horizontal" justify="between" align="center" class={css({ mt: 8 })}>
 					{cursor ? (
-						<a href="/boards" class={css({ fontSize: 'sm', color: 'accent', textDecoration: 'none' })}>
+						<Anchor href="/boards" variant="plain" class={css({ fontSize: 'sm', color: 'accent' })}>
 							← Previous
-						</a>
+						</Anchor>
 					) : (
 						<span />
 					)}
 					{nextCursor && (
-						<a
+						<Anchor
 							href={`/boards?cursor=${encodeURIComponent(nextCursor)}`}
-							class={css({ fontSize: 'sm', color: 'accent', textDecoration: 'none' })}
+							variant="plain"
+							class={css({ fontSize: 'sm', color: 'accent' })}
 						>
 							Next →
-						</a>
+						</Anchor>
 					)}
-				</div>
+				</Stack>
 			</main>
 
 			<footer class={css({ mt: 4, borderTop: '1px solid token(colors.border)', bg: 'white', px: 6, py: 8 })}>
-				<div class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
-					<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
-				</div>
+				<Stack direction="horizontal" class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
+					<Text>
+						<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
+					</Text>
+				</Stack>
 			</footer>
 		</div>,
 	)
@@ -198,46 +204,29 @@ export default createRoute(async (c) => {
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
 	return (
-		<header
-			class={css({
-				position: 'sticky',
-				top: 0,
-				zIndex: 10,
-				display: 'flex',
-				alignItems: 'center',
-				gap: 6,
-				px: 6,
-				h: 16,
-				bg: 'white',
-				borderBottom: '1px solid token(colors.border)',
-			})}
-		>
-			<a
-				href="/"
-				class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', textDecoration: 'none', color: 'ink' })}
-			>
-				<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-				BBS Forum
-			</a>
+		<Layout.Header sticky>
+			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
+				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
+					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
+					BBS Forum
+				</Anchor>
 
-			<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-				<a href="/boards" class={css({ fontSize: 'sm', fontWeight: 700, color: 'ink', textDecoration: 'none' })}>
-					Boards
-				</a>
-				<a href="/threads" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Threads
-				</a>
-			</nav>
+				<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
+					<Anchor href="/boards" variant="plain" class={css({ fontSize: 'sm', fontWeight: 700, color: 'ink' })}>
+						Boards
+					</Anchor>
+					<Anchor href="/threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Threads
+					</Anchor>
+				</nav>
 
-			<div class={css({ display: 'flex', alignItems: 'center', gap: 3, ml: 'auto' })}>
-				<SearchBox />
-				<a
-					href="/#new-thread"
-					class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none', _hover: { bg: '#ea580c' } })}
-				>
-					New thread
-				</a>
-			</div>
-		</header>
+				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
+					<SearchBox />
+					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+						New thread
+					</Button>
+				</Stack>
+			</Stack>
+		</Layout.Header>
 	)
 }
