@@ -57,6 +57,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { Hono } from "hono";
+import type { Env } from "hono";
 import { SQL } from "bun";
 
 import {
@@ -101,14 +102,16 @@ if (created) {
 const queryApp = buildQueryApp(client);
 
 // The combined server: /api → JSON queries; / → Honox UI (per mode).
-const app = new Hono();
+// Typed with the augmented `Env` so `c.env` carries the sql/DB/auth bindings
+// the app's routes rely on (honox's createApp also produces Hono<Env>).
+const app = new Hono<Env>();
 
 // Better Auth is OPTIONAL. `betterAuthEnabled()` is a Bun macro that inlines
 // to a literal, so setting `BETTER_AUTH_ENABLED=false` collapses this `if` to
 // dead code and the bundler drops the `mountBetterAuth` import (and the whole
 // better-auth / drizzle-adapter bundle) from this script.
 import { mountBetterAuth } from "../src/auth/mount";
-let mountAuth: ((app: Hono) => void) | null = null;
+let mountAuth: ((app: Hono<Env>) => void) | null = null;
 if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
 	// The auth instance is wired to the same SQLite database via the drizzle
