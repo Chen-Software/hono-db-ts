@@ -2,6 +2,7 @@ import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
+import { Immutable } from "@/capacities/immutable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { Meterable } from "@/capacities/meterable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
@@ -147,6 +148,9 @@ const ReplyModel = defineModel<ReplySchema>({
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Reply" } },
+		// Immutable (LAST — outermost mixin): `update` reconstructs a new frozen
+		// instance; freeze runs after every inner constructor populated fields.
+		Immutable,
 	],
 });
 

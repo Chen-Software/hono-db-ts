@@ -2,6 +2,7 @@ import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
+import { Immutable } from "@/capacities/immutable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { Meterable } from "@/capacities/meterable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
@@ -25,9 +26,9 @@ import { defineModel } from "./base";
  * Thread — a BBS topic/thread (主题帖). Belongs to a `Board`, authored by a
  * `User`, and collects `Reply`s (inverse relation `thread.getReplies()`).
  *
- * A thread is MUTABLE (unlike `Post`'s content-addressed versions): title edits,
- * pinning, locking are all in-place state changes. `updated_at` therefore means
- * "last activity" and is bumped by `touch()` rather than being a version. The
+ * Wears `Immutable` like the other BBS models: title edits, pinning and locking
+ * produce a brand-new frozen instance via `update` rather than mutating in
+ * place. `updated_at` means "last activity" and is bumped by `touch()`. The
  * `pinned` / `locked` aggregate methods enforce their invariants on the class.
  */
 interface ThreadSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
@@ -147,6 +148,11 @@ const ThreadModel = defineModel<ThreadSchema>({
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Thread" } },
+		// Immutable (LAST — outermost mixin): `pin`/`unpin`/`lock`/`unlock`/
+		// `touch` all route through the immutable `update`, returning a new
+		// frozen instance. Freeze runs after every inner constructor populated
+		// its fields; validation still runs via the `onUpdate` hooks.
+		Immutable,
 	],
 });
 

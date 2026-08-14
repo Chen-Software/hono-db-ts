@@ -2,6 +2,7 @@ import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
+import { Immutable } from "@/capacities/immutable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { Meterable } from "@/capacities/meterable";
 import { ProtobufEncodable } from "@/capacities/protobuf-encodable";
@@ -143,13 +144,10 @@ const UserModel = defineModel<UserSchema>({
 		},
 		// Validatable pulls its validators from `UserSchemaModule`; here we
 		// demonstrate BOTH lifecycle hooks: `onNew` (assert on construction) and
-		// `onUpdate` (assert on the mutable `update`). The `validate` / `assert`
-		// / `assertGuard` overrides default to the structural module functions —
+		// `onUpdate` (assert on update). The `validate` / `assert` /
+		// `assertGuard` overrides default to the structural module functions —
 		// swap any to a `*-equals` / `*-guard` variant to tighten them (see
-		// src/capacities/validatable.test.ts). User does NOT wear `Immutable`, so
-		// its `update` is IN-PLACE (the base default); immutability is an
-		// opt-in capacity. Version-bumping on update is a separate `Versionable`
-		// concern (see `createVersionableUpdate(User)`), not enforced here.
+		// src/capacities/validatable.test.ts).
 		{ capacity: Validatable, options: { onNew: "assert", onUpdate: "assert" } },
 		// Clonable defaults to the validated `assertClone` because Validatable is
 		// present; set `{ capacity: Clonable, options: { clone: "clone" } }` to
@@ -207,6 +205,13 @@ const UserModel = defineModel<UserSchema>({
 		// `db.client.operations.*` OTEL metrics (prod), reusing the same
 		// queryTelemetry sink as the SQL metrics.
 		{ capacity: Meterable, options: { name: "User" } },
+		// Immutable (LAST — outermost mixin): every `update` produces a
+		// BRAND-NEW frozen instance instead of mutating in place, and the
+		// constructor rewrites own properties into freeze-safe accessors.
+		// Declared last so the freeze runs after every inner constructor has
+		// populated its fields. Validation still applies: the reconstruction
+		// re-runs the `onUpdate` hooks (incl. Validatable's assert).
+		Immutable,
 	],
 });
 
