@@ -46,10 +46,14 @@ Commands:
                           {"age":{">":30}}, and LIKE search {"title":{"contains":"x"}}.
                           Booleans are coerced to 0/1. Default order: updated_at desc.
 
-  serve [port]            Run the local server (scripts/serve.ts, default :8787).
-                          JSON query API is ALWAYS at /api; the Honox UI is served
-                          at / when it has been built (see ui:build). Without a UI
-                          build, the API is ALSO exposed at / for back-compat.
+  serve [port] [mode]     Run the local server (scripts/serve.ts, default :8787).
+                          mode: ui+api (default) | auto | api | ui
+                            - ui+api:  UI at / + API at /api (errors if UI not built)
+                            - auto:    UI at / + API at /api; falls back to API at
+                                       / AND /api if UI not built (no error)
+                            - api:     JSON API at /api AND / (no UI)
+                            - ui:      UI only at / (no /api)
+                          Port: PORT env var > --port= / [port] arg > 8787.
 
   ui:build                Build the Honox UI in /app -> dist/index.js (+ static
                           client assets + .vite manifest). Two-phase vite build:

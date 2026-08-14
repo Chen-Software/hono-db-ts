@@ -2,8 +2,15 @@
  * serve — a local Hono HTTP server exposing the good BBS queries AND the
  * Honox UI.
  *
- *     bun run scripts/serve.ts [port]     (default :8787)
- *     PORT=3001 bun run src/main.ts serve (PORT env overrides the arg)
+ *     bun run scripts/serve.ts [port] [mode]     (default :8787, mode=ui+api)
+ *     PORT=3001 bun run src/main.ts serve [mode] (PORT env overrides the arg)
+ *
+ * Mode flag (positional or --mode=):
+ *   ui+api   (default) UI at / + API at /api (errors if the UI isn't built).
+ *   auto     UI at / + API at /api; if the UI isn't built, fall back to API at
+ *            both / and /api (no error).
+ *   api      JSON API at /api AND / (no UI). Use this when you only want the API.
+ *   ui       UI only at / (no /api). Use this when you only want the UI.
  *
  * The Hono app lives in `src/http/app.ts` (`buildQueryApp`) and is reused by
  * the Cloudflare Worker (`src/worker.ts`); this script just binds it to a
@@ -89,43 +96,88 @@ if (created) {
 
 const queryApp = buildQueryApp(client);
 
-// The combined server: /api → JSON queries (always); / → Honox UI (when built).
+// The combined server: /api → JSON queries; / → Honox UI (per mode).
 const app = new Hono();
 
-// The JSON query API is ALWAYS available under /api — independent of the UI.
-app.route("/api", queryApp);
+// --- CLI args: [port] [mode]  OR  --port=  --mode=  /  --port / --mode
+const rawArgs = process.argv.slice(2);
+const argModeEq = rawArgs.find((a) => a.startsWith("--mode="))?.split("=")[1];
+const argPortEq = rawArgs.find((a) => a.startsWith("--port="))?.split("=")[1];
+const argModeNext = rawArgs.includes("--mode") ? rawArgs[rawArgs.indexOf("--mode") + 1] : undefined;
+const argPortNext = rawArgs.includes("--port") ? rawArgs[rawArgs.indexOf("--port") + 1] : undefined;
+const positional = rawArgs.filter((a) => !a.startsWith("--"));
+const mode = (argModeEq ?? argModeNext ?? positional[1] ?? "ui+api").toLowerCase();
 
-// Try to load the built Honox UI (dist/index.js). It's a self-contained
+// Port resolution precedence: PORT env var → --port/positional arg → 8787.
+const port =
+	Number(process.env.PORT) ||
+	Number(argPortEq) ||
+	Number(argPortNext) ||
+	Number(positional[0]) ||
+	8787;
+
+// --- Try to load the built Honox UI (dist/index.js). It's a self-contained
 // Hono app (SSR + /static/* + favicon) produced by `bun run src/main.ts ui:build`.
 const UI_BUNDLE = resolve(import.meta.dir, "../dist/index.js");
 const hasUi = existsSync(UI_BUNDLE);
-if (hasUi) {
-	const { default: uiApp } = await import(UI_BUNDLE);
-	// Mount the UI at the root (it owns /, /static/*, /favicon.ico).
-	app.route("/", uiApp as Hono);
-	console.log("serve: Honox UI mounted at / (from dist/index.js).");
-} else {
-	// No UI build — keep the JSON API ALSO at the root so `/boards` etc. keep
-	// working for clients that hit the API without the /api prefix.
-	app.route("/", queryApp);
-	console.log(
-		"serve: no dist/index.js — serving the JSON API at / AND /api.\n" +
-			"  Build the UI with: bun run src/main.ts ui:build",
-	);
-}
 
-// Port resolution precedence: PORT env var → positional arg → 8787 default.
-const port = Number(process.env.PORT) || Number(process.argv[2]) || 8787;
+if (mode === "api") {
+	// API only: /api AND / (back-compat for clients hitting the root).
+	app.route("/api", queryApp);
+	app.route("/", queryApp);
+	console.log("serve: mode=api — JSON API at /api AND / (no UI).");
+} else if (mode === "ui") {
+	// UI only.
+	if (!hasUi) {
+		console.error(
+			"serve: mode=ui but no dist/index.js — build the UI first:\n" +
+				"  bun run src/main.ts ui:build",
+		);
+		process.exit(1);
+	}
+	const { default: uiApp } = await import(UI_BUNDLE);
+	app.route("/", uiApp as Hono);
+	console.log("serve: mode=ui — Honox UI at / (from dist/index.js).");
+} else if (mode === "ui+api" || mode === "both") {
+	// Explicit UI + API.
+	if (!hasUi) {
+		console.error(
+			"serve: mode=ui+api but no dist/index.js — build the UI first:\n" +
+				"  bun run src/main.ts ui:build",
+		);
+		process.exit(1);
+	}
+	const { default: uiApp } = await import(UI_BUNDLE);
+	app.route("/api", queryApp);
+	app.route("/", uiApp as Hono);
+	console.log("serve: mode=ui+api — Honox UI at / + JSON API at /api (dist/index.js).");
+} else {
+	// auto (default): UI at / when built, else API at both / and /api.
+	if (hasUi) {
+		const { default: uiApp } = await import(UI_BUNDLE);
+		app.route("/api", queryApp);
+		app.route("/", uiApp as Hono);
+		console.log("serve: mode=auto — Honox UI at / + JSON API at /api (dist/index.js).");
+	} else {
+		app.route("/api", queryApp);
+		app.route("/", queryApp);
+		console.log(
+			"serve: mode=auto, no dist/index.js — JSON API at /api AND /.\n" +
+				"  Build the UI with: bun run src/main.ts ui:build",
+		);
+	}
+}
 
 const server = Bun.serve({
 	port,
 	fetch: app.fetch,
 });
 
-console.log(`BBS query server running on http://localhost:${server.port}`);
-console.log(
-	hasUi
-		? "  UI : http://localhost:" + server.port + "/  (Honox UI)"
-		: "  API: http://localhost:" + server.port + "/api/...  (JSON, also at /...)",
-);
-console.log("  API: /api/stats, /api/boards, /api/boards/:id/threads, /api/threads/:id/replies, /api/users/:id/posts, /api/search?q=, /api/latest-posts");
+const serveApi = mode === "api" || mode === "auto" || mode === "ui+api" || mode === "both";
+console.log(`BBS query server running on http://localhost:${server.port}  (mode=${mode})`);
+if (mode !== "api") {
+	console.log(`  UI : http://localhost:${server.port}/  (Honox UI)`);
+}
+if (serveApi) {
+	console.log("  API: /api/stats, /api/boards, /api/boards/:id/threads, /api/threads/:id/replies, /api/users/:id/posts, /api/search?q=, /api/latest-posts");
+}
