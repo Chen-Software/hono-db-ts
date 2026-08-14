@@ -106,7 +106,7 @@ export default function SearchBox() {
 									{result.threads.map((t) => (
 										<a
 											key={t.id}
-											href={`/api/threads/${t.id}`}
+											href={`/threads/${t.id}`}
 											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', fontWeight: 600, color: 'ink', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
 										>
 											{t.title}

@@ -583,7 +583,7 @@ export default createRoute(async (c) => {
 														</span>
 													)}
 													<a
-														href={`/api/threads/${t.id}`}
+														href={`/threads/${t.id}`}
 														class={css({
 															fontWeight: 600,
 															fontSize: 'sm',
@@ -828,7 +828,7 @@ export default createRoute(async (c) => {
 											</span>
 											<div class={css({ minWidth: 0 })}>
 												<a
-													href={`/api/threads/${t.id}`}
+													href={`/threads/${t.id}`}
 													class={css({
 														display: 'block',
 														fontSize: 'sm',
