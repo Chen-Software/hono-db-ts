@@ -360,10 +360,14 @@ describe("Servable — introspection", () => {
 describe("Servable — readonly (server-managed) fields", () => {
 	const uuidA = randomUUID();
 	const uuidB = randomUUID();
-	const app = new Hono();
-
+	// Reuse the write suite's app/client: `writeApp` is already wired to
+	// `writeClient` with Thread served in that suite's beforeAll (so this
+	// suite does NOT serve Thread a second time, which would race the shared
+	// SQLite client). `writeApp` is initialized in the suite's beforeAll, so
+	// it is dereferenced lazily inside each test.
+	let app: Hono;
 	beforeAll(() => {
-		Thread.serve(app, db);
+		app = writeApp;
 	});
 
 	it("POST uses the server clock for created_at/updated_at (client cannot forge)", async () => {
