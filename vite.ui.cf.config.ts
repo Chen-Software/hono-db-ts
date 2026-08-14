@@ -33,4 +33,12 @@ export default defineConfig({
 			staticRoot: resolve(rootDir, 'app/public'),
 		}),
 	],
+	// The app imports the Panda design-system via the bare specifier
+	// `design-system/*` — alias it to the generated outdir at the repo root
+	// (same as vite.ui.config.ts).
+	resolve: {
+		alias: {
+			'design-system': resolve(rootDir, 'design-system'),
+		},
+	},
 })
