@@ -3,6 +3,7 @@ import { createRoute } from 'honox/factory'
 import { hashContent } from '../../../../src/capacities/hashable'
 import { Anchor, Button, Card, Heading, Stack, Text } from '../../../components/ui'
 import { Header as LayoutHeader } from '../../../components/ui/layout'
+import { SiteHeader } from '../../../components/site-header'
 import SearchBox from '../../../islands/search'
 import ThemeSwitcher from '../../../islands/theme-switcher'
 

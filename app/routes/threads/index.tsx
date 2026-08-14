@@ -2,6 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Heading, Stack, Text } from '../../components/ui'
 import { Header as LayoutHeader } from '../../components/ui/layout'
+import { SiteHeader } from '../../components/site-header'
 import SearchBox from '../../islands/search'
 import ThemeSwitcher from '../../islands/theme-switcher'
 
