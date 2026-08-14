@@ -41,7 +41,7 @@ export default defineConfig({
       //
       // staticRoot = dist so the generated `serveStatic({ root })` for the
       // `/static/*` route resolves `/static/x` → `dist/static/x` (the client
-      // bundle). Vite also copies public → dist, so `/favicon.ico` works.
+      // bundle). Viappo copies public → dist, so `/favicon.ico` works.
       staticRoot: resolve(process.cwd(), 'dist'),
     }),
   ],
@@ -52,6 +52,14 @@ export default defineConfig({
   // `public` holds the UI's static files (favicon.ico, etc.); Vite copies
   // it into the build outDir so `/favicon.ico` is served by `serveStatic`.
   publicDir: resolve(process.cwd(), 'public'),
+  // The app imports the Panda design-system via the bare specifier
+  // `design-system/*` (e.g. `design-system/css`, `design-system/recipes`) —
+  // alias it to the generated outdir at the repo root.
+  resolve: {
+    alias: {
+      'design-system': resolve(process.cwd(), 'design-system'),
+    },
+  },
   server: {
     port: 8787,
   },
