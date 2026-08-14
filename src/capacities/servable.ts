@@ -501,14 +501,19 @@ export function Servable<TBase extends CapacityComposer>(
 			}
 
 			const entity: Record<string, unknown> = { ...body };
+			// Server-managed fields: the client NEVER decides the final value
+			// of the primary key / creation time / update time. The PK is
+			// generated when absent (a client-supplied `id` is honoured for
+			// idempotent creates); timestamps are ALWAYS taken from the
+			// server clock so a client cannot forge created_at/updated_at.
+			const now = new Date().toISOString();
 			if (entity[idCol] == null || entity[idCol] === "") {
 				entity[idCol] = crypto.randomUUID();
 			}
-			const now = new Date().toISOString();
-			if (kinds.has("created_at") && entity["created_at"] == null) {
+			if (kinds.has("created_at")) {
 				entity["created_at"] = now;
 			}
-			if (kinds.has("updated_at") && entity["updated_at"] == null) {
+			if (kinds.has("updated_at")) {
 				entity["updated_at"] = now;
 			}
 
@@ -573,7 +578,14 @@ export function Servable<TBase extends CapacityComposer>(
 			// first), refresh `updated_at`, then encode — `toRow` skips absent
 			// fields, so ONLY the provided columns (plus the timestamp) are SET.
 			const current = (fromRow ? fromRow(rows[0]) : rows[0]) as Record<string, unknown>;
-			const merged = { ...current, ...body };
+			// Server-managed fields are never taken from the patch: the PK is
+			// pinned to the URL id and `created_at` stays whatever it was. Any
+			// client-supplied value for them is ignored (not merged).
+			const merged: Record<string, unknown> = { ...current };
+			for (const [k, v] of Object.entries(body)) {
+				if (k === idCol || k === "created_at") continue;
+				merged[k] = v;
+			}
 			merged[idCol] = id;
 			if (kinds.has("updated_at")) merged["updated_at"] = new Date().toISOString();
 

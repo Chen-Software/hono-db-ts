@@ -7,6 +7,7 @@
  */
 import { SQL } from "bun";
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { Board } from "../models/board";
@@ -353,5 +354,60 @@ describe("Servable — introspection", () => {
 	it("User's sort falls back to created_at (no updated_at)", () => {
 		const spec = (User as any).routeSpec();
 		expect(spec.sort).toEqual({ field: "created_at", dir: "desc" });
+	});
+});
+
+describe("Servable — readonly (server-managed) fields", () => {
+	const uuidA = randomUUID();
+	const uuidB = randomUUID();
+	const app = new Hono();
+
+	beforeAll(() => {
+		Thread.serve(app, db);
+	});
+
+	it("POST uses the server clock for created_at/updated_at (client cannot forge)", async () => {
+		const res = await app.request("http://local/threads", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				title: "no-forge",
+				boardId: uuidA,
+				authorId: uuidB,
+				created_at: "1999-01-01T00:00:00.000Z",
+				updated_at: "1999-01-01T00:00:00.000Z",
+			}),
+		});
+		expect(res.status).toBe(201);
+		const row = (await res.json()).data;
+		expect(row.created_at).not.toBe("1999-01-01T00:00:00.000Z");
+		expect(row.updated_at).not.toBe("1999-01-01T00:00:00.000Z");
+		expect(new Date(row.created_at).getTime()).toBeGreaterThan(Date.now() - 5000);
+		expect(new Date(row.updated_at).getTime()).toBeGreaterThan(Date.now() - 5000);
+		expect(row.title).toBe("no-forge");
+	});
+
+	it("PUT ignores client-supplied created_at and id (server-managed)", async () => {
+		const created = await (
+			await app.request("http://local/threads", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ title: "patch-target", boardId: uuidA, authorId: uuidB }),
+			})
+		).json();
+		const origCreated = created.data.created_at;
+
+		const forged = randomUUID();
+		const res = await app.request(`http://local/threads/${created.data.id}`, {
+			method: "PUT",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ created_at: "1999-01-01T00:00:00.000Z", id: forged, title: "patched" }),
+		});
+		expect(res.status).toBe(200);
+		const row = (await res.json()).data;
+		// created_at stays the original; id stays the URL id; the real patch applies.
+		expect(row.created_at).toBe(origCreated);
+		expect(row.id).toBe(created.data.id);
+		expect(row.title).toBe("patched");
 	});
 });
