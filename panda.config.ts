@@ -11,8 +11,16 @@ import { defineConfig } from "@pandacss/dev";
  * `../../styled-system/css` from anywhere under `app/`.
  */
 export default defineConfig({
-	// Entry points Panda scans for `css()`/`styled()` usage.
-	include: ["app/**/*.{ts,tsx}"],
+	// Entry points Panda scans for `css()`/`styled()` usage. Unit tests are
+	// excluded — their sample props (e.g. `<Grid columns={4}>` in
+	// grid.unit.test.tsx, `accept="image/*"` in file-upload.unit.test.tsx)
+	// generate invalid CSS (numbers serialized as text tokens) and only exist
+	// for test assertions, never for production styles.
+	include: [
+		"app/**/*.{ts,tsx}",
+		"!app/**/*.unit.test.{ts,tsx}",
+		"!app/**/*.test.{ts,tsx}",
+	],
 	outdir: "design-system",
 	jsxFramework: "react",
 	theme: {
