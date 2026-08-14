@@ -170,10 +170,10 @@ Run the local server (`scripts/serve.ts`, default `:8787`). The server is a
      `GET /api/<table>` + `GET /api/<table>/:id` automatically via
      `Model.serve(app, client)`.
 - **Honox UI — at `/` (when built)**: after `bun run src/main.ts ui:build`,
-  the built `dist/ui/index.js` is mounted at the root, so `/` renders the
+  the built `dist/index.js` is mounted at the root, so `/` renders the
   UI (SSR + islands + `/static/*` assets).
 
-If `dist/ui/index.js` does not exist (UI not built), the JSON API is ALSO
+If `dist/index.js` does not exist (UI not built), the JSON API is ALSO
 mounted at `/` for back-compatibility — so `/boards` works, but `/api/boards`
 is the canonical route.
 
@@ -184,10 +184,12 @@ like the app). Responses are `{ ok: true, data }` / `{ ok: false, data: { error 
 
 ### `ui:build`
 
-Build the Honox UI (in `/app`) into `dist/ui/index.js` via the dedicated
-Vite config (`vite.ui.config.ts`): honox routes/islands + the `ttsc` typia
-transform + Panda CSS (`panda.config.ts` → `styled-system/`), emitted with
-`@hono/vite-build/bun`. Run this **before** `serve` to get the UI at `/`.
+Build the Honox UI (in `/app`) into `dist/index.js` via the dedicated
+Vite config (`vite.ui.config.ts`): a two-phase build — client bundle
+(`dist/static/*` + `dist/.vite/manifest.json`) then SSR app (`dist/index.js`),
+wiring honox routes/islands + the `ttsc` typia transform + Panda CSS
+(`panda.config.ts` → `styled-system/`), emitted with `@hono/vite-build/bun`.
+Run this **before** `serve` to get the UI at `/`.
 
 ### `ui:dev`
 
