@@ -1,6 +1,7 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
-import { Anchor, Badge, Button, Card, Heading, Layout, Stack, Text } from '../../components/ui'
+import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
+import { Header as LayoutHeader } from '../../components/ui/layout'
 import SearchBox from '../../islands/search'
 
 /**
@@ -87,9 +88,10 @@ export default createRoute(async (c) => {
 		total = 0
 	}
 
+	const lastBoard = boards[boards.length - 1]
 	const nextCursor =
-		boards.length === PAGE_SIZE
-			? `${boards[boards.length - 1].thread_count}:${boards[boards.length - 1].id}`
+		boards.length === PAGE_SIZE && lastBoard
+			? `${lastBoard.thread_count}:${lastBoard.id}`
 			: null
 
 	return c.render(
@@ -120,7 +122,6 @@ export default createRoute(async (c) => {
 						{boards.map((b) => (
 							<Anchor key={b.id} href={`/boards/${b.id}`} variant="plain">
 								<Card
-									clickable
 									class={css({
 										p: 5,
 										width: 'full',
@@ -142,7 +143,7 @@ export default createRoute(async (c) => {
 										{b.description}
 									</Text>
 									<Stack direction="horizontal" gap="2" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
-										<Badge colorPalette="orange" size="sm" variant="subtle">
+										<Badge colorPalette="orange" variant="subtle">
 											/{b.slug}
 										</Badge>
 									</Stack>
@@ -204,7 +205,7 @@ export default createRoute(async (c) => {
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
 	return (
-		<Layout.Header sticky>
+		<LayoutHeader sticky>
 			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
 				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
 					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
@@ -227,6 +228,6 @@ function Nav() {
 					</Button>
 				</Stack>
 			</Stack>
-		</Layout.Header>
+		</LayoutHeader>
 	)
 }
