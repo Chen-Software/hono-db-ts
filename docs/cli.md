@@ -148,12 +148,32 @@ bun run src/main.ts query threads '{"boardId":"<id>","pinned":"true"}'
 bun run src/main.ts query posts '{"published":"true"}' --sort updated_at:desc --limit 3
 ```
 
-### `serve [port]`
+### `serve [port] [mode]`
 
 Run the local server (`scripts/serve.ts`, default `:8787`). The server is a
 **Hono app** (`import { Hono } from "hono"`); its handler is fed to
 `Bun.serve({ fetch: app.fetch })`, so the same `app` can be reused in-process
 (the shape `LocalTransport` in `src/services/transport.ts` consumes).
+
+**Port**: `PORT` env var → `--port=` / positional `[port]` arg → `8787`.
+
+**Mode** (`--mode=` or positional `[mode]`, default `ui+api`):
+
+| mode    | mounts                                        | requires UI build |
+|---------|-----------------------------------------------|-------------------|
+| `ui+api`| (default) UI at `/` + API at `/api`           | yes (errors)      |
+| `auto`  | UI at `/` + API at `/api`; else API at `/` AND `/api` | no (falls back)   |
+| `api`   | JSON API at `/api` AND `/` (back-compat)      | no                |
+| `ui`    | UI only at `/`                                | yes (errors)      |
+
+Examples:
+
+```bash
+bun run src/main.ts serve                       # ui+api (default): UI + API
+PORT=3001 bun run src/main.ts serve             # ui+api on :3001
+bun run src/main.ts serve --mode auto           # lenient: falls back to API-only
+bun run src/main.ts serve api                   # JSON API only
+```
 
 #### Routes
 
