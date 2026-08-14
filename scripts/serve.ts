@@ -113,7 +113,8 @@ if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
 	// The auth instance is wired to the same SQLite database via the drizzle
 	// adapter (the auth tables are in drizzle/*_auth_sqlite_create.sql).
-	mountAuth = await mountBetterAuth(client);
+	const localAuth = await mountBetterAuth(client);
+	mountAuth = (app) => localAuth.mount(app);
 }
 if (mountAuth) mountAuth(app);
 

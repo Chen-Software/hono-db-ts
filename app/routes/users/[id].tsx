@@ -69,11 +69,19 @@ function timeAgo(iso: string): string {
 export default createRoute(async (c) => {
 	const id = c.req.param('id')
 
-	// Authenticated-only: if the session cookie is missing/invalid, send the
-	// visitor to sign-in (remember where they were so we can return them).
-	const session = await getSession(c)
-	if (!session?.user) {
-		return c.redirect(`/sign-in?next=/users/${id}`)
+	// Authenticated-only gate. `__BETTER_AUTH_ENABLED__` is the Vite build-time
+	// flag (see vite.ui.config.ts / vite.ui.cf.config.ts): with
+	// `BETTER_AUTH_ENABLED=false`, this `if` inlines to `if (false)`, so the
+	// guard — and the `getSession` import / better-auth it pulls — is
+	// dead-code-eliminated and the page stays public. Otherwise, a missing or
+	// invalid session cookie sends the visitor to sign-in (remembering where
+	// they were). To restrict to the OWNER only, add:
+	//   if (session.user.id !== id) return c.json({ error: 'forbidden' }, 403)
+	if (__BETTER_AUTH_ENABLED__) {
+		const session = await getSession(c)
+		if (!session?.user) {
+			return c.redirect(`/sign-in?next=/users/${id}`)
+		}
 	}
 
 	let user: UserRow | null = null

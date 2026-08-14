@@ -54,11 +54,14 @@ if (sql) {
 // ---------------------------------------------------------------------------
 import { mountBetterAuth } from '../src/auth/mount'
 let authMount: (server: import('hono').Hono<import('hono').Env>) => void = () => {}
+let authInstance: ReturnType<typeof import('../src/auth').createAuth> | null = null
 // `__BETTER_AUTH_ENABLED__` is a Vite `define` literal (Bun macros are not
 // understood by this UI build), so `if (false)` drops the Better Auth mount —
 // and its better-auth + drizzle-adapter imports — from the bundle.
 if (__BETTER_AUTH_ENABLED__ && sql) {
-	authMount = await mountBetterAuth(sql)
+	const localAuth = await mountBetterAuth(sql)
+	authMount = localAuth.mount
+	authInstance = localAuth.instance
 }
 
 const app = createApp({
@@ -69,9 +72,12 @@ const app = createApp({
 		// Mount the JSON query API under /api (the honox UI routes render at /).
 		if (sql) server.route('/api', buildQueryApp(sql))
 
-		// Provide the SQL client to route handlers via c.env.sql.
+		// Provide the SQL client to route handlers via c.env.sql, and the auth
+		// instance via c.env.auth so SSR routes can check sessions (see
+		// src/auth/context.ts — which never imports bun:sql directly).
 		server.use('*', async (c, next) => {
-			c.env.sql = sql
+			if (sql) c.env.sql = sql
+			;(c.env as { auth?: unknown }).auth = authInstance
 			await next()
 		})
 	},

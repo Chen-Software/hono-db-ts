@@ -49,7 +49,8 @@ export const backend: WorkerBackend = {
 		// the sqlite worker too.
 		if (betterAuthEnabled()) {
 			// Better Auth first — `/api/auth/*` must win over the query app's `/api`.
-			(await mountBetterAuth(client))(app);
+			const localAuth = await mountBetterAuth(client);
+			localAuth.mount(app);
 		}
 
 		app.route("/api", buildQueryApp(client));
