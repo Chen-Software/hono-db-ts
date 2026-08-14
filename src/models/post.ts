@@ -5,7 +5,7 @@ import { Clonable } from "@/capacities/clonable";
 import { Validatable } from "@/capacities/validatable";
 import { isProd } from "@/macros/envs" with { type: "macro" };
 import { Comparable } from "../capacities/comparable";
-import { Hashable } from "../capacities/hashable";
+import { Hashable, hashContent } from "../capacities/hashable";
 import {
 	Identifiable,
 	type IdentifiableSchema,
@@ -109,7 +109,6 @@ const PostSchemaModule = {
 	assertClone: typia.plain.createAssertClone<PostData>(),
 	isClone: typia.plain.createIsClone<PostData>(),
 	validateClone: typia.plain.createValidateClone<PostData>(),
-	prune: typia.plain.createPrune<PostData>(),
 	// validators
 	is: typia.createIs<PostData>(),
 	assert: typia.createAssert<PostData>(),
@@ -143,15 +142,19 @@ const PostSchemaModule = {
 	// typia's `createRandom<PostData>` honours the schema SHAPE but not the
 	// format tags — it emits non-UUID `id`s, invalid `authorId`s, and a nested
 	// `author` whose `uuid`/`email` fields fail classify. So `Post.random()` is
-	// wrapped to stamp the format-bound fields with real values; the contentHash
-	// is stamped by the `Hashable` capacity at construction time.
+	// wrapped to stamp the format-bound fields with real values. `contentHash`
+	// must ALSO be stamped here (not just by the `Hashable` capacity): the base
+	// constructor `classify`s the payload BEFORE the Hashable mixin constructor
+	// re-stamps it, so a typia-random hash would fail classify.
 	random: () => {
 		const raw = typia.createRandom<PostData>()();
+		const body = raw.body ?? "";
 		return {
 			...raw,
 			id: randomUUID(),
 			authorId: randomUUID(),
 			author: raw.author ? { ...raw.author, id: randomUUID() } : undefined,
+			contentHash: hashContent(body),
 		} as PostData;
 	},
 	// http ingest slice (typia.http.* — pure decode, no network). Lets handlers
