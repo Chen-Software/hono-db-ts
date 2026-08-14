@@ -40,7 +40,7 @@ export default defineConfig({
       //
       // staticRoot = dist so the generated `serveStatic({ root })` for the
       // `/static/*` route resolves `/static/x` → `dist/static/x` (the client
-      // bundle). Vite also copies app/public → dist, so `/favicon.ico` works.
+      // bundle). Vite also copies public → dist, so `/favicon.ico` works.
       staticRoot: resolve(process.cwd(), 'dist'),
     }),
   ],
@@ -48,6 +48,9 @@ export default defineConfig({
     outDir: resolve(process.cwd(), 'dist'),
     emptyOutDir: false,
   },
+  // `public` holds the UI's static files (favicon.ico, etc.); Vite copies
+  // it into the build outDir so `/favicon.ico` is served by `serveStatic`.
+  publicDir: resolve(process.cwd(), 'public'),
   server: {
     port: 8787,
   },
