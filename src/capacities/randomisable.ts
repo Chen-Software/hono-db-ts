@@ -65,13 +65,20 @@ function Randomisable<TBase extends CapacityComposer>(Base: TBase): TBase {
 		extends Base
 		implements RandomisableSchema
 	{
-		static random = () => {
+		static random = function (this: any) {
 			// Draw the raw typia payload, then construct a validated instance so
 			// ALL construction-time capacities apply — `Validatable` (assert),
 			// `Immutable` (freeze → the instance is frozen), `Versionable`, etc.
 			// Callers that need the raw shape unwrap with `.toValueObject()`.
-			const data = Base.prototype.schemaModule.random();
-			return new RandomisableClass(data);
+			//
+			// NOTE: construct via `this` (the FINAL composed class) rather than
+			// the `RandomisableClass` closure. `Randomisable` is composed BEFORE
+			// e.g. `Immutable` in a model's capacity array, so the closure class
+			// does NOT wear the outer capacities; `new this(...)` routes through
+			// the fully-composed class so freeze / validation actually apply.
+			const Ctor = (this as any) ?? RandomisableClass;
+			const data = Ctor.prototype.schemaModule.random();
+			return new Ctor(data);
 		};
 	};
 
