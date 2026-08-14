@@ -372,7 +372,7 @@ export default createRoute(async (c) => {
 									{boards.map((b) => (
 										<a
 											key={b.id}
-											href={`/api/boards/${b.id}`}
+											href={`/boards/${b.id}`}
 											class={css({
 												p: 5,
 												rounded: 'xl',
