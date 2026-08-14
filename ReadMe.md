@@ -32,6 +32,11 @@ bun run src/main.ts serve                # JSON API at http://localhost:8787/api
 bun run src/main.ts ui:build             # build the UI -> dist/index.js
 bun run src/main.ts serve                # UI at / , JSON API at /api, on :8787
 #   dev server with HMR instead:  bun run src/main.ts ui:dev
+
+# 6. (Optional) Deploy UI + API to Cloudflare Workers
+bun run src/main.ts ui:cf-build          # -> dist/ui-cf/index.js + dist/static/*
+NODE_ENV=production DATABASE_TYPE=d1 bun run src/main.ts wrangler-config
+wrangler deploy                           # worker + static assets
 ```
 
 Set `DATABASE_URL` (e.g. `file:./dev.db`) in the environment or `.env`.
@@ -73,9 +78,14 @@ scripts/
   db-migrate.ts   db:migrate    — apply migration SQL via drizzle-orm/bun-sql
   seed.ts         db:seed       — BBS dataset via Randomisable.random()
   serve.ts        serve         — local server: Honox UI at / + JSON API at /api
-  ui-build.ts     ui:build      — build the Honox UI -> dist/index.js
+  ui-build.ts     ui:build      — build the Honox UI -> dist/index.js (+ static)
+  ui-cf-build.ts  ui:cf-build   — build the UI into a CF Worker -> dist/ui-cf/index.js
 app/              Honox UI (routes/, islands/, client.ts, style.css — Panda CSS)
+  server.ts       local UI server entry (bun:sql, mounts /api)
+  server.cf.ts    CF Worker UI entry (D1, mounts /api)
 panda.config.ts   Panda CSS config (tokens + utilities -> styled-system/)
-vite.ui.config.ts Vite config for building the UI (@hono/vite-build/bun)
+vite.ui.config.ts     Vite config for the local UI build (@hono/vite-build/bun)
+vite.ui.cf.config.ts  Vite config for the CF Worker UI build (@hono/vite-build/cloudflare-workers)
+wrangler.config.ts    generates wrangler.jsonc (main + assets + D1 binding)
 docs/             data-models-storage + CLI reference
 ```

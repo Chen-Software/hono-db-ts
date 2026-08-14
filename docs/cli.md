@@ -191,6 +191,27 @@ wiring honox routes/islands + the `ttsc` typia transform + Panda CSS
 (`panda.config.ts` → `styled-system/`), emitted with `@hono/vite-build/bun`.
 Run this **before** `serve` to get the UI at `/`.
 
+### `ui:cf-build`
+
+Build the Honox UI into a **Cloudflare Worker entry** via
+`vite.ui.cf.config.ts`: same two-phase pipeline (client assets → `dist/static/*`
++ `dist/.vite/manifest.json`, then SSR) but the entry is `app/server.cf.ts`
+(D1-backed, mounts the JSON query app under `/api`) and the adapter is
+`@hono/vite-build/cloudflare-workers`, producing `dist/ui-cf/index.js`.
+
+Deployment pairing:
+
+```bash
+bun run src/main.ts ui:cf-build       # -> dist/ui-cf/index.js + dist/static/*
+NODE_ENV=production DATABASE_TYPE=d1 bun run src/main.ts wrangler-config
+wrangler deploy                        # worker + static assets
+```
+
+`wrangler.jsonc` points `main` at `dist/ui-cf/index.js` and serves the built
+client assets via Workers Static Assets (`assets.directory: dist/static`,
+`binding: ASSETS`), so `/static/*` is served by the platform while `/` (SSR
+HTML) and `/api/*` are handled by the worker.
+
 ### `ui:dev`
 
 Run the Honox UI dev server (Vite, HMR) on `:8787` with `vite.ui.config.ts`.
@@ -213,4 +234,9 @@ bun run src/main.ts serve &            # API at /api/... and /... on :8787
 # JSON API + Honox UI
 bun run src/main.ts ui:build
 bun run src/main.ts serve &            # UI at /, API at /api on :8787
+
+# Deploy UI + API to Cloudflare Workers
+bun run src/main.ts ui:cf-build
+NODE_ENV=production DATABASE_TYPE=d1 bun run src/main.ts wrangler-config
+wrangler deploy
 ```
