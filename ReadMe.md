@@ -49,6 +49,33 @@ Set `DATABASE_URL` (e.g. `file:./dev.db`) in the environment or `.env`.
 > JSON query API is at `/api/…`. Without a UI build, the JSON API is served at
 > both `/` and `/api`.
 
+## Better Auth (optional)
+
+Better Auth (email + password) is mounted at `/api/auth/*` whenever
+`BETTER_AUTH_ENABLED` is not `"false"` at build time. It follows the Hono
+reference example: a per-env factory (`src/auth/index.ts`), shared options
+(`src/auth/options.ts`), and `better-auth.config.ts` for the CLI.
+
+```bash
+# 1. Environment — see .env.development / .env.production
+#    BETTER_AUTH_URL   public base URL of the auth endpoints (defaults to the worker URL)
+#    BETTER_AUTH_SECRET >= 32 chars (prod: `wrangler secret put BETTER_AUTH_SECRET`)
+
+# 2. Schema — auth tables are emitted into drizzle/ by `db:generate`
+bun run src/main.ts db:generate        # writes <ts>_sqlite_create.sql + <ts>_auth_sqlite_create.sql
+bun run src/main.ts db:migrate
+
+# 3. (After adding Better Auth plugins) regenerate src/auth/schema.ts
+bun run better-auth:generate
+
+# 4. Use the typed client from islands
+#    import { authClient } from "@/auth/client";   // signIn / signUp / signOut / getSession
+```
+
+Opt out entirely with `BETTER_AUTH_ENABLED=false` at build time: the
+`betterAuthEnabled()` macro inlines to `false`, so the `better-auth` +
+`drizzle-adapter` bundle is dead-code-eliminated from the worker/UI builds.
+
 ## What is a "model"?
 
 A model is `defineModel` (see `src/models/base.ts`) applied to a reflected typia
