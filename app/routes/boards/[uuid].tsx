@@ -1,5 +1,7 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
+import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
+import { Header as LayoutHeader } from '../../components/ui/layout'
 import SearchBox from '../../islands/search'
 
 /**
@@ -140,23 +142,20 @@ export default createRoute(async (c) => {
 				<title>Board not found · BBS</title>
 				<Nav />
 				<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 16, textAlign: 'center' })}>
-					<h1 class={css({ fontSize: '2xl', fontWeight: 800 })}>Board not found</h1>
-					<p class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
+					<Heading class={css({ fontSize: '2xl', fontWeight: 800 })}>Board not found</Heading>
+					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No board with id <code>{uuid}</code>.
-					</p>
-					<a
-						href="/"
-						class={css({ display: 'inline-block', mt: 6, px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none' })}
-					>
+					</Text>
+					<Button as="a" href="/" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
 						Back to forum
-					</a>
+					</Button>
 				</main>
 			</div>,
 		)
 	}
 
-	const nextCursor =
-		threads.length === PAGE_SIZE ? threads[threads.length - 1].updated_at : null
+	const lastThread = threads[threads.length - 1]
+	const nextCursor = threads.length === PAGE_SIZE && lastThread ? lastThread.updated_at : null
 
 	return c.render(
 		<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' })}>
@@ -165,51 +164,52 @@ export default createRoute(async (c) => {
 
 			<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 10 })}>
 				{/* Breadcrumb */}
-				<nav class={css({ display: 'flex', alignItems: 'center', gap: 2, fontSize: 'sm', color: 'muted', mb: 6 })}>
-					<a href="/" class={css({ color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}>
+				<Stack direction="horizontal" align="center" gap="2" class={css({ fontSize: 'sm', color: 'muted', mb: 6 })}>
+					<Anchor href="/" variant="plain" class={css({ color: 'muted' })}>
 						Home
-					</a>
+					</Anchor>
 					<span aria-hidden>›</span>
-					<span class={css({ color: 'ink', fontWeight: 500 })}>{board.name}</span>
-				</nav>
+					<Text class={css({ color: 'ink', fontWeight: 500 })}>{board.name}</Text>
+				</Stack>
 
 				<div class={css({ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 })}>
 					{/* ---- main column ---- */}
 					<div>
 						{/* Board header */}
-						<article class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 6, mb: 8 })}>
-							<div class={css({ display: 'flex', alignItems: 'center', gap: 3 })}>
+						<Card class={css({ p: 6, mb: 8, width: 'full' })}>
+							<Stack direction="horizontal" align="center" gap="3">
 								<span class={css({ w: 3, h: 3, rounded: 'full', bg: 'accent' })} />
-								<span class={css({ px: 2, py: 0.5, rounded: 'full', bg: '#fff7ed', color: '#c2410c', fontSize: 'xs', fontWeight: 500 })}>
+								<Badge colorPalette="orange" variant="subtle">
 									/{board.slug}
-								</span>
-							</div>
-							<h1 class={css({ mt: 3, fontSize: '2xl', fontWeight: 800, letterSpacing: '-0.01em' })}>
+								</Badge>
+							</Stack>
+							<Heading class={css({ mt: 3, fontSize: '2xl', fontWeight: 800, letterSpacing: '-0.01em' })}>
 								{board.name}
-							</h1>
-							<p class={css({ mt: 2, maxWidth: 'xl', fontSize: 'sm', color: 'muted', lineHeight: 1.6 })}>
+							</Heading>
+							<Text class={css({ mt: 2, maxWidth: 'xl', fontSize: 'sm', color: 'muted', lineHeight: 1.6 })}>
 								{board.description}
-							</p>
-							<div class={css({ mt: 4, display: 'flex', alignItems: 'center', gap: 5, fontSize: 'xs', color: 'faint' })}>
-								<span class={css({ display: 'flex', alignItems: 'center', gap: 1 })}>
+							</Text>
+							<Stack direction="horizontal" align="center" gap="5" class={css({ mt: 4, fontSize: 'xs', color: 'faint' })}>
+								<Text as="span" class={css({ display: 'flex', alignItems: 'center', gap: 1 })}>
 									<span aria-hidden>👤</span>
 									Moderator: {board.moderator_name ?? 'unknown'}
-								</span>
-								<span>{board.thread_count} threads</span>
-								<span>Created {timeAgo(board.created_at)}</span>
-								<a
+								</Text>
+								<Text as="span">{board.thread_count} threads</Text>
+								<Text as="span">Created {timeAgo(board.created_at)}</Text>
+								<Anchor
 									href={`/boards/${board.id}/edit`}
-									class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted', textDecoration: 'none', _hover: { color: 'accent' } })}
+									variant="plain"
+									class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
 								>
 									<span aria-hidden>✏️</span>
 									Edit
-								</a>
-							</div>
-						</article>
+								</Anchor>
+							</Stack>
+						</Card>
 
 						{/* New thread form */}
 						<section class={css({ mb: 8 })}>
-							<h2 class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>New thread</h2>
+							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>New thread</Heading>
 							<form
 								method="post"
 								action={`/boards/${board.id}`}
@@ -237,104 +237,103 @@ export default createRoute(async (c) => {
 											</option>
 										))}
 									</select>
-									<button
-										type="submit"
-										class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, border: 'none', cursor: 'pointer', _hover: { bg: '#ea580c' } })}
-									>
+									<Button type="submit" colorPalette="orange" size="sm">
 										Post thread
-									</button>
+									</Button>
 								</div>
 							</form>
 						</section>
 
 						{/* Threads in this board */}
 						<section>
-							<div class={css({ mb: 4, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' })}>
-								<h2 class={css({ fontSize: 'lg', fontWeight: 700 })}>Threads</h2>
-								<span class={css({ fontSize: 'sm', color: 'faint' })}>{total} total</span>
-							</div>
+							<Stack direction="horizontal" justify="between" align="baseline" class={css({ mb: 4 })}>
+								<Heading class={css({ fontSize: 'lg', fontWeight: 700 })}>Threads</Heading>
+								<Text as="span" class={css({ fontSize: 'sm', color: 'faint' })}>{total} total</Text>
+							</Stack>
 
 							{threads.length > 0 ? (
 								<div class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', overflow: 'hidden' })}>
 									{threads.map((t, i) => (
-										<a
+										<Anchor
 											key={t.id}
 											href={`/threads/${t.id}`}
+											variant="plain"
 											class={css({
 												display: 'flex',
 												alignItems: 'center',
 												gap: 4,
 												px: 5,
 												py: 4,
-												textDecoration: 'none',
 												color: 'ink',
 												borderTop: i === 0 ? 'none' : '1px solid token(colors.border)',
 												_hover: { bg: '#fafafa' },
 											})}
 										>
 											<div class={css({ flex: 1, minWidth: 0 })}>
-												<div class={css({ display: 'flex', alignItems: 'center', gap: 2 })}>
+												<Stack direction="horizontal" align="center" gap="2">
 													{t.pinned === 1 && (
-														<span class={css({ px: 1.5, py: 0.5, rounded: 'full', bg: '#fef3c7', color: '#92400e', fontSize: 'xs', fontWeight: 600 })}>
+														<Badge colorPalette="amber" variant="subtle">
 															Pin
-														</span>
+														</Badge>
 													)}
 													{t.locked === 1 && (
-														<span class={css({ px: 1.5, py: 0.5, rounded: 'full', bg: '#fee2e2', color: '#991b1b', fontSize: 'xs', fontWeight: 600 })}>
+														<Badge colorPalette="red" variant="subtle">
 															Locked
-														</span>
+														</Badge>
 													)}
-													<span class={css({ fontWeight: 600, fontSize: 'sm', lineClamp: 1 })}>{t.title}</span>
-												</div>
-												<div class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
+													<Text class={css({ fontWeight: 600, fontSize: 'sm', lineClamp: 1 })}>{t.title}</Text>
+												</Stack>
+												<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
 													{t.author_name ?? 'unknown'} · {timeAgo(t.updated_at)}
-												</div>
+												</Text>
 											</div>
-											<div class={css({ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 'sm', color: 'muted', flexShrink: 0 })}>
+											<Text class={css({ display: 'flex', alignItems: 'center', gap: 1.5, fontSize: 'sm', color: 'muted', flexShrink: 0 })}>
 												<span aria-hidden>💬</span>
 												{t.reply_count}
-											</div>
-										</a>
+											</Text>
+										</Anchor>
 									))}
 								</div>
 							) : (
-								<p class={css({ py: 10, textAlign: 'center', fontSize: 'sm', color: 'faint' })}>
+								<Text class={css({ py: 10, textAlign: 'center', fontSize: 'sm', color: 'faint' })}>
 									No threads in this board yet.
-								</p>
+								</Text>
 							)}
 
 							{/* Pagination */}
-							<div class={css({ mt: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' })}>
+							<Stack direction="horizontal" justify="between" align="center" class={css({ mt: 6 })}>
 								{cursor ? (
-									<a href={`/boards/${board.id}`} class={css({ fontSize: 'sm', color: 'accent', textDecoration: 'none' })}>
+									<Anchor href={`/boards/${board.id}`} variant="plain" class={css({ fontSize: 'sm', color: 'accent' })}>
 										← Newer
-									</a>
+									</Anchor>
 								) : (
 									<span />
 								)}
 								{nextCursor && (
-									<a
+									<Anchor
 										href={`/boards/${board.id}?cursor=${encodeURIComponent(nextCursor)}`}
-										class={css({ fontSize: 'sm', color: 'accent', textDecoration: 'none' })}
+										variant="plain"
+										class={css({ fontSize: 'sm', color: 'accent' })}
 									>
 										Older →
-									</a>
+									</Anchor>
 								)}
-							</div>
+							</Stack>
 						</section>
 					</div>
 
 					{/* ---- sidebar ---- */}
 					<aside class={css({ spaceY: 8 })}>
 						<section>
-							<h2 class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>Hot threads</h2>
+							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>Hot threads</Heading>
 							{hot.length > 0 ? (
 								<div class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
 									{hot.map((t, i) => (
-										<a
+										<Anchor
 											key={t.id}
 											href={`/threads/${t.id}`}
-											class={css({ display: 'flex', gap: 3, alignItems: 'flex-start', px: 3, py: 3, rounded: 'lg', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
+											variant="plain"
+											class={css({ display: 'flex', gap: 3, alignItems: 'flex-start', px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' } })}
 										>
 											<span
 												class={css({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', w: 5, h: 5, rounded: 'md', fontSize: 'xs', fontWeight: 700, bg: i < 3 ? 'accent' : '#f3f4f6', color: i < 3 ? 'white' : 'muted', flexShrink: 0 })}
@@ -342,14 +341,14 @@ export default createRoute(async (c) => {
 												{i + 1}
 											</span>
 											<div class={css({ minWidth: 0 })}>
-												<div class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 2, color: 'ink' })}>{t.title}</div>
-												<div class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>{t.reply_count} replies</div>
+												<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 2, color: 'ink' })}>{t.title}</Text>
+												<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>{t.reply_count} replies</Text>
 											</div>
-										</a>
+										</Anchor>
 									))}
 								</div>
 							) : (
-								<p class={css({ fontSize: 'sm', color: 'faint' })}>No hot threads yet.</p>
+								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No hot threads yet.</Text>
 							)}
 						</section>
 					</aside>
@@ -357,9 +356,11 @@ export default createRoute(async (c) => {
 			</main>
 
 			<footer class={css({ mt: 4, borderTop: '1px solid token(colors.border)', bg: 'white', px: 6, py: 8 })}>
-				<div class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
-					<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
-				</div>
+				<Stack direction="horizontal" class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
+					<Text>
+						<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
+					</Text>
+				</Stack>
 			</footer>
 		</div>,
 	)
@@ -368,47 +369,30 @@ export default createRoute(async (c) => {
 /** Shared top navigation — mirrors the home page's header. */
 function Nav() {
 	return (
-		<header
-			class={css({
-				position: 'sticky',
-				top: 0,
-				zIndex: 10,
-				display: 'flex',
-				alignItems: 'center',
-				gap: 6,
-				px: 6,
-				h: 16,
-				bg: 'white',
-				borderBottom: '1px solid token(colors.border)',
-			})}
-		>
-			<a
-				href="/"
-				class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', textDecoration: 'none', color: 'ink' })}
-			>
-				<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
-				BBS Forum
-			</a>
+		<LayoutHeader sticky>
+			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
+				<Anchor href="/" variant="plain" class={css({ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, fontSize: 'lg', color: 'ink' })}>
+					<span class={css({ display: 'inline-block', w: 3, h: 3, rounded: 'sm', bg: 'accent' })} />
+					BBS Forum
+				</Anchor>
 
-			<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
-				<a href="/#boards" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Boards
-				</a>
-				<a href="/threads" class={css({ fontSize: 'sm', color: 'muted', textDecoration: 'none', _hover: { color: 'ink' } })}>
-					Threads
-				</a>
-			</nav>
+				<nav class={css({ display: 'flex', gap: 4, ml: 4 })}>
+					<Anchor href="/#boards" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Boards
+					</Anchor>
+					<Anchor href="/threads" variant="plain" class={css({ fontSize: 'sm', color: 'muted' })}>
+						Threads
+					</Anchor>
+				</nav>
 
-			<div class={css({ display: 'flex', alignItems: 'center', gap: 3, ml: 'auto' })}>
-				<SearchBox />
-				<a
-					href="/#new-thread"
-					class={css({ px: 4, py: 2, rounded: 'md', bg: 'accent', color: 'white', fontSize: 'sm', fontWeight: 600, textDecoration: 'none', _hover: { bg: '#ea580c' } })}
-				>
-					New thread
-				</a>
-			</div>
-		</header>
+				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: 'auto' })}>
+					<SearchBox />
+					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+						New thread
+					</Button>
+				</Stack>
+			</Stack>
+		</LayoutHeader>
 	)
 }
 
@@ -421,10 +405,10 @@ export const POST = createRoute(async (c) => {
 	if (!sql) return c.redirect(`/boards/${uuid}`)
 
 	const body = await c.req.parseBody()
-	if (body.action === 'create-thread') {
-		const title = typeof body.title === 'string' ? body.title.trim() : ''
-		const boardId = typeof body.boardId === 'string' ? body.boardId : uuid
-		const authorId = typeof body.authorId === 'string' ? body.authorId : ''
+	if (body['action'] === 'create-thread') {
+		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+		const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : uuid
+		const authorId = typeof body['authorId'] === 'string' ? body['authorId'] : ''
 
 		if (title && boardId && authorId) {
 			try {
