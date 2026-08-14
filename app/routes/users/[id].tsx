@@ -4,14 +4,19 @@ import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../compone
 import { Header as LayoutHeader } from '../../components/ui/layout'
 import SearchBox from '../../islands/search'
 import ThemeSwitcher from '../../islands/theme-switcher'
+import { getSession } from '../../../src/auth/context'
 
 /**
  * User profile page — `/users/:id`.
  *
- * Pure SSR. Shows a member's public profile (name, email, role, age, joined)
- * plus their recent activity split into three sections: the threads they
- * started, the posts they authored, and the replies they left. Every activity
- * row links back to the relevant resource.
+ * Authenticated-only (SSR). Shows the signed-in member's public profile (name,
+ * email, role, age, joined) plus their recent activity split into three
+ * sections: the threads they started, the posts they authored, and the replies
+ * they left. Every activity row links back to the relevant resource.
+ *
+ * The route checks the Better Auth session cookie first (`getSession`); if no
+ * valid session is found it redirects to `/sign-in` so unauthenticated
+ * visitors can log in before viewing the profile.
  */
 
 type UserRow = {
@@ -63,6 +68,13 @@ function timeAgo(iso: string): string {
 
 export default createRoute(async (c) => {
 	const id = c.req.param('id')
+
+	// Authenticated-only: if the session cookie is missing/invalid, send the
+	// visitor to sign-in (remember where they were so we can return them).
+	const session = await getSession(c)
+	if (!session?.user) {
+		return c.redirect(`/sign-in?next=/users/${id}`)
+	}
 
 	let user: UserRow | null = null
 	let threads: UserThread[] = []
