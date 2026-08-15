@@ -391,8 +391,16 @@ export function Servable<TBase extends CapacityComposer>(
 		if (col.isId) idCol = col.name;
 	}
 
-	// Matcher table from Queriable's inference — the `?param=` semantics.
-	const fieldPlans = deriveFieldPlans(schema, { fields: options.fields });
+	// Matcher table for `?param=` semantics. Prefer the plans `Queriable`
+	// already lifted onto the class (single source of truth for field aliases
+	// like `?mail=`), so a `fields` override declared once on `Queriable` is
+	// automatically honored here. Fall back to deriving from `options.fields`
+	// only when `Queriable` was NOT composed (Servable-without-Queriable).
+	const inheritedPlans = (Base as any).fieldPlans as FieldPlan[] | undefined;
+	const fieldPlans =
+		inheritedPlans && inheritedPlans.length > 0
+			? inheritedPlans
+			: deriveFieldPlans(schema, { fields: options.fields });
 
 	// List sort: `updated_at` desc, falling back to `created_at` / the PK so a
 	// model without a natural sort key (e.g. `User`) still works.

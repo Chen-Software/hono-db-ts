@@ -190,15 +190,15 @@ const UserModel = defineModel<UserSchema>({
 			options: { fields: { email: { as: "mail" } } },
 		},
 		// Servable: generates the SQL-backed Hono read routes `GET /users` +
-		// `GET /users/:id` (`User.serve(app, client)`), reusing the SAME
-		// `fields` alias override so `?mail=` filters over SQL exactly as it
-		// does in-memory. Sort defaults to `created_at` (User has no
+		// `GET /users/:id` (`User.serve(app, client)`). It REUSES the field
+		// plans `Queriable` lifted above, so the `?mail=` alias (and any other
+		// `fields` override) is honored over SQL automatically — no need to
+		// repeat it here. Sort defaults to `created_at` (User has no
 		// `updated_at`). Requires `SqlSerialisable` to be composed first.
 		{
 			capacity: Servable,
 			options: {
 				sort: { field: "created_at", dir: "desc" },
-				fields: { email: { as: "mail" } },
 			},
 		},
 		// Meterable: opts `User`'s repository operations into metrics. Every

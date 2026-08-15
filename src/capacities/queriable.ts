@@ -176,7 +176,7 @@ export const Queriable = <T extends object>(
 		options,
 	);
 
-	const QueriableClass = class QueriableClass extends Base {
+		const QueriableClass = class QueriableClass extends Base {
 		/** Apply the derived query matchers to `items`. */
 		static filter<I extends T>(
 			items: I[],
@@ -218,6 +218,14 @@ export const Queriable = <T extends object>(
 				: matched;
 		}
 	};
+
+	// Lift the derived plans as a static so sibling capacities (notably
+	// `Servable`) can reuse them as the SINGLE SOURCE OF TRUTH for `?param=`
+	// semantics — an alias declared once on `Queriable` (e.g. `email` as
+	// `?mail=`) is then automatically honored over SQL too, with no duplicate
+	// `fields` override on `Servable`.
+	(QueriableClass as unknown as { fieldPlans: FieldPlan[] }).fieldPlans =
+		fieldPlans;
 
 	return QueriableClass;
 };
