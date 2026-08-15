@@ -10,7 +10,7 @@
 
 `Validatable` is the capacity that makes the *other* capacities' "schema-safe"
 promises real: `Identifiable`'s `uuid` format check, `JsonSerialisable`'s strict
-`fromJSON`, `Clonable`'s default `assertClone`, `Comparable`'s "validated" `equals`
+`fromJSON`, [`Clonable`](./capacity-clonable.md)'s default `assertClone`, `Comparable`'s "validated" `equals`
 — all route through validators this capacity binds. Without it, `assertClassify`
 silently degrades to the plain unvalidated `classify`.
 
@@ -229,7 +229,7 @@ const UserModel = defineModel<UserSchema>({
 |---|---|
 | `SchemaModule` (`capacity-schema-module.md`) | the **source** — `Validatable` binds its `validate`/`assert`/`classify`/`*-equals` keys. |
 | `JsonSerialisable` | `fromJSON` uses the strict `assertParse` *when `Validatable` is also declared* (else lenient `JSON.parse`) — same `ctx.has("Validatable")` idiom as `Clonable`/`Comparable`. |
-| `Clonable` | defaults to `assertClone` (**validated**) when `Validatable` is present; opt out with `{ clone: "clone" }`. |
+| [`Clonable`](./capacity-clonable.md) | defaults to `assertClone` (**validated**) when `Validatable` is present; opt out with `{ clone: "clone" }`. |
 | `Comparable` | `equals` defaults to the **validated** mode when `Validatable` is present (rejects invalid operands). |
 | `Identifiable` | format (`uuid`) enforcement happens *through* `Validatable`'s assert (`Post.is({id:"not-a-uuid"}) === false`). |
 | `Immutable` | `Validatable` registers an `onConstruct`/`onUpdate` hook; neither capacity owns the constructor — they compose as middleware. |

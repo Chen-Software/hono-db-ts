@@ -8,7 +8,7 @@
 > option** that [`Persistable`](./capacity-persistable.md) (storage) reuses.
 >
 > **Distinctive trait:** unlike `JsonSerialisable`, `Immutable`, and
-> `Triggerable` (which each return a *new subclass*), `ProtobufEncodable`
+> [`Triggerable`](./capacity-triggerable.md) (which each return a *new subclass*), `ProtobufEncodable`
 > **mutates `Base` in place and returns the same constructor** — a deliberate
 > choice that lets it decorate a standalone class without forcing it into a
 > `class X extends Mixin(...)` chain.
@@ -86,7 +86,7 @@ const UserModel = defineModel<UserSchema>({
 - It still composes cleanly *after* other layered mixins:
   `composeCapabilities(PostBase, [JsonSerialisable, ProtobufEncodable], mod)`.
 
-By contrast, `JsonSerialisable`, `Immutable`, and `Triggerable` **do** return a
+By contrast, `JsonSerialisable`, `Immutable`, and [`Triggerable`](./capacity-triggerable.md) **do** return a
 new subclass (they need a constructor override or a paved registry). `compose.ts`
 notes this split explicitly:
 
@@ -94,7 +94,7 @@ notes this split explicitly:
 > `Triggerable`); others mutate `Base` **in place** and return the same
 > constructor (`ProtobufEncodable`).
 
-- **`Triggerable` is auto-prepended** by `composeCapabilities`, so the capacity
+- **[`Triggerable`](./capacity-triggerable.md) is auto-prepended** by `composeCapabilities`, so the capacity
   registry `ProtobufEncodable` registers into (§7) always exists. Never list
   `Triggerable` yourself.
 - **The "use them or ignore them" split** — if a model omits `ProtobufEncodable`

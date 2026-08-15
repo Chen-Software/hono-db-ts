@@ -269,6 +269,8 @@ other SQL-aware capacity is a consumer of the plan it derives.
   this capacity derives (a `string & Sha256`) is the content-address.
 - [`capacity-servable.md`](./capacity-servable.md) — the HTTP/SQL CRUD surface
   that reads the same plan for column kinds + PK and reuses `Queriable`'s filters.
+- [`capacity-validatable.md`](./capacity-validatable.md) — `Validatable`'s assert
+  enforces the column `CHECK`/format invariants (e.g. `id` `uuid`) at the data layer.
 - [`data-models-storage.md`](../docs/data-models-storage.md) — the whole
   capacity model, the BBS models, storage layers, and the "query post history"
   recipe.

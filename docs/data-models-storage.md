@@ -219,6 +219,47 @@ params and empty values are ignored, never 400. Composition order matters:
 > per-model surface; the wire shape it emits (`{ ok, data }`) matches the
 > hand-written server and `LocalTransport`.
 
+### `Aggregable` — generated SQL-backed aggregation
+
+`Servable`/`Queriable` answer "which ROWS match"; `Aggregable` answers "what the
+matching rows ADD UP to". It turns any `SqlSerialisable` model into an
+aggregateable entity — `GROUP BY` + `COUNT`/`SUM`/`AVG`/`MIN`/`MAX` — through
+the same query-param surface:
+
+```ts
+const rows = Post.aggregate(allPosts, {
+  groupBy: "authorId", count: "*", published: "true", orderBy: "count:desc",
+});
+// [{ authorId: "u1", count: 3 }, …]  — most posters first
+
+Post.serveAggregate(app, client);   // GET /posts/aggregate
+```
+
+Query params (all optional, PERMISSIVE like `Queriable` — never 400):
+
+| param | meaning |
+|---|---|
+| `groupBy` | comma-separated fields to group by (omitted → one whole-set row) |
+| `count` | `*` → `COUNT(*)` (alias `count`); `count=field` → `COUNT(field)` |
+| `sum`/`avg`/`min`/`max` | comma-separated numeric fields → `sum_age`, `avg_age`, … |
+| any other field | a `Queriable`-style row filter applied BEFORE grouping (same `buildFilters` SQL) |
+| `orderBy` | `<alias>[:asc\|desc]` (group field or aggregate alias); default: first `groupBy` field asc |
+| `limit` | cap group rows (default 25, max 100) |
+
+The answer to "which users posted the most throughout history":
+
+```
+GET /posts/aggregate?groupBy=authorId&count=*&orderBy=count:desc&limit=10
+```
+
+> Two aggregate surfaces exist for the same question: the hand-written
+> `/stats/top-posters` (rich read-model: LEFT JOINs `users` so it returns
+> `name`/`email`/`role` and includes zero-post users) and the generic
+> `GET /<table>/aggregate` (single-table, per-author `authorId` + count only).
+> The latter is the capacity; the former is the join-heavy read model — both
+> count the *current* `posts` rows (one per post id), NOT edit history (that
+> lives in the append-only version store, see §5).
+
 ---
 
 ## 3. Storage has three cooperating layers
@@ -349,3 +390,20 @@ const current = postRepo.findById(post.id);
 
 Two posts → two `getPosts()` entries; one post edited twice → one `getPosts()`
 entry (the latest) but a 3-version `historyOf(id)`.
+
+---
+
+## 7. See also — the capacity system
+
+For the *mechanism* behind the capacity list (how `composeCapabilities` folds
+capacities, `Triggerable` always-first, the `SchemaModule` slice model, marker
+vs. behavioural capacities, the type-level fold), see
+[`capacity-introduction.md`](./capacity-introduction.md) — the index to the
+per-capacity docs below:
+
+- Identity & provenance: [`Identifiable`](./capacity-identifiable.md), `Timestamped`, `Referencible`
+- Validation & schema: [`Validatable`](./capacity-validatable.md), `SchemaModule`
+- Storage & wire format: [`SqlSerialisable`](./capacity-sql-serialisable.md), [`JsonSerialisable`](./capacity-json-serialisable.md), [`ProtobufEncodable`](./capacity-protobuf-encodable.md), `Persistable`
+- Versioning & immutability: [`Versionable`](./capacity-versionable.md), [`Immutable`](./capacity-immutable.md), [`Hashable`](./capacity-hashable.md)
+- Query & serve: [`Queriable`](./capacity-queriable.md), `Siftable`, [`Servable`](./capacity-servable.md), `Aggregable`
+- Behaviour & utilities: [`Clonable`](./capacity-clonable.md), `Comparable`, `Randomisable`, `Derivable`, `Reactive`, `Meterable`

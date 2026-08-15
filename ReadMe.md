@@ -1,11 +1,7 @@
-# Data Modelling Starter
+# Hono + HonoX + Drizzle ORM + Typia Starter
 
-A TypeScript-first validation and data-modelling starter: models are composed
-from reusable **capacities** over reflected typia schemas, with a generated SQL
-projection (`SqlSerialisable`), an in-memory identity map, and a full CLI for
-building models, generating/applying migrations, seeding a BBS dataset, and
-querying — plus an optional local HTTP query server (a Hono app: hand-written
-"good queries" plus `Servable`-generated per-model routes).
+A [Hono](https://hono.dev) + [HonoX](https://github.com/honojs/honox) + [Drizzle ORM](https://orm.drizzle.team/) + [Typia](https://typia.io) (TypeScript-first validation and data modelling) starter: models are composed
+from reusable [**capacities**](docs/capacity-introduction.md).
 
 ## Quick start
 

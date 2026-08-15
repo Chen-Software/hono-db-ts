@@ -80,7 +80,7 @@ const UserModel = defineModel<UserSchema>({
 });
 ```
 
-- **`Triggerable` is auto-prepended** by `composeCapabilities`, so the capacity
+- **[`Triggerable`](./capacity-triggerable.md) is auto-prepended** by `composeCapabilities`, so the capacity
   registry `JsonSerialisable` registers into (§8) always exists. Never list
   `Triggerable` yourself.
 - **`defineModel` hands the one shared `SchemaModule`** to every capacity.
@@ -188,7 +188,7 @@ it, the capacity silently does not register.
 | `Validatable` | **Gates deserialisation strictness** (§5). Declare it to make `fromJSON`/the override ctor validate. |
 | `Persistable` | **Reuses `toJSON`/`fromJSON` as its default `"json"` wire format** — `Persistable.serialise = (i) => Ctor.toJSON(i)`, `deserialise = (b) => Ctor.fromJSON(decode(b))`. `Persistable` throws if neither `JsonSerialisable` nor `ProtobufEncodable` is composed. |
 | `Immutable` | Reconstruction-based updates still round-trip through `toJSON`/`fromJSON` when persisted/sent. |
-| `Clonable` | Same "validate only when `Validatable` is present" defaulting idiom — the two capacities share the cross-capacity `ctx.has("Validatable")` pattern. |
+| [`Clonable`](./capacity-clonable.md) | Same "validate only when `Validatable` is present" defaulting idiom — the two capacities share the cross-capacity `ctx.has("Validatable")` pattern. |
 | `Connectable` | The HTTP **request-ingest** counterpart (`typia.http.*Query`/`Headers`/`Parameter`) — decodes the *rest* of an HTTP exchange; `fromJSON` decodes the *body*. |
 
 ## 10. Runtime is typia-free
@@ -210,7 +210,8 @@ runtime path Cloudflare-safe (no transformer, no build step at execution).
 - [`capacity-persistable.md`](./capacity-persistable.md) — storage; reuses
   `toJSON`/`fromJSON` as its default `"json"` format.
 - [`capacity-validatable.md`](./capacity-validatable.md) — gates `fromJSON`
-  strictness via the cross-capacity `ctx`.
+  strictness via the cross-capacity `ctx`; the same `ctx.has("Validatable")` idiom
+  [`Clonable`](./capacity-clonable.md)/`Comparable` use to default to their validated variants.
 - [`capacity-schema-module.md`](./capacity-schema-module.md) — the fixed bundle
   of typia bindings every capacity consumes a slice of.
 - `src/capacities/json-serialisable.ts` — the mixin (`toJSON`/`fromJSON`,
