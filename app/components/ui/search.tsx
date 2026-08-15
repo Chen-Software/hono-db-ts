@@ -22,6 +22,11 @@ export function Search(props: SearchProps) {
 		locale,
 		placeholder,
 		initialQuery,
+		debounceMs,
+		maxSuggestions,
+		showCount,
+		itemLabel,
+		syncUrl,
 		size,
 		variant,
 		class: classProp,
@@ -37,6 +42,11 @@ export function Search(props: SearchProps) {
 			<SearchIsland
 				placeholder={resolvedPlaceholder}
 				initialQuery={initialQuery}
+				debounceMs={debounceMs}
+				maxSuggestions={maxSuggestions}
+				showCount={showCount}
+				itemLabel={itemLabel}
+				syncUrl={syncUrl}
 				size={size}
 				variant={variant}
 				class={classProp}
@@ -49,6 +59,11 @@ export function Search(props: SearchProps) {
 			placeholder={placeholder}
 			locale={locale}
 			initialQuery={initialQuery}
+			debounceMs={debounceMs}
+			maxSuggestions={maxSuggestions}
+			showCount={showCount}
+			itemLabel={itemLabel}
+			syncUrl={syncUrl}
 			size={size}
 			variant={variant}
 			class={classProp}

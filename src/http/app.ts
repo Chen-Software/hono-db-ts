@@ -238,11 +238,19 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 		const limit = num(c.req.query("limit"), 20);
 		const like = `%${q.replace(/%/g, "\\%")}%`;
 		const threads = await fetchAll(
-			`SELECT id, title, "boardId", "authorId", "updated_at" FROM "threads" WHERE title LIKE ? ESCAPE '\\' ORDER BY "updated_at" DESC LIMIT ?`,
+			`SELECT t.id, t.title, t."boardId", t."authorId", t."updated_at",
+			        u.name AS author_name, b.name AS board_name
+			 FROM "threads" t
+			 LEFT JOIN "users" u ON u.id = t."authorId"
+			 LEFT JOIN "boards" b ON b.id = t."boardId"
+			 WHERE t.title LIKE ? ESCAPE '\\' ORDER BY t."updated_at" DESC LIMIT ?`,
 			[like, limit],
 		);
 		const posts = await fetchAll(
-			`SELECT id, title, "authorId", "updated_at" FROM "posts" WHERE title LIKE ? ESCAPE '\\' ORDER BY "updated_at" DESC LIMIT ?`,
+			`SELECT p.id, p.title, p."authorId", p."updated_at", u.name AS author_name
+			 FROM "posts" p
+			 LEFT JOIN "users" u ON u.id = p."authorId"
+			 WHERE p.title LIKE ? ESCAPE '\\' ORDER BY p."updated_at" DESC LIMIT ?`,
 			[like, limit],
 		);
 		return json({ threads, posts });

@@ -41,7 +41,7 @@ describe("Search Component Localisation", () => {
 		expect(html).toContain("search__input"); // styles.input
 	});
 
-	test("should render interactive search as a hydrated island on the search recipe", () => {
+	test("should render interactive search as a hydrated combobox on the search recipe", () => {
 		const html = (
 			<Search
 				interactive={true}
@@ -59,5 +59,11 @@ describe("Search Component Localisation", () => {
 		expect(html).toContain("search__root--size_sm");
 		expect(html).toContain("search__root--variant_subtle");
 		expect(html).toContain("search__clearTrigger");
+		// Autocomplete semantics: combobox input wired to a listbox that is
+		// closed on initial SSR render (it only opens once a search runs).
+		expect(html).toContain('role="combobox"');
+		expect(html).toContain('aria-expanded="false"');
+		expect(html).toContain('aria-controls="search-listbox-');
+		expect(html).toContain('aria-autocomplete="list"');
 	});
 });
