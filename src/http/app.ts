@@ -11,9 +11,10 @@
  * `{ ok: false, data: { error } }`.
  *
  * Endpoints:
- *   GET /stats, /boards, /boards/:id, /boards/:id/threads, /boards/:id/hot,
- *   /threads/:id, /threads/:id/replies, /users/:id, /users/:id/threads,
- *   /users/:id/posts, /users/:id/replies, /search, /latest-posts
+ *   GET /stats, /stats/top-posters, /boards, /boards/:id, /boards/:id/threads,
+ *   /boards/:id/hot, /threads/:id, /threads/:id/replies, /users/:id,
+ *   /users/:id/threads, /users/:id/posts, /users/:id/replies, /search,
+ *   /latest-posts
  */
 
 import { Hono } from "hono";
@@ -74,6 +75,31 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 			        (SELECT COUNT(*) FROM "posts") AS posts`,
 		);
 		return json(rows[0]);
+	});
+
+	// GET /stats/top-posters?limit= — users who AUTHORED the most posts
+	// across ALL time (the "posted the most throughout history" question).
+	//
+	// This is an AGGREGATION (GROUP BY authorId, ORDER BY COUNT DESC), which
+	// the per-row generic query-param surface (Queriable/Servable field
+	// filters) deliberately CANNOT express — those emit only WHERE predicates
+	// against individual rows. Aggregation is a multi-row read-model, so it
+	// lives here alongside /stats and /boards/:id/hot (the other hand-written
+	// join queries), not in the generic Servable list route.
+	//
+	// Counts rows in the *current* `posts` table (one row per post id, the
+	// latest version) grouped by `authorId` — i.e. how many distinct posts
+	// each user CREATED. It does NOT count edits/versions (that's the separate
+	// append-only history store, where each `update()` appends a new version
+	// with the same authorId and would wrongly inflate the count). To restrict
+	// to published posts only, add `WHERE p.published = 1` before the GROUP BY.
+	app.get("/stats/top-posters", async (c) => {
+		const limit = num(c.req.query("limit"), 10);
+		const q =
+			`SELECT u.id, u.name, u.email, u.role, COUNT(p.id) AS post_count ` +
+			`FROM "users" u LEFT JOIN "posts" p ON p."authorId" = u.id ` +
+			`GROUP BY u.id ORDER BY post_count DESC LIMIT ${limit}`;
+		return json(await fetchAll(q));
 	});
 
 	// GET /boards?limit=&cursor=
