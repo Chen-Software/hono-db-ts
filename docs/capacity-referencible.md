@@ -186,23 +186,35 @@ Consequences:
 4. **`many-to-many` `through` is not wired.** The option is documented but the
    junction-table scan is a follow-up; only the predicate form (array
    membership) supports m2m today.
-5. **`onDelete` is wired but currently dormant (in-memory).** `Referencible`
+5. **`onDelete` is executed in memory (no longer dormant).** `Referencible`
    registers `onDelete` hooks for *any* inverse spec — manual
    (`options.relations`) **and** auto-derived from a `Reference` tag — mirroring
-   `restrict` / `cascade` / `setNull` from the tag/spec. This is verified to work
-   at the *registration* level: `User` ends up with 4 `onDelete` hooks (3 `cascade`
-   from Post/Thread/Reply, 1 `setNull` from Board), correctly mirroring each tag.
-   **But there is no in-memory `delete()` path that invokes them yet:** `Triggerable`
-   paves only the `hooks`/`listeners` statics (no instance `delete()` method), and
-   `Referencible`'s own cascade branch calls `(child as any).delete?.()` — a method
-   models don't implement (silent no-op), while `setNull` would mutate an
-   `Immutable`-frozen instance. So the hooks are correctly *registered* but *inert*.
-   This gap is pre-existing and affects manual **and** auto-derived inverses
-   identically — the auto-wire did not introduce it; adding a `delete()` that fires
-   `onDelete` + `__deregister` is a separate fix. `SqlSerialisable`'s `cascadeDelete`
-   (DB rows) is independent and unaffected. The drift guard checks the two agree for
-   manual specs; the auto-derived case carries its tag's `onDelete` directly, so
-   there is nothing to drift.
+   `restrict` / `cascade` / `setNull` from the tag/spec. `User` ends up with 4
+   `onDelete` hooks (3 `cascade` from Post/Thread/Reply, 1 `setNull` from Board),
+   correctly mirroring each tag. These hooks are now **fired** by the instance
+   `delete()` method that `ModelBase` injects:
+   - `ModelBase.delete()` runs `onDelete` lifecycle hooks, then deregisters the
+     instance from its identity map. Idempotency is enforced by a module-level
+     `WeakSet` (frozen `Immutable` instances cannot hold a `__deleted` flag).
+   - `cascade` → `(child as any).delete()` (now real, because every model has
+     `delete()`).
+   - `setNull` → `nullChildFk(child, fk)`: for a **mutable** child it assigns
+     `child[fk] = null`; for a **frozen** (`Immutable`) child it reconstructs via
+     `child.update({ [fk]: null })` and overwrites the identity-map entry, so
+     identity-map navigation stays consistent without mutating a frozen object.
+   - `restrict` → throws (`ReferentialIntegrityError`) if children exist.
+   **Prerequisite for `setNull` to be coherent:** the FK column must actually be
+   nullable, otherwise the schema forbids nulling it. `Board.moderatorId` was
+   therefore made `moderatorId?: UUID & Reference<…,"setNull","left"> | null`
+   (optional + nullable); its owner accessor uses a `left` join so a board with no
+   moderator yields `undefined`. Verified by `src/models/bbs.test.ts`
+   ("In-memory delete() fires onDelete (cascade / setNull)"): `user.delete()`
+   cascades Post/Thread/Reply out of the map, setNulls Boards (reconstructs a
+   frozen Board with a null FK, still in the map, removed from `user.getBoards()`),
+   and `delete()` is idempotent (safe to call twice). `SqlSerialisable`'s
+   `cascadeDelete` (DB rows) is independent and unaffected. The drift guard checks
+   the two agree for manual specs; the auto-derived case carries its tag's
+   `onDelete` directly, so there is nothing to drift.
 6. **Drift guards throw at compose time** (module load) if a manual spec
    disagrees with its tag — but only when the complement model is registered;
    import order can hide a mismatch (best-effort, no throw if the complement is
