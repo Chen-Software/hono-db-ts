@@ -186,7 +186,7 @@ documented in-source (file noted).
 |---|---|---|
 | `Identifiable` | [capacity-identifiable.md](./capacity-identifiable.md) | The `id` field + provenance (`crypto.randomUUID` when absent). |
 | `Timestamped` | [capacity-timestamped.md](./capacity-timestamped.md) *(pending)* | `created_at` / `updated_at` timestamps. |
-| `Referencible` | `src/capacities/referencible.ts` | FK relations (`user.getPosts()`), derived from `Reference<>` tags. |
+| [`Referencible`](./capacity-referencible.md) | `src/capacities/referencible.ts` | In-memory FK accessors (`user.getPosts()`) resolved through the identity map; owner side derived from `Reference<>` tags. *(Not in the `REGISTRY` — array form only.)* |
 
 ### Validation & schema
 | Capacity | Doc | What it owns |
@@ -215,22 +215,22 @@ documented in-source (file noted).
 | `Queriable` | [capacity-queriable.md](./capacity-queriable.md) | In-memory `filter(items, query)` — schema-inferred row-level matchers. |
 | `Siftable` | `src/capacities/siftable.ts` | `Queriable` + keyset pagination. |
 | `Servable` | [capacity-servable.md](./capacity-servable.md) | Generated Hono/SQL CRUD routes + `?param=` filters + `routeSpec()`. |
-| `Aggregable` | `src/capacities/aggregable.ts` | `aggregate(items, …)` + `GET /…/aggregate` (group-by/count ranking). |
+| `Aggregable` | [capacity-aggregable.md](./capacity-aggregable.md) | `aggregate(items, …)` + `GET /…/aggregate` (GROUP BY + COUNT/SUM/AVG/MIN/MAX ranking). |
 
 ### Behaviour & utilities
 | Capacity | Doc | What it owns |
 |---|---|---|
 | `Clonable` | [capacity-clonable.md](./capacity-clonable.md) | Deep copy (`clone`); variant-driven by `Validatable`. |
-| `Comparable` | `src/capacities/comparable.ts` | `equals` / `less` / `more` (validator-aware by default). |
-| `Randomisable` | `src/capacities/randomisable.ts` | `Model.random()` / `randomSeed()` (typia `createRandom`). |
-| `Derivable` | `src/capacities/derivable.ts` | Derived/computed fields recomputed on construct/update. |
-| `Reactive` | `src/capacities/reactive.ts` | Reactive change notifications. |
-| `Meterable` | `src/capacities/meterable.ts` | Opts repository ops into metrics. |
+| [`Comparable`](./capacity-comparable.md) | `src/capacities/comparable.ts` | `equals` / `less` / `more` (validator-aware by default). |
+| [`Randomisable`](./capacity-randomisable.md) | `src/capacities/randomisable.ts` | `Model.random()` (typia `createRandom`; `randomSeed()` / `seedField` **not yet implemented**). |
+| `Derivable` | `src/capacities/derivable.ts` ([doc](./capacity-derivable.md)) | Derived/computed fields recomputed on construct/update (eager `onUpdate` + lazy `bus` paths; see doc §10 gotchas). |
+| `Reactive` | `src/capacities/reactive.ts` ([doc](./capacity-reactive.md)) | Subscriber-centric bus-topic reactions (the inversion of `Triggerable.after`). |
+| `Meterable` | `src/capacities/meterable.ts` ([doc](./capacity-meterable.md)) | Marker that opts a model's repository ops into metrics (consumer not yet wired — see doc §6). |
 
 ### Foundation
 | Capacity | Doc | What it owns |
 |---|---|---|
-| `Triggerable` | `src/capacities/triggerable.ts` | The registry foundation; always applied first. Paves `schemaModule`, the lifecycle (`hooks`) and event (`listeners`) registries onto the prototype so every downstream capacity can pull its slice / register hooks. |
+| `Triggerable` | `src/capacities/triggerable.ts` ([doc](./capacity-triggerable.md)) | The registry foundation; always applied first. Paves `schemaModule`, the lifecycle (`hooks`) and event (`listeners`) registries onto the prototype so every downstream capacity can pull its slice / register hooks. |
 
 ---
 
@@ -241,6 +241,8 @@ documented in-source (file noted).
 - **"I want to make a model queryable / servable"** →
   [capacity-queriable.md](./capacity-queriable.md) →
   [capacity-servable.md](./capacity-servable.md).
+- **"I want to aggregate / rank (who posted the most?)"** →
+  [capacity-aggregable.md](./capacity-aggregable.md).
 - **"I want versioning / content addressing"** →
   [capacity-versionable.md](./capacity-versionable.md) →
   [capacity-immutable.md](./capacity-immutable.md) →

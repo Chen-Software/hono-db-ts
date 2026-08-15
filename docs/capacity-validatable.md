@@ -10,7 +10,7 @@
 
 `Validatable` is the capacity that makes the *other* capacities' "schema-safe"
 promises real: `Identifiable`'s `uuid` format check, `JsonSerialisable`'s strict
-`fromJSON`, [`Clonable`](./capacity-clonable.md)'s default `assertClone`, `Comparable`'s "validated" `equals`
+`fromJSON`, [`Clonable`](./capacity-clonable.md)'s default `assertClone`, [`Comparable`](./capacity-comparable.md)'s "validated" `equals`
 — all route through validators this capacity binds. Without it, `assertClassify`
 silently degrades to the plain unvalidated `classify`.
 
@@ -228,14 +228,14 @@ const UserModel = defineModel<UserSchema>({
 | Capacity | Relationship to `Validatable` |
 |---|---|
 | `SchemaModule` (`capacity-schema-module.md`) | the **source** — `Validatable` binds its `validate`/`assert`/`classify`/`*-equals` keys. |
-| `JsonSerialisable` | `fromJSON` uses the strict `assertParse` *when `Validatable` is also declared* (else lenient `JSON.parse`) — same `ctx.has("Validatable")` idiom as `Clonable`/`Comparable`. |
+| `JsonSerialisable` | `fromJSON` uses the strict `assertParse` *when `Validatable` is also declared* (else lenient `JSON.parse`) — same `ctx.has("Validatable")` idiom as [`Clonable`](./capacity-clonable.md)/[`Comparable`](./capacity-comparable.md). |
 | [`Clonable`](./capacity-clonable.md) | defaults to `assertClone` (**validated**) when `Validatable` is present; opt out with `{ clone: "clone" }`. |
-| `Comparable` | `equals` defaults to the **validated** mode when `Validatable` is present (rejects invalid operands). |
+| [`Comparable`](./capacity-comparable.md) | `equals` defaults to the **validated** mode when `Validatable` is present (rejects invalid operands). |
 | `Identifiable` | format (`uuid`) enforcement happens *through* `Validatable`'s assert (`Post.is({id:"not-a-uuid"}) === false`). |
 | `Immutable` | `Validatable` registers an `onConstruct`/`onUpdate` hook; neither capacity owns the constructor — they compose as middleware. |
 | `Versionable` | reconstructs via `Ctor.from` (fresh construct) → `onNew` runs, `onUpdate` does not (see §7.1). |
 | `Hashable` | `post.hash()`/`verify()` are independent of `Validatable`, but the *construction* stamp + `onNew` both run. |
-| `Randomisable` | `Model.random()` routes through the constructor → `Validatable`'s `classify`/`onNew` apply, so a random instance is schema-valid (frozen if `Immutable`). |
+| [`Randomisable`](./capacity-randomisable.md) | `Model.random()` routes through the constructor → `Validatable`'s `classify`/`onNew` apply, so a random instance is schema-valid (frozen if `Immutable`). |
 | `Persistable` | (future) persistence writes are expected to assert via `Validatable` before commit. |
 | `Triggerable` | registration gate + owns the lifecycle hook registry `Validatable` pushes into. |
 

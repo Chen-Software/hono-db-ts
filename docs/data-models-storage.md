@@ -252,6 +252,16 @@ The answer to "which users posted the most throughout history":
 GET /posts/aggregate?groupBy=authorId&count=*&orderBy=count:desc&limit=10
 ```
 
+Every BBS model composes `Aggregable`, so each contributes a generated route:
+
+| model | route | example |
+|---|---|---|
+| `Post` | `GET /posts/aggregate` | "who posted the most?" → `?groupBy=authorId&count=*&orderBy=count:desc` |
+| `User` | `GET /users/aggregate` | "avg age per role" → `?groupBy=role&avg=age` |
+| `Thread` | `GET /threads/aggregate` | "threads per board" → `?groupBy=boardId&count=*` |
+| `Board` | `GET /boards/aggregate` | "boards per moderator" → `?groupBy=moderatorId&count=*` |
+| `Reply` | `GET /replies/aggregate` | "who replies the most" → `?groupBy=authorId&count=*&orderBy=count:desc` |
+
 > Two aggregate surfaces exist for the same question: the hand-written
 > `/stats/top-posters` (rich read-model: LEFT JOINs `users` so it returns
 > `name`/`email`/`role` and includes zero-post users) and the generic
@@ -406,4 +416,4 @@ per-capacity docs below:
 - Storage & wire format: [`SqlSerialisable`](./capacity-sql-serialisable.md), [`JsonSerialisable`](./capacity-json-serialisable.md), [`ProtobufEncodable`](./capacity-protobuf-encodable.md), `Persistable`
 - Versioning & immutability: [`Versionable`](./capacity-versionable.md), [`Immutable`](./capacity-immutable.md), [`Hashable`](./capacity-hashable.md)
 - Query & serve: [`Queriable`](./capacity-queriable.md), `Siftable`, [`Servable`](./capacity-servable.md), `Aggregable`
-- Behaviour & utilities: [`Clonable`](./capacity-clonable.md), `Comparable`, `Randomisable`, `Derivable`, `Reactive`, `Meterable`
+- Behaviour & utilities: [`Clonable`](./capacity-clonable.md), [`Comparable`](./capacity-comparable.md), [`Randomisable`](./capacity-randomisable.md), [`Derivable`](./capacity-derivable.md), `Reactive`, [`Meterable`](./capacity-meterable.md)

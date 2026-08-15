@@ -36,7 +36,8 @@ on top of the `Immutable` marker, and it cooperates tightly with `Hashable`
   `src/services/version-history-store.ts` / a `PostRepo` with `historyOf` and
   `append`/`create` operations. **As of this writing those files are not
   present in the tree** (the repo/store layer is described in comments and
-  `meterable.ts` but not yet implemented). `Versionable` is therefore
+  `meterable.ts` but not yet implemented — see
+  [capacity-meterable.md](./capacity-meterable.md) §6). `Versionable` is therefore
   self-contained for the rules; wiring the actual history persistence is a
   separate, outstanding task.
 - A wire-format or storage capacity. It defines neither SQL columns nor a

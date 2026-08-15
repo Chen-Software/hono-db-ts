@@ -187,7 +187,7 @@ This is the section that matters for the rest of the capacity set.
 - **`SqlSerialisable` → primary key.** `deriveSqlPlan` flags `name === "id"` as
   `isId: true`, and `toDrizzleTable` calls `col.primaryKey()` for it. Every model
   table's PK is exactly `Identifiable`'s `id`. (`sql-serialisable.md` §3/§4.)
-- **`Referencible` / foreign keys target `id`.** `Reference<…>` resolves to the
+- **[`Referencible`](./capacity-referencible.md) / foreign keys target `id`.** `Reference<…>` resolves to the
   target model's `id` column by default (`column ?? "id"`). `Post.authorId` is a
   `Reference` to `User.id`. So `Identifiable` is what makes the relational graph
   possible.
@@ -208,10 +208,10 @@ This is the section that matters for the rest of the capacity set.
 - **`JSON` / `Protobuf` carry it.** `toJSON`/`fromJSON` and `encode`/`decode`
   serialise `id` as an ordinary field (a 36-char uuid string / 32-hex for the
   wire formats). (`json-serialisable.md`, `protobuf-encodable.md`.)
-- **`Randomisable` produces one.** `Model.random()` pipes typia's `createRandom`
+- **[`Randomisable`](./capacity-randomisable.md) produces one.** `Model.random()` pipes typia's `createRandom`
   payload through `new this(...)`, which routes through `Identifiable`'s
   constructor — so a random user gets a real `uuid` (unless the schema's
-  `random` generator overrides it). (`randomisable` capacity.)
+  `random` generator overrides it). ([`randomisable`](./capacity-randomisable.md) capacity.)
 - **`Triggerable` gates registration.** As noted in §4.
 
 ---
@@ -223,10 +223,10 @@ This is the section that matters for the rest of the capacity set.
 | `Versionable` | **requires** it — version history is keyed by `id`; all helpers are `Identifiable & Versionable`. |
 | `Hashable` | **requires** it — content addressing needs a stable subject `id`. |
 | `SqlSerialisable` | `id` → `primaryKey()`; the column the FKs reference. |
-| `Referencible` | FK targets default to `id`; `Identifiable` is what makes relations resolvable. |
+| [`Referencible`](./capacity-referencible.md) | FK targets default to `id`; `Identifiable` is what makes relations resolvable. |
 | `Queriable` / `Servable` | `id` is a substring-matchable query field; `Servable` cursor falls back to `id` as sort key. |
 | `JsonSerialisable` / `ProtobufEncodable` | carry `id` as a serialised field (uuid string / hex). |
-| `Randomisable` | `random()` routes through the `Identifiable` constructor → real uuid. |
+| [`Randomisable`](./capacity-randomisable.md) | `random()` routes through the `Identifiable` constructor → real uuid. |
 | `Timestamped` | orthogonal — `created_at` is minted the same dual-arg way; they compose as a pair. |
 | `Immutable` | orthogonal — `id` is already `readonly`; `Immutable` freezes the whole instance including `id`. |
 | `Triggerable` | registration gate — `Identifiable` only registers when `Triggerable` is innermost. |

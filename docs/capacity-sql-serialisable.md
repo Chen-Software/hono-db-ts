@@ -247,7 +247,7 @@ a default).
 | `Queriable` | reads `deriveSqlPlan` to infer per-field `?param=` matchers | yes (reads its plan) |
 | `Servable` | reads `deriveSqlPlan` for column kinds + PK, and `Queriable.fieldPlans` for filters | transitively yes |
 | `Siftable` | reads `deriveSqlPlan` for in-memory keyset pagination | yes |
-| `Referencible` | shares the `Reference` tag vocabulary (`ReferenceMeta`, `cardinality`, `onDelete`) so SQL FKs and in-memory accessors can't drift | shares the tag, separate capacity |
+| [`Referencible`](./capacity-referencible.md) | shares the `Reference` tag vocabulary (`ReferenceMeta`, `cardinality`, `onDelete`) so SQL FKs and in-memory accessors can't drift | shares the tag, separate capacity |
 
 `SqlSerialisable` is the **root** of the SQL branch of the capacity tree: every
 other SQL-aware capacity is a consumer of the plan it derives.

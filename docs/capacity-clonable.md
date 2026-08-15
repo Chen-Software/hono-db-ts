@@ -171,7 +171,7 @@ wears it between `ProtobufEncodable` and `Comparable`). To opt out of validation
 | [`Validatable`](./capacity-validatable.md) | Gates the default variant via `ctx.has("Validatable")` — `assertClone` when present, plain `clone` otherwise. Opt out with `{ clone: "clone" }`. |
 | [`Immutable`](./capacity-immutable.md) | `inst.clone()` rebuilds via `new Ctor`, so an `Immutable` model's clone is **re-frozen** — the copy is itself immutable. The `Immutable` constructor uses own-enumerable accessors so `clone(this)` reads the values correctly. |
 | [`JsonSerialisable`](./capacity-json-serialisable.md) / [`ProtobufEncodable`](./capacity-protobuf-encodable.md) | The other two "consume a `SchemaModule` slice" capacities. `Clonable` is the *in-memory* deep copy; `Json`/`Protobuf` are the *wire-format* (de)serialisers. All three share the `ctx.has("Validatable")` defaulting idiom. |
-| [`Comparable`](./capacity-validatable.md) | Shares the validate-only-when-`Validatable`-present defaulting pattern (its `equals` defaults to the validator-aware mode). |
+| [`Comparable`](./capacity-comparable.md) | Shares the validate-only-when-`Validatable`-present defaulting pattern (its `equals` defaults to the validator-aware mode). |
 | [`Identifiable`](./capacity-identifiable.md) | A clone preserves `id` (deep copy includes it); `inst.clone()` yields a new instance with the *same* `id` — a snapshot, not a new identity. |
 
 ---

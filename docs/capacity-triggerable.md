@@ -96,7 +96,7 @@ type LifecycleHook  = (target: any) => any;
 - Synchronous by contract.
 - The unified `base.ts` constructor fires `onConstruct` (fresh) or `onUpdate`
   (reconstruction — detected via `UPDATE_PHASE`). `onDelete` is driven by the
-  delete path (e.g. `Referencible`'s cascade). `onInit` is reserved.
+  delete path (e.g. [`Referencible`](./capacity-referencible.md)'s cascade). `onInit` is reserved.
 - `Validatable` is the canonical consumer: it pushes its `onNew`/`onUpdate`
   enforcement in as `onConstruct`/`onUpdate` hooks.
 
@@ -201,9 +201,9 @@ outside `composeCapabilities` does not get that guarantee.
 | `Identifiable` / `Immutable` / `Hashable` | Register their name via the `capacities` gate idiom. |
 | `JsonSerialisable` / `Clonable` / `Comparable` / `Randomisable` | Pull their slice from `Base.prototype.schemaModule` (paved by `Triggerable`); gate registration on the Set. |
 | `Persistable` | Consumes the **event** seam: `save()` emits `beforePersist`/`afterPersist`; subscribes `after("Update")` / `after("Delete")` for autoSave/autoDelete. |
-| `Referencible` | Uses the synchronous `onDelete` **hook** to cascade-delete children (hook, not event — so it can run before commit). |
-| `Derivable` | Uses the `onUpdate` **hook** to recompute derived attributes during update. |
-| `Reactive` | Wraps `Triggerable.after("Update", fn)` — the emitter-centric alternative to owning the mutation. |
+| [`Referencible`](./capacity-referencible.md) | Uses the synchronous `onDelete` **hook** to cascade-delete children (hook, not event — so it can run before commit). |
+| [`Derivable`](./capacity-derivable.md) | Uses the `onUpdate` **hook** to recompute derived attributes during update (and folds `Reactive` for the lazy/bus path). Note its hook only fires through the *mutable* `update()` — see its doc §10. |
+| `Reactive` ([doc](./capacity-reactive.md)) | The **inversion** of `Triggerable.after(...)`: subscriber-centric. The model names a bus `topic` + `handler` and reacts to *any* producer, instead of the source wiring `after("Update")` onto itself. Both lean on `Triggerable`'s registry. |
 
 ---
 

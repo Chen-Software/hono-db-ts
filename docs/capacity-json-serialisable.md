@@ -211,7 +211,7 @@ runtime path Cloudflare-safe (no transformer, no build step at execution).
   `toJSON`/`fromJSON` as its default `"json"` format.
 - [`capacity-validatable.md`](./capacity-validatable.md) — gates `fromJSON`
   strictness via the cross-capacity `ctx`; the same `ctx.has("Validatable")` idiom
-  [`Clonable`](./capacity-clonable.md)/`Comparable` use to default to their validated variants.
+  [`Clonable`](./capacity-clonable.md)/[`Comparable`](./capacity-comparable.md) use to default to their validated variants.
 - [`capacity-schema-module.md`](./capacity-schema-module.md) — the fixed bundle
   of typia bindings every capacity consumes a slice of.
 - `src/capacities/json-serialisable.ts` — the mixin (`toJSON`/`fromJSON`,

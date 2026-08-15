@@ -226,10 +226,12 @@ The `?param=` surface is **row-level `WHERE` filtering only**. There is no
 
 > `GET /threads?authorId=<id>` works, but "rank users by post count" does not.
 
-Aggregation (a multi-row read-model) is kept out of the generic filter and lives
-in **hand-written join endpoints** — `/stats`, `/boards/:id/hot`,
-`/stats/top-posters` (`src/http/app.ts`), each using `client.unsafe(sql)`
-**server-side only**.
+Aggregation (a multi-row read-model) is kept out of the generic filter. **Since
+the `Aggregable` capacity, single-table roll-ups are generic too** — `GET
+/…/aggregate` (`?groupBy=&count=&orderBy=`), see
+[`capacity-aggregable.md`](./capacity-aggregable.md). The join-heavy read-models
+— `/stats`, `/boards/:id/hot`, `/stats/top-posters` (`src/http/app.ts`) — remain
+**hand-written** endpoints, each using `client.unsafe(sql)` **server-side only**.
 
 **Raw SQL is never a client passthrough.** A `?sql=` route would be a direct
 SQL-injection / data-exfiltration hole (`DROP`, cross-table reads). The only
@@ -279,6 +281,8 @@ absent it derives its own field plans from `options.fields`. But composing
 
 - [`capacity-queriable.md`](./capacity-queriable.md) — the matcher engine and
   the `?param=` semantics table (boolean/number/date/uuid/array).
+- [`capacity-aggregable.md`](./capacity-aggregable.md) — the sibling that turns
+  the row-level surface into GROUP BY + COUNT/SUM/AVG/MIN/MAX ranking.
 - [`capacity-sql-serialisable.md`](./capacity-sql-serialisable.md) — the
   foundation this capacity reads: how the drizzle table, column kinds, PK, and
   FK constraints are derived from the reflected schema.
