@@ -8,7 +8,6 @@ import {
 	type ComparableInstance,
 	type ComparableStatic,
 } from "./comparable";
-import { Connectable } from "./connectable";
 import { Derivable } from "./derivable";
 import {
 	Hashable,
@@ -125,7 +124,6 @@ export type CapacityFn =
 	| typeof Persistable
 	| typeof Reactive
 	| typeof Derivable
-	| typeof Connectable
 	| typeof SqlSerialisable
 	| typeof Versionable
 	| typeof Hashable
@@ -193,7 +191,6 @@ for (const [name, fn] of [
 	["Persistable", Persistable],
 	["Reactive", Reactive],
 	["Derivable", Derivable],
-	["Connectable", Connectable],
 	["SqlSerialisable", SqlSerialisable],
 	["Versionable", Versionable],
 	["Hashable", Hashable],
