@@ -9,7 +9,47 @@ example, adapted to this project's SQLite-everywhere runtime.
 ## 1. What is auth here?
 
 The app uses **[Better Auth](https://www.betterauth.com)** — a framework-agnostic
-auth library — mounted as a Hono sub-app at **`/api/auth/*`**. It handles:
+auth library — mounted as a Hono sub-app at **`/api/auth/*`**.
+
+### Better Auth at a glance
+
+Before the project specifics, here is the conceptual picture — what Better Auth
+*is*, why it is worth using, and what it gives you.
+
+**What it is.** Better Auth is a modern, **TypeScript-first, framework-agnostic**
+authentication library. Rather than being bound to one framework (the way some
+auth libraries are tied to Next.js), it is a standalone *auth core* you mount
+into any backend — Hono, Next, Express, SvelteKit — and it reaches your existing
+database through an **adapter** (drizzle, prisma, D1, raw SQLite/Postgres). In
+this starter it is mounted at `/api/auth/*` and uses the drizzle adapter over D1
+on Workers (and bun:sqlite locally).
+
+**Why use it.** Auth is one of the highest-risk things to build by hand: a wrong
+hash, cookie, or CSRF detail can leak accounts. Better Auth ships **secure
+defaults** — password hashing (argon2/bcrypt), signed session tokens, HTTP-only
+cookies, CSRF protection, session rotation — so you never re-implement that
+crypto. It is **framework-agnostic** (same API across runtimes, so auth does not
+lock your architecture), **end-to-end type-safe** (server and client SDK share
+types), and built from **battle-tested primitives** instead of a homemade
+`users` table and login flow.
+
+**What it provides.** It is an extendable core — you enable only what you need,
+so unused pieces are tree-shaken away (which is exactly why this starter drops
+the whole subtree when `BETTER_AUTH_ENABLED=false`). Capabilities include:
+
+- **email + password** — sign-up / sign-in / sign-out with hashed credentials
+  (the only method this starter enables);
+- **OAuth / social** — Google, GitHub, and 50+ providers via config;
+- **sessions & cookies** — database-backed sessions behind a secure, HTTP-only
+  `session_token` cookie (the `__Secure-better-auth.session_token` set in the
+  browser);
+- **organizations** — teams, members, and roles;
+- **2FA / MFA** — TOTP and backup codes;
+- **admin & user management** — server APIs for managing accounts;
+- **WebAuthn** — passkeys / passwordless login;
+- **plugins** — an open extension point for everything else.
+
+It handles:
 
 - **email + password** sign-up / sign-in / sign-out
 - **sessions** — an opaque, signed `better-auth.session_token` cookie set on the
@@ -53,6 +93,9 @@ datastore. The tables are:
 | Server session | `src/auth/context.ts` | `getSession(c)` for SSR routes |
 | Client | `src/auth/client.ts` | `getAuthClient()` for islands / browser |
 | Env macros | `src/macros/envs.ts` | `betterAuthEnabled/Url/Secret` (DCE gate) |
+| Profile route | `app/routes/users/[id].tsx` | Owner-only profile; derives identity from session, enriches with BBS `users` row when present |
+| Self-referential route | `app/routes/users/me.tsx` | Resolves session → 302 to `/users/<id>` (the memorable entry point) |
+| Nav avatar island | `app/islands/user-avatar-card.tsx` | Avatar trigger + hover card with "View profile" link |
 
 The runtime database differs by deployment, but the auth wiring is identical:
 
@@ -225,44 +268,76 @@ curl http://localhost:8787/api/auth/get-session
 
 ---
 
-## 6. Protecting a route (example: `users/[id]`)
+## 6. Profile routes (`users/[id]` and `users/me`)
 
-Yes — the file-based route is easily gated. The **shipped** `app/routes/users/[id].tsx`
-resolves the session and **redirects to `/sign-in`** when absent. It also enforces
-**ownership**: a signed-in user may only view *their own* profile, and any other
-`id` is rejected with `403`:
+### Owner-only profile — `users/[id]`
+
+`app/routes/users/[id].tsx` is the canonical profile page. It is **authenticated
+and owner-only** (SSR). The handler:
+
+1. resolves the Better Auth session via `getSession(c)`,
+2. redirects anonymous visitors to `/sign-in?next=/users/<id>`,
+3. returns `403` for any `id` that is not the signed-in user's own id,
+4. renders the profile (name, email, joined) plus recent activity — threads
+   started, posts published, replies left — each linking back to its resource.
 
 ```tsx
-// app/routes/users/[id].tsx (shipped)
-import { createRoute } from "honox/factory";
-import { getSession } from "@/auth/context";
-
-export default createRoute(async (c) => {
-  const id = c.req.param("id");
-
-  // Auth + owner gate. `__BETTER_AUTH_ENABLED__` is the Vite build-time flag;
-  // a `BETTER_AUTH_ENABLED=false` build inlines `if (false)` and dead-code-
-  // eliminates the guard (and the `getSession` import it pulls).
-  if (__BETTER_AUTH_ENABLED__) {
-    const session = await getSession(c);
-    if (!session?.user) return c.redirect(`/sign-in?next=/users/${id}`);
-    if (session.user.id !== id) return c.json({ error: "forbidden" }, 403);
-  }
-
-  // … render the profile from `c.env.sql` …
-});
+// app/routes/users/[id].tsx (shipped, guard excerpt)
+const id = c.req.param("id") ?? "";
+if (__BETTER_AUTH_ENABLED__) {
+  const session = await getSession(c);
+  if (!session?.user) return c.redirect(`/sign-in?next=/users/${id}`);
+  if (session.user.id !== id) return c.json({ error: "forbidden" }, 403);
+}
 ```
 
-The owner check is enforced in the shipped route above. Drop the
-`if (session.user.id !== id)` line if you'd rather let any authenticated user
-view any profile.
+The owner check is enforced above. Drop the `if (session.user.id !== id)` line
+if you'd rather let any authenticated user view any profile.
 
-The same auth-aware control also lives in the **site nav**: every page now
-renders `app/components/site-header.tsx`, which includes a self-contained
-`AuthButton` island (`app/islands/auth-button.tsx`). It shows **Sign in** when
-logged out and **Sign out** (calling `getAuthClient().signOut()`) when logged in,
-and is gated behind `__BETTER_AUTH_ENABLED__` so it is tree-shaken out of
-auth-disabled builds.
+**Two id spaces (and why the page used to 404).** Better Auth issues its own user
+id (e.g. `TX31U6zP0togyuH5G3UeWTqXBbkYOvlu`), while the BBS `users` table uses a
+separate demo UUID (e.g. `e6c0c337-…`). They are **not linked yet**, so a freshly
+signed-up account has no BBS `users` row — which used to make this owner-only
+page fall through to a bare 404. The fix: because the page is owner-only, it
+**always derives the profile's core identity** (name / email / createdAt) straight
+from the authenticated session, and only enriches it with a BBS `users` row (and
+that user's activity) **when one exists**. A plain Better Auth account therefore
+sees a correct profile with empty activity sections. The activity queries run
+against `c.env.sql` and are wrapped in `try/catch`, so a missing `users` row never
+breaks the page.
+
+### Discoverable profile entry — `users/me`
+
+The Better Auth id is not human-memorable, so the dynamic `[id]` route alone is
+hard to reach by hand. `app/routes/users/me.tsx` is a **stable, self-referential**
+redirector: it resolves the session and 302s to `/users/<your-id>`. Unauthenticated
+visitors are sent to `/sign-in?next=/users/me` (so they return here after login),
+and auth-disabled builds redirect to `/`. Because `/users/me` is a static segment,
+Hono matches it **before** the dynamic `/users/[id]`, so there is no route clash.
+Use `/users/me` as the nav target (below) so users never need to know their id.
+
+### Auth UI in the site header
+
+`app/components/site-header.tsx` is the single source of truth for the top nav and
+is auth-aware. Behind `__BETTER_AUTH_ENABLED__` it renders:
+
+- a **Profile** link to `/users/me` (the discoverable entry point above), and
+- a **`UserAvatarCard`** island (`app/islands/user-avatar-card.tsx`) next to the
+  existing `AuthButton`.
+
+`UserAvatarCard` determines auth state on mount by calling the same-origin
+`/api/auth/get-session` (the session cookie is HTTP-only, so the browser reads it
+indirectly — exactly like `AuthButton`). When signed out it renders nothing; when
+signed in it shows an `Avatar` (initials, or the user's image with a graceful
+fallback) as the hover-card trigger, and on hover/focus/tap reveals a card with
+the user's name, email, and a **View profile** link to `/users/<id>`. It is built
+on the hover-card *primitives* directly (the `HoverCard` wrapper delegates to a
+nonexistent island in this codebase). Like everything else it is gated behind
+`__BETTER_AUTH_ENABLED__`, so it is tree-shaken out of auth-disabled builds.
+
+`AuthButton` itself (`app/islands/auth-button.tsx`) shows **Sign in** when logged
+out and **Sign out** (`getAuthClient().signOut()`) when logged in, also gated
+behind the same flag.
 
 To protect **any** route, the same two-line gate at the top of the handler is
 all you need — no route-specific middleware is required because the session
@@ -313,5 +388,6 @@ hand-edited SQL to drift.
 | Sign out | `getAuthClient().signOut()` |
 | Current user (server) | `getSession(c)` → `session?.user` or `null` |
 | Current user (client) | `getAuthClient().getSession()` / `useSession()` |
+| Go to your own profile | Visit `/users/me` → 302 to `/users/<id>` (server) or the avatar hover card's **View profile** link |
 | Protect a route | `if (!(await getSession(c))?.user) return c.redirect('/sign-in')` |
 | Disable auth entirely | `BETTER_AUTH_ENABLED=false` at **build time** (DCE). Leave it unset and auth is ON — only the literal `false` disables. |
