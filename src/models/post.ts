@@ -209,10 +209,12 @@ const PostBase = defineModel<PostData>({
 		// Referencible: the `user` relation is now DERIVED from the `Reference`
 		// tag on `authorId` above (owner side) — no manual `relations` entry.
 		// `post.getUser()` resolves the FK `authorId` to a live User via the
-		// identity map (inner join, per the tag's `join: "inner"`). The inverse
-		// `user.getPosts()` stays manual on `User` because it has no FK column
-		// of its own to tag; its `cardinality` / `onDelete` are guarded against
-		// this tag by `Referencible`.
+		// identity map (inner join, per the tag's `join: "inner"`). Its inverse
+		// `user.getPosts()` is now AUTO-DERIVED by `wireInverseRelations()`
+		// (run from `defineModel`) from THIS `authorId` tag — no manual
+		// `relations` entry on `User` is needed. The derived collection mirrors
+		// this tag's `onDelete` (`cascade`), so deleting a user cascades its
+		// posts in-memory, matching the SQL FK.
 		{
 			capacity: Referencible,
 			options: { relations: [] },

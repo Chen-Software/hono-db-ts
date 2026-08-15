@@ -3,6 +3,7 @@ import typia, { type tags } from "typia";
 import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
+import { Derivable } from "@/capacities/derivable";
 import { Immutable } from "@/capacities/immutable";
 import { JsonSerialisable } from "@/capacities/json-serialisable";
 import { Meterable } from "@/capacities/meterable";
@@ -45,6 +46,26 @@ interface UserSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 		tags.Type<"uint32"> &
 		tags.ExclusiveMinimum<19> &
 		tags.Maximum<100>;
+
+	/**
+	 * Pre-materialised activity counters. Maintained by the write path
+	 * (incremented when a Post/Thread/Reply is created for this user,
+	 * decremented on delete) — NOT derived from a live relation scan. Optional
+	 * so a User can be constructed without them (they default to 0 in
+	 * `all_activities` below).
+	 */
+	post_count?: number;
+	thread_count?: number;
+	reply_count?: number;
+
+	/**
+	 * `all_activities` — a DERIVED attribute: `post_count + thread_count +
+	 * `reply_count`, recomputed by the `Derivable` capacity whenever a counter
+	 * changes. Optional: `Derivable` writes it on construct, so it need not be
+	 * supplied by callers. This is the field you sort/query to find the
+	 * "most attentive" user (`GET /users?sort=all_activities:desc`).
+	 */
+	all_activities?: number;
 }
 
 /**
@@ -160,23 +181,16 @@ const UserModel = defineModel<UserSchema>({
 		// Because `Validatable` is also declared, `equals` defaults to the
 		// validator-aware ("validated") mode — it rejects invalid operands.
 		Comparable,
-		// Referencible: `user.getPosts()` scans the Post identity map for
-		// `authorId === user.id`. `onDelete: "cascade"` registers an `onDelete`
-		// hook so deleting a user deletes all its posts first.
-		{
-			capacity: Referencible,
-			options: {
-				relations: [
-					{
-						name: "posts",
-						target: () => Post,
-						by: "authorId",
-						cardinality: "one-to-many",
-						onDelete: "cascade",
-					},
-				],
-			},
-		},
+		// Referencible: inverse collection accessors (`user.getPosts()` /
+		// `user.getThreads()` / `user.getReplies()` / `user.getBoards()`) are
+		// AUTO-DERIVED from the `Reference` tags on the SOURCE models — Post's
+		// `authorId`, Thread's `authorId`, Reply's `authorId`, Board's
+		// `moderatorId` — each targeting `"UserSchema"`. `wireInverseRelations()`
+		// (run from `defineModel`) installs them on this prototype and mirrors
+		// each tag's `onDelete` (e.g. Post's `cascade`, Board's `setNull`), so no
+		// manual `relations` entry is needed here. The owner accessors
+		// (`post.getUser()` etc.) are still derived from this model's own tags.
+		Referencible,
 		// Randomisable: exposes `User.random()` / `User.randomSeed()` (typia's
 		// `createRandom` bound in UserSchemaModule) as static factories — used by
 		// the seed script to generate random, schema-valid users.
@@ -216,6 +230,26 @@ const UserModel = defineModel<UserSchema>({
 		// `db.client.operations.*` OTEL metrics (prod), reusing the same
 		// queryTelemetry sink as the SQL metrics.
 		{ capacity: Meterable, options: { name: "User" } },
+		// Derivable: `user.all_activities` is COMPUTED from the pre-materialised
+		// counters above — it is NOT hand-written on every update. The recompute
+		// fires on construct (and on update for non-Immutable models; `User` is
+		// `Immutable`, so see the caveats in docs/capacity-derivable.md — manual
+		// `recompute()` or the `bus` topic path is needed after a counter edit).
+		{
+			capacity: Derivable,
+			options: {
+				derived: [
+					{
+						attr: "all_activities",
+						from: ["post_count", "thread_count", "reply_count"],
+						recompute: (_self, d) =>
+							(d.post_count ?? 0) +
+							(d.thread_count ?? 0) +
+							(d.reply_count ?? 0),
+					},
+				],
+			},
+		},
 		// Immutable (LAST — outermost mixin): every `update` produces a
 		// BRAND-NEW frozen instance instead of mutating in place, and the
 		// constructor rewrites own properties into freeze-safe accessors.

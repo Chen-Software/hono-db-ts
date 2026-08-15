@@ -46,16 +46,23 @@ interface BoardSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 	description: string & tags.MinLength<0> & tags.MaxLength<500>;
 
 	/** Moderator of the board — FK to `User`. Owner side (derived accessor
-	 *  `getModerator()`, named via the 6th `Reference` type param). */
-	moderatorId: UUID &
+	 *  `getModerator()`, named via the 6th `Reference` type param).
+	 *
+	 *  Made **optional + nullable** so the `setNull` referential action on the
+	 *  `Reference` tag is coherent: when the referenced `User` is deleted in
+	 *  memory, `Board`'s FK can actually be nulled (otherwise the schema would
+	 *  forbid it — the same contradiction a `NOT NULL` SQL column would have).
+	 *  The owner accessor uses a `left` join so a board with no moderator
+	 *  yields `undefined` rather than throwing. */
+	moderatorId?: UUID &
 		Reference<
 			"UserSchema",
 			"id",
 			"many-to-one",
 			"setNull",
-			"inner",
+			"left",
 			"moderator"
-		>;
+		> | null;
 }
 
 const boardLess = typia.compare.createLess<BoardSchema>();
@@ -172,7 +179,7 @@ class Board extends BoardModel {
 	declare name: string;
 	declare slug: string;
 	declare description: string;
-	declare moderatorId: UUID;
+	declare moderatorId?: UUID | null;
 }
 
 export { Board, BoardModel, type BoardSchema, BoardSchemaModule };

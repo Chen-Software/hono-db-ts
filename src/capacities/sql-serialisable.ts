@@ -330,6 +330,15 @@ function baseType(p: JsonProp): string | undefined {
 function isNullable(p: JsonProp): boolean {
 	if (p.nullable) return true;
 	if (Array.isArray(p.type)) return p.type.includes("null");
+	// A `oneOf` union containing a `{ type: "null" }` member is a nullable
+	// scalar (e.g. `UUID | null`); the null branch carries no storage kind.
+	if (Array.isArray(p.oneOf)) {
+		return p.oneOf.some(
+			(m) =>
+				m.type === "null" ||
+				(Array.isArray(m.type) && m.type.length === 1 && m.type[0] === "null"),
+		);
+	}
 	return false;
 }
 
@@ -342,9 +351,14 @@ function isDate(p: JsonProp): boolean {
  * Classify one member of a `oneOf` union. A member that is a scalar (a bare
  * `type`, or a `const` literal) yields that scalar kind; an object/array member
  * means the union is a genuine *variant* (not a scalar union) and is reported as
- * `"json"` so the whole column degrades to JSON text.
+ * `"json"` so the whole column degrades to JSON text. A `null`-only member
+ * (`{ type: "null" }`) is a *nullable* marker, not a real variant — it yields
+ * `null` (sentinel) so the caller can ignore it when deciding the column's
+ * scalar kind. Without this, `UUID | null` would be misread as a JSON column.
  */
-function oneOfMemberKind(m: JsonProp): ColKind {
+function oneOfMemberKind(m: JsonProp): ColKind | null {
+	if (m.type === "null" || (Array.isArray(m.type) && m.type.length === 1 && m.type[0] === "null"))
+		return null;
 	if (m.const !== undefined) {
 		if (typeof m.const === "string") return "string";
 		if (typeof m.const === "number")
@@ -383,9 +397,14 @@ function kindOf(p: JsonProp): ColKind {
 	if (t === "integer") return "integer";
 	if (t === "number") return "number";
 	if (t === "boolean") return "boolean";
-	// No top-level `type`: inspect a `oneOf` union, if present.
+	// No top-level `type`: inspect a `oneOf` union, if present. `null`-only
+	// members are filtered out — they're nullable markers, not real variants,
+	// so `UUID | null` is still a TEXT column (not JSON).
 	if (Array.isArray(p.oneOf) && p.oneOf.length > 0) {
-		const kinds = p.oneOf.map(oneOfMemberKind);
+		const kinds = p.oneOf
+			.map(oneOfMemberKind)
+			.filter((k): k is ColKind => k !== null);
+		if (kinds.length === 0) return "string"; // only a null member
 		if (kinds.every((k) => k === "string")) return "string";
 		// Any non-scalar member ⇒ genuine variant ⇒ JSON-encode.
 		if (kinds.some((k) => k === "json")) return "json";

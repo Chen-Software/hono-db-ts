@@ -8,7 +8,9 @@ import {
 } from "../capacities/compose";
 import type { SchemaModule } from "../capacities/schema-module";
 import { UPDATE_PHASE, type LifecycleHooks } from "../capacities/triggerable";
+import { wireInverseRelations } from "../capacities/referencible";
 import { registerModel } from "../registry";
+import { getInstanceMap } from "../storage/identity-map";
 
 /**
  * `defineModel` — the shared base for every model in the starter.
@@ -79,6 +81,14 @@ function runHooks(
 ): void {
 	for (const fn of hooks ?? []) fn(target, patch);
 }
+
+/**
+ * Tracks instances already deleted in memory so `delete()` is idempotent — a
+ * second call is a no-op. A `WeakSet` (not a flag on the instance) because the
+ * instance may be `Object.frozen` (an `Immutable` model), where writing a
+ * `__deleted` own property would throw.
+ */
+const deletedInstances = new WeakSet<object>();
 
 export function defineModel<T, const S extends CapacityList>(
 	options: Omit<DefineModelOptions<T>, "capacities"> & { capacities: S },
@@ -159,6 +169,28 @@ export function defineModel<T>(
 		toValueObject(): T {
 			return schemaModule.clone(this) as T;
 		}
+
+		/**
+		 * Delete this instance **in memory**: fire the `onDelete` lifecycle hooks
+		 * (which, via `Referencible`, cascade / setNull / restrict the related
+		 * instances configured by each `Reference` tag or manual inverse spec),
+		 * then drop this instance from its identity map. Idempotent — a second
+		 * call is a no-op.
+		 *
+		 * This is deliberately *not* a database operation. DB row removal is
+		 * `SqlSerialisable`'s `cascadeDelete` (driven by `Persistable` / the
+		 * repository), which is configured from the SAME `onDelete` vocabulary —
+		 * so the two cannot drift, but they run through different machinery.
+		 */
+		delete(): void {
+			if (deletedInstances.has(this)) return;
+			const Ctor = this.constructor as any;
+			// Fire `onDelete` hooks BEFORE deregistering self, so cascade /
+			// setNull hooks can still navigate from this instance.
+			runHooks(Ctor.hooks?.onDelete, this);
+			getInstanceMap(this).unregister(Ctor.schemaName, String((this as any).id));
+			deletedInstances.add(this);
+		}
 	}
 
 	ModelBase.schemaName = schemaName;
@@ -180,6 +212,11 @@ export function defineModel<T>(
 	// Register under `schemaName` so `Reference` tags / `Referencible` can
 	// resolve the model by name (see `registry.ts`).
 	registerModel(schemaName, composed);
+	// After each registration, (re)wire inverse collection accessors derived
+	// from `Reference` tags. Idempotent + converges as models load, so every
+	// `user.getPosts()` / `getThreads()` / `getReplies()` / `getBoards()` etc.
+	// appears automatically once both ends of the FK are registered.
+	wireInverseRelations();
 
 	return composed;
 }

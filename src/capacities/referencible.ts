@@ -10,7 +10,7 @@ import {
 	inverseCardinality,
 	referencesOf,
 } from "../tags/reference";
-import { hasModel, listModels } from "../registry";
+import { hasModel, listModels, resolveModel } from "../registry";
 import type { CapacityComposer } from "./compose";
 import { addLifecycleHook } from "./triggerable";
 
@@ -98,6 +98,102 @@ export interface ReferencibleOptions {
 	relations: RelationSpec[];
 }
 
+/**
+ * Naive English pluraliser for inverse accessor names — the SOURCE model name
+ * becomes the collection on the target (`Post` → `getPosts`, `Reply` →
+ * `getReplies`, `Board` → `getBoards`). Covers the regular cases this codebase
+ * hits; it is intentionally not a general linguistic pluraliser.
+ */
+function pluralize(word: string): string {
+	if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + "ies";
+	if (/(s|x|z|ch|sh)$/i.test(word)) return word + "es";
+	return word + "s";
+}
+
+/**
+ * Wire every registered model's `Reference`-tagged FKs into the INVERSE
+ * collection accessors on their target models — the mirror image of the owner
+ * accessors that `Referencible` already derives from a model's own tags.
+ * `post.authorId -> User` yields `user.getPosts()`, `thread.authorId -> User`
+ * yields `user.getThreads()`, `board.moderatorId -> User` yields
+ * `user.getBoards()`, and so on.
+ *
+ * Called (idempotently) from `defineModel` after each model registers, so it
+ * converges as models load regardless of import order: an inverse is only
+ * installed once BOTH its source and target are registered. The inverse name
+ * is the *source* model name, pluralised — it does NOT reuse the tag's `name`
+ * (that names the owner accessor). An existing getter wins (a manual inverse
+ * declaration on the target is preserved). `onDelete` is mirrored from the tag
+ * so the in-memory cascade / setNull / restrict behaviour matches the SQL FK.
+ */
+/**
+ * Null a child's FK column for `setNull` on delete. Frozen (`Immutable`)
+ * children cannot be mutated in place, so reconstruct them via `update` and
+ * overwrite the identity-map entry with the rebuilt instance — keeping
+ * navigation (e.g. `user.getBoards()`) consistent with the nulled FK. Mutable
+ * children are assigned directly.
+ */
+function nullChildFk(child: any, fk: string): void {
+	if (Object.isFrozen(child)) {
+		const updated = child.update?.({ [fk]: null });
+		if (updated) {
+			getInstanceMap(child).register(
+				child.constructor.schemaName,
+				String(child.id),
+				updated,
+			);
+		}
+	} else {
+		child[fk] = null;
+	}
+}
+
+export function wireInverseRelations(): void {
+	for (const [srcName, srcCtor] of listModels()) {
+		const schema = (srcCtor as any)?.schema;
+		if (!schema) continue;
+		for (const { column, meta } of referencesOf(schema)) {
+			const targetName = meta.target;
+			if (targetName === srcName) continue; // self-ref handled manually
+			if (!hasModel(targetName)) continue; // target not registered yet
+			const targetCtor = resolveModel(targetName);
+			const invName = pluralize(deriveRelationName(srcName));
+			const getterName = "get" + invName[0].toUpperCase() + invName.slice(1);
+			if ((targetCtor.prototype as any)[getterName]) continue; // manual wins
+			const pred = (owner: any, target: any) => owner[column] === target.id;
+			Object.defineProperty(targetCtor.prototype, getterName, {
+				enumerable: false,
+				configurable: true,
+				value: function (this: any) {
+					return getInstanceMap(this).filter(srcName, (far: any) =>
+						pred(far, this),
+					);
+				},
+			});
+			const onDelete = meta.onDelete ?? "noAction";
+			if (onDelete && onDelete !== "noAction") {
+				addLifecycleHook(targetCtor, "onDelete", (inst: any) => {
+					const related = getInstanceMap(inst).filter(srcName, (far: any) =>
+						pred(far, inst),
+					);
+					if (onDelete === "restrict" && related.length > 0) {
+						throw new Error(
+							`Referencible: cannot delete ${targetName} ${inst.id} — ` +
+								`${related.length} ${srcName} still reference it (restrict).`,
+						);
+					}
+					if (onDelete === "cascade") {
+						for (const child of related) (child as any).delete?.();
+					}
+				if (onDelete === "setNull") {
+					for (const child of related) nullChildFk(child, column);
+				}
+				});
+			}
+		}
+	}
+}
+
 function Referencible<TBase extends CapacityComposer>(
 	Base: TBase,
 	mod?: any,
@@ -113,8 +209,10 @@ function Referencible<TBase extends CapacityComposer>(
 	// `relations` entry for it: the in-memory accessor (`post.getUser()`) falls
 	// out of the tag, and cannot drift from the SQL FK (both read the same tag).
 	// The inverse (collection) side has no FK column of its own to tag, so it
-	// stays manual — but its `cardinality` / `onDelete` are guarded against the
-	// tag below.
+	// is NOT derived here; it is wired separately by `wireInverseRelations()`
+	// (run from `defineModel`), which scans every model's tags and installs the
+	// matching collection getter (`user.getPosts()` etc.) on the target. A
+	// manual inverse spec is still allowed and guarded against the tag below.
 	const tagged = mod?.schema ? referencesOf(mod.schema) : [];
 	const manualByColumn = new Map<string, RelationSpec>();
 	for (const r of options.relations) {
@@ -162,11 +260,13 @@ function Referencible<TBase extends CapacityComposer>(
 		});
 	}
 
-	// --- inverse-side drift guard (best-effort). For each manual COLLECTION
+	// --- inverse-side drift guard (best-effort). For each MANUAL collection
 	// relation, find a registered model whose `Reference` tag targets THIS
 	// model; its tag's `onDelete` / inverse cardinality must match the manual
 	// spec. Skipped (no throw) if the complement model isn't registered yet, so
-	// import order can never break composition.
+	// import order can never break composition. (Auto-derived inverses from
+	// `wireInverseRelations()` carry their tag's metadata directly, so they
+	// need no guard here.)
 	for (const rel of options.relations) {
 		const c = rel.cardinality ?? "auto";
 		const isMany = c === "one-to-many" || c === "many-to-many";
@@ -307,13 +407,15 @@ function Referencible<TBase extends CapacityComposer>(
 				if (rel.onDelete === "setNull") {
 					const fk =
 						rel.fk ?? (typeof rel.by === "string" ? rel.by : undefined);
-					if (fk) for (const child of related) child[fk] = null;
+					if (fk) for (const child of related) nullChildFk(child, fk);
 				}
 			});
 		}
 	}
 
-	// --- deregister hook so `Triggerable.delete()` can drop this from the map
+	// --- deregister helper retained for any caller that wants to drop THIS
+	// model's instances manually; `ModelBase.delete()` (in base.ts) performs the
+	// canonical delete + onDelete firing and calls into the identity map itself.
 	(Base as any).__deregister = (inst: any) => {
 		if (inst?.id != null)
 			getInstanceMap(inst).unregister(modelName, String(inst.id));

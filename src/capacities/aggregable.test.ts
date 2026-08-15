@@ -188,6 +188,10 @@ CREATE TABLE "users" (
 	"email" text NOT NULL,
 	"role" text NOT NULL,
 	"age" integer NOT NULL,
+	"post_count" integer,
+	"thread_count" integer,
+	"reply_count" integer,
+	"all_activities" integer,
 	"created_at" text NOT NULL
 );
 `;

@@ -40,9 +40,13 @@ export type JoinMode = "inner" | "left" | "right" | "full";
  * duplicated manual relation declaration.
  *
  * The inverse (collection) side of a relation (`user.getPosts()`) has no FK
- * column of its own to tag, so it is still declared manually in `Referencible`'s
- * `relations` — but its `cardinality` / `onDelete` are guarded against this
- * tag (see `referencible.ts`), so the two cannot silently drift.
+ * column of its own to tag, so `Referencible`'s own mixin does not derive it.
+ * Instead `wireInverseRelations()` (run from `defineModel`) scans every model's
+ * tags and installs the matching collection getter on the target (`user.getPosts()`
+ * from `Post.authorId -> UserSchema`, `user.getThreads()` from `Thread.authorId`,
+ * etc.), mirroring each tag's `onDelete`. A manual inverse in `Referencible`'s
+ * `relations` is still allowed and guarded against this tag, so the two cannot
+ * silently drift.
  *
  * @example
  * ```ts
@@ -113,9 +117,23 @@ export interface ReferenceMeta {
 
 /** Read the `Reference` tag off a single reflected JSON-schema property. */
 export function readReference(prop: any): ReferenceMeta | undefined {
+	// Direct annotation (the common case: `field: UUID & Reference<…>`).
 	const meta = prop?.["x-reference"];
-	if (!meta || typeof meta !== "object") return undefined;
-	return meta as ReferenceMeta;
+	if (meta && typeof meta === "object") return meta as ReferenceMeta;
+	// Nullable union form: typia reflects `field?: UUID & Reference<…> | null`
+	// as `{ oneOf: [{ type: "null" }, { type: "string", x-reference: {…} }] }`,
+	// so the `x-reference` annotation lives INSIDE the non-null branch rather
+	// than on the property node. Search the union branches for it.
+	for (const key of ["oneOf", "anyOf"]) {
+		const branches = prop?.[key];
+		if (Array.isArray(branches)) {
+			for (const b of branches) {
+				const m = b?.["x-reference"];
+				if (m && typeof m === "object") return m as ReferenceMeta;
+			}
+		}
+	}
+	return undefined;
 }
 
 /**
@@ -153,9 +171,15 @@ export function referencesOf(
  * `"User"` → `"user"`.
  */
 export function deriveRelationName(target: string): string {
+	// Strip the model's schema-name suffix. Most models use `…Schema`
+	// (`UserSchema` → `user`); `Post` uses `…Data` (`PostData` → `post`), so
+	// both suffixes are recognised. The result is the lower-cased model base
+	// name, used to build default accessor names.
 	const base = target.endsWith("Schema")
 		? target.slice(0, -"Schema".length)
-		: target;
+		: target.endsWith("Data")
+			? target.slice(0, -"Data".length)
+			: target;
 	if (!base) return target.toLowerCase();
 	return base.charAt(0).toLowerCase() + base.slice(1);
 }

@@ -24,6 +24,10 @@ CREATE TABLE "users" (
 	"email" text NOT NULL,
 	"role" text NOT NULL,
 	"age" integer NOT NULL,
+	"post_count" integer,
+	"thread_count" integer,
+	"reply_count" integer,
+	"all_activities" integer,
 	"created_at" text NOT NULL
 );
 CREATE TABLE "boards" (
@@ -31,7 +35,7 @@ CREATE TABLE "boards" (
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"description" text NOT NULL,
-	"moderatorId" text NOT NULL,
+	"moderatorId" text,
 	"created_at" text NOT NULL
 );
 CREATE TABLE "threads" (
