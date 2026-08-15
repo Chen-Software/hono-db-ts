@@ -31,9 +31,10 @@ type ProtobufEncodableSchema = Record<never, never>;
  * handed to `defineModel`. If the model does not declare `ProtobufEncodable`
  * in its `capacities`, those three functions simply stay unused in the module.
  *
- * Unlike {@link JsonSerialisable} (and {@link Immutable}), this mixin mutates
- * `Base` **in place** and returns the same constructor — the way {@link Triggerable}
- * itself behaves. That is a deliberate choice, not an oversight:
+ * Unlike {@link JsonSerialisable}, {@link Immutable}, and {@link Triggerable}
+ * (all of which return a NEW subclass), this mixin mutates `Base` **in place**
+ * and returns the same constructor. That is a deliberate choice, not an
+ * oversight:
  *   - protobuf (de)serialisation is a pure codec with no constructor override,
  *     so there is nothing that *requires* wrapping `Base` in a fresh subclass;
  *   - in-place mutation lets the capacity **decorate an existing standalone
