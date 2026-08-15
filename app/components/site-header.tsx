@@ -87,7 +87,10 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 				</nav>
 
 				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: "auto" })}>
-					<Search placeholder="Search threads & posts…" />
+					<Search
+						placeholder="Search threads & posts…"
+						class={css({ maxWidth: "24rem" })}
+					/>
 					<ThemeSwitcher />
 					{__BETTER_AUTH_ENABLED__ && (
 						<>

@@ -1,9 +1,21 @@
-import { css } from '../../design-system/css'
+import { cx, css } from '../../design-system/css'
+import { search } from '../../design-system/recipes'
+import { CloseIcon } from '../icons/close'
+import { SearchIcon } from '../icons/search'
 import { useState } from 'hono/jsx'
 
 type SearchResult = {
 	threads: Array<{ id: string; title: string; boardId: string; authorId: string; updated_at: string }>
 	posts: Array<{ id: string; title: string; authorId: string; updated_at: string }>
+}
+
+export type SearchBoxProps = {
+	placeholder?: string
+	initialQuery?: string
+	size?: 'sm' | 'md' | 'lg'
+	variant?: 'outline' | 'surface' | 'subtle'
+	class?: string
+	style?: any
 }
 
 /**
@@ -12,16 +24,22 @@ type SearchResult = {
  * same app (`app/server.ts` mounts `buildQueryApp` under `/api`), so this works
  * whether the page is served by `bun run src/main.ts serve` or the UI dev
  * server.
+ *
+ * Styling comes from the `search` slot recipe (the same one powering the
+ * static `SearchBase` form), so the hydrated island and the no-JS fallback
+ * share size/variant semantics and look. `size`/`variant` are split out as
+ * recipe variants; everything else is forwarded from the `Search` wrapper.
  */
-type SearchBoxProps = {
-	placeholder?: string
-	initialQuery?: string
-}
+export default function SearchBox(props: SearchBoxProps) {
+	const [variantProps, localProps] = search.splitVariantProps(props)
+	const {
+		placeholder = 'Search threads & posts…',
+		initialQuery = '',
+		class: classProp,
+		style,
+	} = localProps
+	const styles = search(variantProps)
 
-export default function SearchBox({
-	placeholder = 'Search threads & posts…',
-	initialQuery = '',
-}: SearchBoxProps) {
 	const [q, setQ] = useState(initialQuery)
 	const [result, setResult] = useState<SearchResult | null>(null)
 	const [error, setError] = useState<string | null>(null)
@@ -44,104 +62,75 @@ export default function SearchBox({
 		}
 	}
 
+	const clear = () => {
+		setQ('')
+		setResult(null)
+		setError(null)
+	}
+
+	const showListbox = result !== null || error !== null
+
 	return (
-		<div class={css({ position: 'relative' })}>
-			<div class={css({ display: 'flex', gap: 2 })}>
+		<div class={cx(styles.root, classProp)} style={style}>
+			<div class={styles.inputWrap}>
+				<div class={styles.icon}>
+					<SearchIcon width="20" height="20" />
+				</div>
 				<input
+					type="text"
 					value={q}
 					onInput={(e) => setQ((e.target as HTMLInputElement).value)}
 					onKeyDown={(e) => e.key === 'Enter' && run()}
 					placeholder={placeholder}
-					class={css({
-						w: 56,
-						px: 3,
-						py: 2,
-						rounded: 'md',
-						border: '1px solid token(colors.border)',
-						fontSize: 'sm',
-						bg: 'canvas',
-						color: 'fg.default',
-						outline: 'none',
-						_focus: { borderColor: 'colorPalette.solid.bg', bg: 'canvas' },
-					})}
-					/>
+					class={styles.input}
+				/>
+				{q && (
 					<button
-					onClick={() => run()}
-					class={css({
-						px: 3,
-						py: 2,
-						rounded: 'md',
-						bg: 'colorPalette.solid.bg',
-						color: 'colorPalette.solid.fg',
-						fontSize: 'sm',
-						fontWeight: 600,
-						cursor: 'pointer',
-						_hover: { bg: 'colorPalette.solid.bg.hover' },
-					})}
+						type="button"
+						onClick={clear}
+						aria-label="Clear search"
+						class={styles.clearTrigger}
 					>
-					Search
-				</button>
+						<CloseIcon width="16" height="16" />
+					</button>
+				)}
 			</div>
 
-			{(result || error) && (
-				<div
-					class={css({
-						position: 'absolute',
-						top: 'calc(100% + 8px)',
-						right: 0,
-						w: 96,
-						maxHeight: '24rem',
-						overflowY: 'auto',
-						rounded: 'lg',
-						border: '1px solid token(colors.border)',
-						bg: 'colorPalette.surface.bg',
-						color: 'fg.default',
-						boxShadow: '0 12px 32px rgba(17,24,39,0.15)',
-						p: 2,
-						zIndex: 20,
-						})}
-						>
-						{error ? (
-						<p class={css({ px: 3, py: 2, fontSize: 'sm', color: 'fg.error' })}>{error}</p>
-						) : (
+			{showListbox && (
+				<div class={styles.listbox}>
+					{error ? (
+						<p class={styles.status}>{error}</p>
+					) : (
 						<>
 							{result && result.threads.length === 0 && result.posts.length === 0 && (
-								<p class={css({ px: 3, py: 2, fontSize: 'sm', color: 'fg.subtle' })}>No results.</p>
+								<p class={styles.status}>No results.</p>
 							)}
 							{result && result.threads.length > 0 && (
 								<div>
-									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'fg.subtle', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+									<p class={cx(styles.countText, css({ px: 3, pt: 2, pb: 1 }))}>
 										Threads
-									</div>
+									</p>
 									{result.threads.map((t) => (
-										<a
-											key={t.id}
-											href={`/threads/${t.id}`}
-											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', fontWeight: 600, color: 'fg.default', textDecoration: 'none', _hover: { bg: 'colorPalette.subtle.bg.hover' } })}
-										>
-											{t.title}
+										<a key={t.id} href={`/threads/${t.id}`} class={styles.item}>
+											<span class={styles.itemTitle}>{t.title}</span>
 										</a>
 									))}
 								</div>
 							)}
 							{result && result.posts.length > 0 && (
 								<div>
-									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'fg.subtle', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+									<p class={cx(styles.countText, css({ px: 3, pt: 2, pb: 1 }))}>
 										Posts
-									</div>
+									</p>
 									{result.posts.map((p) => (
-										<a
-											key={p.id}
-											href={`/posts/${p.id}`}
-											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', color: 'fg.default', textDecoration: 'none', _hover: { bg: 'colorPalette.subtle.bg.hover' } })}
-										>
-											{p.title}
+										<a key={p.id} href={`/posts/${p.id}`} class={styles.item}>
+											<span class={styles.itemTitle}>{p.title}</span>
 										</a>
 									))}
 								</div>
 							)}
 						</>
-						)}
+					)}
 				</div>
 			)}
 		</div>

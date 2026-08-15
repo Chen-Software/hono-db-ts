@@ -17,14 +17,31 @@ export interface SearchProps extends SearchBaseProps {
 // The placeholder is resolved here (not in the island) so both the hydrated
 // island and the static form honor `locale` the same way.
 export function Search(props: SearchProps) {
-	const { interactive, locale, placeholder, initialQuery, ...rest } = props;
+	const {
+		interactive,
+		locale,
+		placeholder,
+		initialQuery,
+		size,
+		variant,
+		class: classProp,
+		style,
+		...rest
+	} = props;
 	if (shouldHydrate(interactive, true)) {
 		const resolvedPlaceholder =
 			placeholder ??
 			DEFAULT_PLACEHOLDERS[locale ?? "en"] ??
 			DEFAULT_PLACEHOLDERS.en;
 		return (
-			<SearchIsland placeholder={resolvedPlaceholder} initialQuery={initialQuery} />
+			<SearchIsland
+				placeholder={resolvedPlaceholder}
+				initialQuery={initialQuery}
+				size={size}
+				variant={variant}
+				class={classProp}
+				style={style}
+			/>
 		);
 	}
 	return (
@@ -32,6 +49,10 @@ export function Search(props: SearchProps) {
 			placeholder={placeholder}
 			locale={locale}
 			initialQuery={initialQuery}
+			size={size}
+			variant={variant}
+			class={classProp}
+			style={style}
 			{...rest}
 		/>
 	);

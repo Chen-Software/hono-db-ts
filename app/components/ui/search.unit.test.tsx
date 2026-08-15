@@ -41,7 +41,7 @@ describe("Search Component Localisation", () => {
 		expect(html).toContain("search__input"); // styles.input
 	});
 
-	test("should render interactive search as a hydrated island and forward placeholder/initialQuery", () => {
+	test("should render interactive search as a hydrated island on the search recipe", () => {
 		const html = (
 			<Search
 				interactive={true}
@@ -54,9 +54,10 @@ describe("Search Component Localisation", () => {
 
 		expect(html).toContain('placeholder="Find threads"');
 		expect(html).toContain('value="Hono"');
-		expect(html).toContain("Search"); // the island's submit button
-		// Recipe classes are a static-rendering (SearchBase) feature; the
-		// hydrated island keeps its own layout, so none appear here.
-		expect(html).not.toContain("search__root");
+		// The island renders on the same slot recipe as SearchBase, so variant
+		// classes and the clear trigger are present in the hydrated output.
+		expect(html).toContain("search__root--size_sm");
+		expect(html).toContain("search__root--variant_subtle");
+		expect(html).toContain("search__clearTrigger");
 	});
 });
