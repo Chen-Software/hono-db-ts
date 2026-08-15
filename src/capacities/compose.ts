@@ -1,4 +1,8 @@
 import {
+	Aggregable,
+	type AggregableStatic,
+} from "./aggregable";
+import {
 	Clonable,
 	type ClonableInstance,
 	type ClonableStatic,
@@ -133,6 +137,7 @@ export type CapacityFn =
 	| typeof Referencible
 	| typeof Queriable
 	| typeof Siftable
+	| typeof Aggregable
 	| typeof Meterable
 	| typeof Servable;
 
@@ -197,6 +202,7 @@ for (const [name, fn] of [
 	["Randomisable", Randomisable],
 	["Queriable", Queriable],
 	["Siftable", Siftable],
+	["Aggregable", Aggregable],
 	["Meterable", Meterable],
 	["Servable", Servable],
 ] as const) {
@@ -229,7 +235,9 @@ type CapacityInstance<C> = C extends typeof Hashable
 				? ClonableStatic & ClonableInstance
 				: C extends typeof Servable
 					? ServableStatic
-					: C extends { capacity: infer D }
+					: C extends typeof Aggregable
+						? AggregableStatic
+						: C extends { capacity: infer D }
 						? CapacityInstance<D>
 						: C extends string
 							? unknown

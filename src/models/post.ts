@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
+import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Validatable } from "@/capacities/validatable";
 import { isProd } from "@/macros/envs" with { type: "macro" };
@@ -240,6 +241,15 @@ const PostBase = defineModel<PostData>({
 		// range so `?created_at=[1995-01-01,2000-01-01]` works out of the box
 		// (a bare value is an exact day-level match; `[min,max]` is the range).
 		Queriable,
+		// Aggregable: turns `Post` into an aggregateable entity —
+		// `Post.aggregate(items, { groupBy: "authorId", count: "*" })` and
+		// `Post.serveAggregate(app, client)` → `GET /posts/aggregate`. Answers
+		// ranking questions the row filters can't, e.g. "which users posted the
+		// most?" via `?groupBy=authorId&count=*&orderBy=count:desc`.
+		{
+			capacity: Aggregable,
+			options: { path: "/posts/aggregate" },
+		},
 		// Meterable: opts `Post`'s repository operations into metrics. Every
 		// `PostRepo` op (findById / listLatest / listByAuthor / historyOf /
 		// create / append / delete) is timed and recorded as `Post.<op>` —

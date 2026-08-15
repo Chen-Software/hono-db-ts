@@ -1,5 +1,6 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
+import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
 import { Immutable } from "@/capacities/immutable";
@@ -200,6 +201,14 @@ const UserModel = defineModel<UserSchema>({
 			options: {
 				sort: { field: "created_at", dir: "desc" },
 			},
+		},
+		// Aggregable: turns `User` into an aggregateable entity — `User.aggregate`
+		// (in-memory) + `User.serveAggregate(app, client)` → `GET /users/aggregate`.
+		// Numeric roll-ups work out of the box (`?groupBy=role&avg=age`); the
+		// `mail` alias override is honored for aggregate-row filters too.
+		{
+			capacity: Aggregable,
+			options: { path: "/users/aggregate" },
 		},
 		// Meterable: opts `User`'s repository operations into metrics. Every
 		// `UserRepo` op (insert / load / find / delete / update) is timed and

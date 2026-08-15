@@ -194,9 +194,12 @@ interface Filters {
 /**
  * Translate `?param=` values into SQL `WHERE` clauses using the EXACT matcher
  * table `Queriable` derives. Permissive like `Queriable`: unknown params,
- * empty values and unparseable range bounds are silently ignored.
+ * empty values and unparseable range bounds are silently ignored. Exported so
+ * sibling capacities (e.g. `Aggregable`) build their WHERE the SAME way — a
+ * `?param=` filter means the same thing on the list route and on the
+ * aggregate route.
  */
-function buildFilters(
+export function buildFilters(
 	query: Query,
 	fieldPlans: FieldPlan[],
 	kinds: Map<string, string>,

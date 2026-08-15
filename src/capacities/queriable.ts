@@ -161,6 +161,46 @@ function kindToMode(kind: string, format?: string): Matcher {
 	}
 }
 
+/** The `?param=` query shape every Queriable-style filter accepts. */
+export type QueryParams = Record<string, string | string[] | undefined>;
+
+/**
+ * Apply a derived field-plan matcher table to an in-memory array — the shared
+ * core of `Queriable.filter` AND `Aggregable`'s pre-aggregation narrowing.
+ * PERMISSIVE like `Queriable`: an unknown param key, an empty value, an
+ * unparseable range bound, or a field absent from an item is never an error —
+ * the predicate simply passes. The `limit` param is IGNORED here (it is page
+ * control, not a matcher); callers apply it themselves.
+ */
+export function filterByPlans<I extends object>(
+	items: I[],
+	query: QueryParams,
+	fieldPlans: FieldPlan[],
+): I[] {
+	// Invert fieldPlans → param-keyed matcher for fast lookup.
+	const byParam = new Map<string, FieldPlan>();
+	for (const fp of fieldPlans) {
+		if (fp.mode === "none") continue;
+		byParam.set(fp.param, fp);
+	}
+
+	const predicates = Object.entries(query).filter(([key]) => key !== "limit");
+
+	return items.filter((item) => {
+		const data = item as unknown as Record<string, unknown>;
+		return predicates.every(([key, raw]) => {
+			const wanted = Array.isArray(raw) ? raw[0] : raw;
+			if (wanted == null || wanted === "") return true;
+			const fp = byParam.get(key);
+			// Unknown param key (or a `none` field) → ignore.
+			if (!fp) return true;
+			const actual = data[fp.field];
+			if (actual === undefined || actual === null) return true;
+			return matchField(actual, wanted, fp.mode, fp.isDate);
+		});
+	});
+}
+
 /**
  * Queriable — the capacity factory. Wires a static `filter` onto the adorned
  * model that applies the derived matcher table to an array of instances.
@@ -180,7 +220,7 @@ export const Queriable = <T extends object>(
 		/** Apply the derived query matchers to `items`. */
 		static filter<I extends T>(
 			items: I[],
-			query: Record<string, string | string[] | undefined>,
+			query: QueryParams,
 		): I[] {
 			const limitRaw = query["limit"];
 			const limit =
@@ -188,31 +228,7 @@ export const Queriable = <T extends object>(
 					? Number(Array.isArray(limitRaw) ? limitRaw[0] : limitRaw)
 					: undefined;
 
-			// Invert fieldPlans → param-keyed matcher for fast lookup.
-			const byParam = new Map<string, FieldPlan>();
-			for (const fp of fieldPlans) {
-				if (fp.mode === "none") continue;
-				byParam.set(fp.param, fp);
-			}
-
-			const predicates = Object.entries(query).filter(
-				([key]) => key !== "limit",
-			);
-
-			const matched = items.filter((item) => {
-				const data = item as unknown as Record<string, unknown>;
-				return predicates.every(([key, raw]) => {
-					const wanted = Array.isArray(raw) ? raw[0] : raw;
-					if (wanted == null || wanted === "") return true;
-					const fp = byParam.get(key);
-					// Unknown param key (or a `none` field) → ignore.
-					if (!fp) return true;
-					const actual = data[fp.field];
-					if (actual === undefined || actual === null) return true;
-					return matchField(actual, wanted, fp.mode, fp.isDate);
-				});
-			});
-
+			const matched = filterByPlans(items, query, fieldPlans);
 			return limit != null && Number.isFinite(limit)
 				? matched.slice(0, Math.max(0, limit))
 				: matched;
