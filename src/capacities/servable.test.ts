@@ -147,7 +147,9 @@ describe("Servable — generated list routes", () => {
 		expect(page1.body.data.rows.map((r: any) => r.id)).toEqual(["b3", "b2"]);
 		expect(page1.body.data.nextCursor).not.toBeNull();
 
-		const page2 = await get(`/boards?limit=2&cursor=${page1.body.data.nextCursor}`);
+		const page2 = await get(
+			`/boards?limit=2&cursor=${page1.body.data.nextCursor}`,
+		);
 		expect(page2.body.data.rows.map((r: any) => r.id)).toEqual(["b1"]);
 		expect(page2.body.data.nextCursor).toBeNull();
 	});
@@ -197,15 +199,36 @@ beforeAll(async () => {
 	await writeClient.unsafe(SEED);
 	await writeClient.unsafe(
 		`INSERT INTO "users" ("id","name","email","role","age","created_at") VALUES (?,?,?,?,?,?)`,
-		[UUID_USER, "User One", "one@example.com", "member", 30, "2020-01-01T00:00:00.000Z"],
+		[
+			UUID_USER,
+			"User One",
+			"one@example.com",
+			"member",
+			30,
+			"2020-01-01T00:00:00.000Z",
+		],
 	);
 	await writeClient.unsafe(
 		`INSERT INTO "users" ("id","name","email","role","age","created_at") VALUES (?,?,?,?,?,?)`,
-		[UUID_USER2, "User Two", "two@example.com", "member", 28, "2020-01-02T00:00:00.000Z"],
+		[
+			UUID_USER2,
+			"User Two",
+			"two@example.com",
+			"member",
+			28,
+			"2020-01-02T00:00:00.000Z",
+		],
 	);
 	await writeClient.unsafe(
 		`INSERT INTO "boards" ("id","name","slug","description","moderatorId","created_at") VALUES (?,?,?,?,?,?)`,
-		[UUID_BOARD, "Uuid Board", "uuid-board", "desc", UUID_USER, "2020-01-03T00:00:00.000Z"],
+		[
+			UUID_BOARD,
+			"Uuid Board",
+			"uuid-board",
+			"desc",
+			UUID_USER,
+			"2020-01-03T00:00:00.000Z",
+		],
 	);
 
 	writeApp = new Hono();
@@ -219,7 +242,8 @@ async function send(
 ): Promise<{ status: number; body: any }> {
 	const res = await writeApp.request(`http://local${path}`, {
 		method,
-		headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+		headers:
+			body !== undefined ? { "content-type": "application/json" } : undefined,
 		body: body !== undefined ? JSON.stringify(body) : undefined,
 	});
 	return { status: res.status, body: await res.json().catch(() => null) };
@@ -268,7 +292,9 @@ describe("Servable — PUT (partial update)", () => {
 		});
 		const id = created.body.data.id;
 
-		const { status, body } = await send("PUT", `/threads/${id}`, { title: "Updated title" });
+		const { status, body } = await send("PUT", `/threads/${id}`, {
+			title: "Updated title",
+		});
 		expect(status).toBe(200);
 		expect(body.ok).toBe(true);
 		expect(body.data.title).toBe("Updated title");
@@ -288,13 +314,17 @@ describe("Servable — PUT (partial update)", () => {
 		const id = created.body.data.id;
 		expect(created.body.data.pinned).toBe(false);
 
-		const { status, body } = await send("PUT", `/threads/${id}`, { pinned: true });
+		const { status, body } = await send("PUT", `/threads/${id}`, {
+			pinned: true,
+		});
 		expect(status).toBe(200);
 		expect(body.data.pinned).toBe(true);
 	});
 
 	it("404s when updating an absent id", async () => {
-		const { status } = await send("PUT", "/threads/does-not-exist", { title: "x" });
+		const { status } = await send("PUT", "/threads/does-not-exist", {
+			title: "x",
+		});
 		expect(status).toBe(404);
 	});
 });
@@ -386,8 +416,12 @@ describe("Servable — readonly (server-managed) fields", () => {
 		const row = (await res.json()).data;
 		expect(row.created_at).not.toBe("1999-01-01T00:00:00.000Z");
 		expect(row.updated_at).not.toBe("1999-01-01T00:00:00.000Z");
-		expect(new Date(row.created_at).getTime()).toBeGreaterThan(Date.now() - 5000);
-		expect(new Date(row.updated_at).getTime()).toBeGreaterThan(Date.now() - 5000);
+		expect(new Date(row.created_at).getTime()).toBeGreaterThan(
+			Date.now() - 5000,
+		);
+		expect(new Date(row.updated_at).getTime()).toBeGreaterThan(
+			Date.now() - 5000,
+		);
 		expect(row.title).toBe("no-forge");
 	});
 
@@ -396,7 +430,11 @@ describe("Servable — readonly (server-managed) fields", () => {
 			await app.request("http://local/threads", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ title: "patch-target", boardId: uuidA, authorId: uuidB }),
+				body: JSON.stringify({
+					title: "patch-target",
+					boardId: uuidA,
+					authorId: uuidB,
+				}),
 			})
 		).json();
 		const origCreated = created.data.created_at;
@@ -405,7 +443,11 @@ describe("Servable — readonly (server-managed) fields", () => {
 		const res = await app.request(`http://local/threads/${created.data.id}`, {
 			method: "PUT",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ created_at: "1999-01-01T00:00:00.000Z", id: forged, title: "patched" }),
+			body: JSON.stringify({
+				created_at: "1999-01-01T00:00:00.000Z",
+				id: forged,
+				title: "patched",
+			}),
 		});
 		expect(res.status).toBe(200);
 		const row = (await res.json()).data;

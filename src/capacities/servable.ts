@@ -260,7 +260,9 @@ function eqClause(
 ): void {
 	if (kind === "boolean") {
 		const v = wanted === "true" || wanted === "1";
-		out.clauses.push(dialect === "sqlite" ? `${col} = ${v ? 1 : 0}` : `${col} = ${v}`);
+		out.clauses.push(
+			dialect === "sqlite" ? `${col} = ${v ? 1 : 0}` : `${col} = ${v}`,
+		);
 		return;
 	}
 	if (kind === "integer" || kind === "number") {
@@ -405,7 +407,10 @@ export function Servable<TBase extends CapacityComposer>(
 	const maxLimit = options.maxLimit ?? 100;
 	const withById = options.byId !== false;
 
-	async function runList(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+	async function runList(
+		c: Context,
+		exec: SqlQueryExecutor,
+	): Promise<Response> {
 		try {
 			const query = c.req.query();
 			const limit = parseLimit(query["limit"], defaultLimit, maxLimit);
@@ -421,7 +426,8 @@ export function Servable<TBase extends CapacityComposer>(
 			if (cursor) {
 				const op = sortDir === "desc" ? "<" : ">";
 				const isNum =
-					kinds.get(sortField) === "integer" || kinds.get(sortField) === "number";
+					kinds.get(sortField) === "integer" ||
+					kinds.get(sortField) === "number";
 				if (isNum && !Number.isNaN(Number(cursor))) {
 					where.push(`${sortCol} ${op} ?`);
 					params.push(Number(cursor));
@@ -457,7 +463,10 @@ export function Servable<TBase extends CapacityComposer>(
 		}
 	}
 
-	async function runById(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+	async function runById(
+		c: Context,
+		exec: SqlQueryExecutor,
+	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
 			const rows = (await exec.unsafe(
@@ -493,7 +502,10 @@ export function Servable<TBase extends CapacityComposer>(
 	const withWrites = options.write !== false;
 	const cascades = options.cascadeDelete ?? [];
 
-	async function runCreate(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+	async function runCreate(
+		c: Context,
+		exec: SqlQueryExecutor,
+	): Promise<Response> {
 		try {
 			const body = await c.req.json();
 			if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -560,7 +572,10 @@ export function Servable<TBase extends CapacityComposer>(
 		}
 	}
 
-	async function runUpdate(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+	async function runUpdate(
+		c: Context,
+		exec: SqlQueryExecutor,
+	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
 			const rows = (await exec.unsafe(
@@ -577,7 +592,10 @@ export function Servable<TBase extends CapacityComposer>(
 			// Merge the patch onto the current row (domain values, so `fromRow`
 			// first), refresh `updated_at`, then encode — `toRow` skips absent
 			// fields, so ONLY the provided columns (plus the timestamp) are SET.
-			const current = (fromRow ? fromRow(rows[0]) : rows[0]) as Record<string, unknown>;
+			const current = (fromRow ? fromRow(rows[0]) : rows[0]) as Record<
+				string,
+				unknown
+			>;
 			// Server-managed fields are never taken from the patch: the PK is
 			// pinned to the URL id and `created_at` stays whatever it was. Any
 			// client-supplied value for them is ignored (not merged).
@@ -587,7 +605,8 @@ export function Servable<TBase extends CapacityComposer>(
 				merged[k] = v;
 			}
 			merged[idCol] = id;
-			if (kinds.has("updated_at")) merged["updated_at"] = new Date().toISOString();
+			if (kinds.has("updated_at"))
+				merged["updated_at"] = new Date().toISOString();
 
 			if (assertFn) {
 				try {
@@ -614,11 +633,17 @@ export function Servable<TBase extends CapacityComposer>(
 			)[0];
 			return json(fromRow ? fromRow(updated) : updated);
 		} catch (err) {
-			return fail(`servable PUT ${basePath}/:id: ${(err as Error).message}`, 500);
+			return fail(
+				`servable PUT ${basePath}/:id: ${(err as Error).message}`,
+				500,
+			);
 		}
 	}
 
-	async function runDelete(c: Context, exec: SqlQueryExecutor): Promise<Response> {
+	async function runDelete(
+		c: Context,
+		exec: SqlQueryExecutor,
+	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
 			const rows = (await exec.unsafe(
@@ -634,10 +659,16 @@ export function Servable<TBase extends CapacityComposer>(
 					[id],
 				);
 			}
-			await exec.unsafe(`DELETE FROM ${quote(tableName)} WHERE ${quote(idCol)} = ?`, [id]);
+			await exec.unsafe(
+				`DELETE FROM ${quote(tableName)} WHERE ${quote(idCol)} = ?`,
+				[id],
+			);
 			return json({ id, deleted: true });
 		} catch (err) {
-			return fail(`servable DELETE ${basePath}/:id: ${(err as Error).message}`, 500);
+			return fail(
+				`servable DELETE ${basePath}/:id: ${(err as Error).message}`,
+				500,
+			);
 		}
 	}
 
@@ -677,8 +708,8 @@ export function Servable<TBase extends CapacityComposer>(
 				isDate: fp.isDate,
 			})),
 			write: withWrites,
-			};
-			};
+		};
+	};
 
 	return Base;
 }

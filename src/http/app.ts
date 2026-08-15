@@ -91,13 +91,16 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 	// GET /boards/:id
 	app.get(`/boards/:id{${UUID}}`, async (c) => {
 		const id = c.req.param("id");
-		const board = (await fetchAll(`SELECT * FROM "boards" WHERE "id" = ?`, [id]))[0];
+		const board = (
+			await fetchAll(`SELECT * FROM "boards" WHERE "id" = ?`, [id])
+		)[0];
 		if (!board) return fail("board not found", 404);
 		const moderator =
-			(await fetchAll(
-				`SELECT id, name, email FROM "users" WHERE "id" = ?`,
-				[board.moderatorId],
-			))[0] ?? null;
+			(
+				await fetchAll(`SELECT id, name, email FROM "users" WHERE "id" = ?`, [
+					board.moderatorId,
+				])
+			)[0] ?? null;
 		return json({ ...board, moderator });
 	});
 
@@ -135,13 +138,28 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 	// GET /threads/:id
 	app.get(`/threads/:id{${UUID}}`, async (c) => {
 		const id = c.req.param("id");
-		const thread = (await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id]))[0];
+		const thread = (
+			await fetchAll(`SELECT * FROM "threads" WHERE "id" = ?`, [id])
+		)[0];
 		if (!thread) return fail("thread not found", 404);
 		const author =
-			(await fetchAll(`SELECT id, name, email FROM "users" WHERE "id" = ?`, [thread.authorId]))[0] ?? null;
+			(
+				await fetchAll(`SELECT id, name, email FROM "users" WHERE "id" = ?`, [
+					thread.authorId,
+				])
+			)[0] ?? null;
 		const board =
-			(await fetchAll(`SELECT id, name, slug FROM "boards" WHERE "id" = ?`, [thread.boardId]))[0] ?? null;
-		const replyCount = (await fetchAll(`SELECT COUNT(*) AS n FROM "replies" WHERE "threadId" = ?`, [id]))[0].n;
+			(
+				await fetchAll(`SELECT id, name, slug FROM "boards" WHERE "id" = ?`, [
+					thread.boardId,
+				])
+			)[0] ?? null;
+		const replyCount = (
+			await fetchAll(
+				`SELECT COUNT(*) AS n FROM "replies" WHERE "threadId" = ?`,
+				[id],
+			)
+		)[0].n;
 		return json({ ...thread, author, board, replyCount });
 	});
 
@@ -166,7 +184,12 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 	// GET /users/:id
 	app.get(`/users/:id{${UUID}}`, async (c) => {
 		const id = c.req.param("id");
-		const user = (await fetchAll(`SELECT id, name, email, role, age, "created_at" FROM "users" WHERE "id" = ?`, [id]))[0];
+		const user = (
+			await fetchAll(
+				`SELECT id, name, email, role, age, "created_at" FROM "users" WHERE "id" = ?`,
+				[id],
+			)
+		)[0];
 		if (!user) return fail("user not found", 404);
 		return json(user);
 	});

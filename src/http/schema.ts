@@ -70,7 +70,10 @@ export function resolveDatabaseTarget(
 	const trimmed = url.trim();
 
 	// Memory — any of the sqlite :memory: spellings.
-	if (/^sqlite:(?:\/\/)?\/?(:?memory:?)$/.test(trimmed) || trimmed === ":memory:") {
+	if (
+		/^sqlite:(?:\/\/)?\/?(:?memory:?)$/.test(trimmed) ||
+		trimmed === ":memory:"
+	) {
 		return { kind: "memory", url: ":memory:" };
 	}
 
@@ -109,9 +112,7 @@ export function readMigrationsSql(): string {
 }
 
 /** Does the database have any application tables yet? */
-export async function hasSchema(
-	client: SqlQueryExecutor,
-): Promise<boolean> {
+export async function hasSchema(client: SqlQueryExecutor): Promise<boolean> {
 	const rows = (await client.unsafe(
 		`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
 	)) as Array<{ name: string }>;
@@ -122,9 +123,7 @@ export async function hasSchema(
  * Apply the generated schema if the database is empty. Returns `true` when
  * schema was created, `false` when the DB already had tables (left untouched).
  */
-export async function ensureSchema(
-	client: SqlQueryExecutor,
-): Promise<boolean> {
+export async function ensureSchema(client: SqlQueryExecutor): Promise<boolean> {
 	if (await hasSchema(client)) return false;
 	const sql = readMigrationsSql();
 	if (!sql.trim()) {

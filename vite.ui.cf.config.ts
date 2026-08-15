@@ -1,11 +1,11 @@
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
-import build from '@hono/vite-build/cloudflare-workers'
-import { defineConfig, type Plugin } from 'vite'
-import honox from 'honox/vite'
-import { guardedTtsc } from './scripts/ttsc-island-guard'
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import build from "@hono/vite-build/cloudflare-workers";
+import { defineConfig, type Plugin } from "vite";
+import honox from "honox/vite";
+import { guardedTtsc } from "./scripts/ttsc-island-guard";
 
-const rootDir = dirname(fileURLToPath(import.meta.url))
+const rootDir = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Drizzle's sqlite dialect chunks import `node:fs` / `node:fs/promises` /
@@ -20,30 +20,30 @@ const rootDir = dirname(fileURLToPath(import.meta.url))
  */
 function stripNodeBuiltins(): Plugin {
 	return {
-		name: 'strip-node-builtins',
+		name: "strip-node-builtins",
 		generateBundle(_options, bundle) {
 			for (const name of Object.keys(bundle)) {
-				const chunk = bundle[name]
-				if (chunk?.type !== 'chunk') continue
-				let code = chunk.code
+				const chunk = bundle[name];
+				if (chunk?.type !== "chunk") continue;
+				let code = chunk.code;
 				// Drop bare side-effect imports of node builtins that Workers lacks.
 				code = code.replace(
 					/import"node:(fs|fs\/promises|os|path|async_hooks|util|url|buffer|stream|events|crypto)";/g,
-					'',
-				)
+					"",
+				);
 				// Drop `import X from "node:..."` default/namespace imports (drizzle
 				// imports them but never calls them — dead imports crash chunk load
 				// on Workers, which has no real implementations).
 				code = code.replace(
 					/import\s+\w+\s+from"node:(?:fs|fs\/promises|os|path|async_hooks|util|url|buffer|stream|events|crypto)";/g,
-					'',
-				)
+					"",
+				);
 				if (code !== chunk.code) {
-					chunk.code = code
+					chunk.code = code;
 				}
 			}
 		},
-	}
+	};
 }
 
 /**
@@ -63,37 +63,37 @@ export default defineConfig({
 		stripNodeBuiltins(),
 		guardedTtsc(),
 		honox({
-			entry: 'app/server.cf.ts',
-			client: { input: ['/app/client.ts', '/app/style.css'] },
+			entry: "app/server.cf.ts",
+			client: { input: ["/app/client.ts", "/app/style.css"] },
 		}),
 		build({
-			entry: 'app/server.cf.ts',
-			outputDir: resolve(rootDir, 'dist/ui-cf'),
+			entry: "app/server.cf.ts",
+			outputDir: resolve(rootDir, "dist/ui-cf"),
 			emptyOutDir: true,
-			staticRoot: resolve(rootDir, 'app/public'),
+			staticRoot: resolve(rootDir, "app/public"),
 			// honox's server entry uses top-level `await` (reading the client
 			// manifest), which the default `ssrTarget: "webworker"` rejects.
 			// The Workers runtime supports top-level await, so raise the target.
-			ssrTarget: 'esnext',
+			ssrTarget: "esnext",
 			// The Workers runtime has no real `node:*` implementations (even with
 			// `nodejs_compat`, fs/os/path/async_hooks are edge stubs). Drizzle's
 			// d1 adapter chunk imports them at module scope, which crashes the
 			// auth endpoints (`import("node:fs/promises")` throws → 500). Keep
 			// them external so they don't break chunk loading at runtime.
 			external: [
-				'bun',
-				'node:crypto',
-				'node:fs',
-				'node:fs/promises',
-				'node:os',
-				'node:path',
-				'node:async_hooks',
-				'node:util',
-				'node:url',
-				'node:buffer',
-				'node:stream',
-				'node:events',
-				'node:sqlite',
+				"bun",
+				"node:crypto",
+				"node:fs",
+				"node:fs/promises",
+				"node:os",
+				"node:path",
+				"node:async_hooks",
+				"node:util",
+				"node:url",
+				"node:buffer",
+				"node:stream",
+				"node:events",
+				"node:sqlite",
 			],
 		}),
 	],
@@ -104,21 +104,23 @@ export default defineConfig({
 	// inlines to `if (false)` when disabled and the entire Better Auth subtree
 	// (better-auth + drizzle adapter) is dropped from the deployed bundle.
 	define: {
-		__BETTER_AUTH_ENABLED__: JSON.stringify(process.env.BETTER_AUTH_ENABLED !== 'false'),
+		__BETTER_AUTH_ENABLED__: JSON.stringify(
+			process.env.BETTER_AUTH_ENABLED !== "false",
+		),
 	},
 	// The app imports the Panda design-system via the bare specifier
 	// `design-system/*` — alias it to the generated outdir at the repo root
 	// (same as vite.ui.config.ts).
 	resolve: {
 		alias: {
-			'design-system': resolve(rootDir, 'design-system'),
-			'@': resolve(rootDir, 'src'),
+			"design-system": resolve(rootDir, "design-system"),
+			"@": resolve(rootDir, "src"),
 		},
 	},
 	// esbuild-transpile (vite 5) reads `build.target` (not `ssr.target`) for the
 	// SSR chunk too, and the default es2020 rejects honox's top-level `await`.
 	// Workers supports top-level await, so raise it to esnext.
 	build: {
-		target: 'esnext',
+		target: "esnext",
 	},
-})
+});

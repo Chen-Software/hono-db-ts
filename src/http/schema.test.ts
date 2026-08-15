@@ -124,9 +124,9 @@ describe("ensureSchema", () => {
 		const createdAgain = await ensureSchema(client);
 		expect(createdAgain).toBe(false); // untouched
 
-		const rows = (await client.unsafe(
-			`SELECT name FROM "users"`,
-		)) as Array<{ name: string }>;
+		const rows = (await client.unsafe(`SELECT name FROM "users"`)) as Array<{
+			name: string;
+		}>;
 		expect(rows).toHaveLength(1);
 		expect(rows[0]!.name).toBe("Ada");
 		client.close();

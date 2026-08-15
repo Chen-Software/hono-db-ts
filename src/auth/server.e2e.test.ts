@@ -112,7 +112,9 @@ describe("Better Auth over the real mount path", () => {
 		const cookie = sessionCookie(signUp.headers.get("set-cookie"));
 
 		// Session is live before sign-out.
-		const before = await app.request("/api/auth/get-session", { headers: { cookie } });
+		const before = await app.request("/api/auth/get-session", {
+			headers: { cookie },
+		});
 		expect((await before.json())?.user?.email).toBe("signout@example.com");
 
 		// Sign out — Better Auth clears the session server-side and sends a
@@ -122,10 +124,14 @@ describe("Better Auth over the real mount path", () => {
 			headers: { cookie },
 		});
 		expect(signOut.status).toBe(200);
-		expect(signOut.headers.get("set-cookie") ?? "").toContain("better-auth.session_token=");
+		expect(signOut.headers.get("set-cookie") ?? "").toContain(
+			"better-auth.session_token=",
+		);
 
 		// The same cookie no longer resolves a session.
-		const after = await app.request("/api/auth/get-session", { headers: { cookie } });
+		const after = await app.request("/api/auth/get-session", {
+			headers: { cookie },
+		});
 		expect(await after.json()).toBeNull();
 	});
 

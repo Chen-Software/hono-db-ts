@@ -115,7 +115,9 @@ export function buildWranglerConfig(): WranglerConfig {
 				database_name: dbName,
 				// Real D1 database ID (D1_DATABASE_ID) or the placeholder; wrangler
 				// needs the actual ID to bind (it does NOT auto-resolve by name).
-				database_id: prod ? (d1DatabaseId() ?? "00000000000000000000000000000000") : "local",
+				database_id: prod
+					? (d1DatabaseId() ?? "00000000000000000000000000000000")
+					: "local",
 				preview_database_id: "local",
 				migrations_dir: "./drizzle",
 			},
@@ -130,7 +132,7 @@ export function buildWranglerConfig(): WranglerConfig {
 		config.vars = {
 			...config.vars,
 			DATABASE_URL:
-				type === "sqlite" ? ":memory:" : process.env.TURSO_URL ?? undefined,
+				type === "sqlite" ? ":memory:" : (process.env.TURSO_URL ?? undefined),
 		};
 	}
 
