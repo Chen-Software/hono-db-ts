@@ -41,19 +41,22 @@ describe("Search Component Localisation", () => {
 		expect(html).toContain("search__input"); // styles.input
 	});
 
-	test("should render interactive search as a hydrated island and support size/variant variants", () => {
+	test("should render interactive search as a hydrated island and forward placeholder/initialQuery", () => {
 		const html = (
 			<Search
 				interactive={true}
 				size="sm"
 				variant="subtle"
+				placeholder="Find threads"
 				initialQuery="Hono"
 			/>
 		).toString();
 
-		expect(html).toContain("search__root--size_sm");
-		expect(html).toContain("search__root--variant_subtle");
+		expect(html).toContain('placeholder="Find threads"');
 		expect(html).toContain('value="Hono"');
-		expect(html).toContain('class="search__clearTrigger'); // clearTrigger should be visible
+		expect(html).toContain("Search"); // the island's submit button
+		// Recipe classes are a static-rendering (SearchBase) feature; the
+		// hydrated island keeps its own layout, so none appear here.
+		expect(html).not.toContain("search__root");
 	});
 });

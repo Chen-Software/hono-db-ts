@@ -1,7 +1,6 @@
 import { css } from "../../design-system/css";
-import { Anchor, Button, Stack } from "./ui";
+import { Anchor, Button, Search, Stack } from "./ui";
 import { Header as LayoutHeader } from "./ui/layout";
-import SearchBox from "../islands/search";
 import ThemeSwitcher from "../islands/theme-switcher";
 import AuthButton from "../islands/auth-button";
 import UserAvatarCard from "../islands/user-avatar-card";
@@ -88,7 +87,7 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 				</nav>
 
 				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: "auto" })}>
-					<SearchBox />
+					<Search placeholder="Search threads & posts…" />
 					<ThemeSwitcher />
 					{__BETTER_AUTH_ENABLED__ && (
 						<>

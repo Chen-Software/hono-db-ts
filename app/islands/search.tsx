@@ -13,8 +13,16 @@ type SearchResult = {
  * whether the page is served by `bun run src/main.ts serve` or the UI dev
  * server.
  */
-export default function SearchBox() {
-	const [q, setQ] = useState('')
+type SearchBoxProps = {
+	placeholder?: string
+	initialQuery?: string
+}
+
+export default function SearchBox({
+	placeholder = 'Search threads & posts…',
+	initialQuery = '',
+}: SearchBoxProps) {
+	const [q, setQ] = useState(initialQuery)
 	const [result, setResult] = useState<SearchResult | null>(null)
 	const [error, setError] = useState<string | null>(null)
 
@@ -43,7 +51,7 @@ export default function SearchBox() {
 					value={q}
 					onInput={(e) => setQ((e.target as HTMLInputElement).value)}
 					onKeyDown={(e) => e.key === 'Enter' && run()}
-					placeholder="Search threads &amp; posts…"
+					placeholder={placeholder}
 					class={css({
 						w: 56,
 						px: 3,
