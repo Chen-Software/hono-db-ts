@@ -1,11 +1,11 @@
-import { SiteHeader } from "../components/site-header";
-import { css } from "../../design-system/css";
 import { createRoute } from "honox/factory";
-import { Card, Heading, Stack, Text } from "../components/ui";
-import AuthForm from "../islands/auth-form";
-
-const FONT =
-	"ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+import { AuthPage } from "../components/auth-page";
+import { getAuthInstance } from "../../src/auth/context";
+import {
+	authErrorMessage,
+	forwardAuthForm,
+	safeRedirectTarget,
+} from "../../src/auth/proxy";
 
 /**
  * Sign-in page — `/sign-in`.
@@ -18,35 +18,60 @@ const FONT =
  * When Better Auth is compiled out (`BETTER_AUTH_ENABLED=false`), the island
  * is never rendered (and its `better-auth` dependency is dead-code-eliminated
  * by the Vite `define`), so we show a plain notice instead.
+ *
+ * ## Robustness against broken island hydration
+ * See `sign-up.tsx` for the rationale: if the `AuthForm` island fails to
+ * hydrate, the `<form>` does a native `method="post"` submit to this route and
+ * the `POST` handler forwards it to Better Auth's `/api/auth/sign-in/email`
+ * endpoint, copying the session cookie onto a `?next=` redirect.
  */
 export default createRoute(async (c) => {
 	const next = c.req.query("next") ?? "";
+	return c.render(<AuthPage mode="sign-in" next={next} />);
+});
+
+export const POST = createRoute(async (c) => {
+	if (!__BETTER_AUTH_ENABLED__) return c.redirect("/");
+
+	const auth = await getAuthInstance(c);
+	if (!auth) return c.redirect("/");
+
+	const form = await c.req.parseBody();
+	const email = typeof form.email === "string" ? form.email.trim() : "";
+	const password = typeof form.password === "string" ? form.password : "";
+	const next = safeRedirectTarget(c.req.query("next"));
+
+	if (!email || !password) {
+		return c.render(
+			<AuthPage
+				mode="sign-in"
+				next={next}
+				error="Please enter your email and password."
+				defaultEmail={email}
+			/>,
+		);
+	}
+
+	const { status, setCookie, body } = await forwardAuthForm({
+		auth,
+		endpoint: "/sign-in/email",
+		payload: { email, password },
+		cookie: c.req.header("cookie") ?? undefined,
+		origin: new URL(c.req.url).origin,
+	});
+
+	if (status >= 200 && status < 300) {
+		const res = c.redirect(next, 302);
+		for (const ck of setCookie) res.headers.append("Set-Cookie", ck);
+		return res;
+	}
 
 	return c.render(
-		<div class={css({ minHeight: "100vh", bg: "#f7f7f8", color: "ink", fontFamily: FONT })}>
-			<title>Sign in · BBS</title>
-
-			<SiteHeader variant="app" />
-			<main class={css({ maxWidth: "md", mx: "auto", px: 6, py: 16 })}>
-				<Card>
-					<div class={css({ p: 8 })}>
-						<Stack gap="1" class={css({ mb: 6 })}>
-							<Heading class={css({ fontSize: "2xl", fontWeight: 800 })}>Sign in</Heading>
-							<Text class={css({ fontSize: "sm", color: "muted" })}>
-								Welcome back. Sign in to continue.
-							</Text>
-						</Stack>
-
-						{__BETTER_AUTH_ENABLED__ ? (
-							<AuthForm mode="sign-in" next={next} />
-						) : (
-							<Text class={css({ fontSize: "sm", color: "muted" })}>
-								Authentication is currently disabled on this deployment.
-							</Text>
-						)}
-					</div>
-				</Card>
-			</main>
-		</div>,
+		<AuthPage
+			mode="sign-in"
+			next={next}
+			error={authErrorMessage(body) ?? "Couldn't sign you in. Please check your details."}
+			defaultEmail={email}
+		/>,
 	);
 });

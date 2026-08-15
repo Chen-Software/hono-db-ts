@@ -10,6 +10,15 @@ export interface AuthFormProps {
 	mode: Mode;
 	/** Where to send the user after a successful sign-in (from `?next=`). */
 	next?: string;
+	/**
+	 * Server-side error to show on first render. Populated when the form is
+	 * re-rendered after a failed native (non-hydrated) POST submit.
+	 */
+	error?: string;
+	/** Pre-fill the email field (e.g. after a failed POST so the user retries). */
+	defaultEmail?: string;
+	/** Pre-fill the name field (sign-up). */
+	defaultName?: string;
 }
 
 const FONT =
@@ -26,11 +35,17 @@ const FONT =
  * The `next` param comes from the protected route's `?next=` redirect and is
  * validated to be a same-origin relative path (no open redirects).
  */
-export default function AuthForm({ mode, next }: AuthFormProps) {
-	const [email, setEmail] = useState("");
+export default function AuthForm({
+	mode,
+	next,
+	error,
+	defaultEmail = "",
+	defaultName = "",
+}: AuthFormProps) {
+	const [email, setEmail] = useState(defaultEmail);
 	const [password, setPassword] = useState("");
-	const [name, setName] = useState("");
-	const [error, setError] = useState<string | null>(null);
+	const [name, setName] = useState(defaultName);
+	const [errorState, setError] = useState<string | null>(error ?? null);
 	const [submitting, setSubmitting] = useState(false);
 
 	const isSignUp = mode === "sign-up";
@@ -64,7 +79,7 @@ export default function AuthForm({ mode, next }: AuthFormProps) {
 		`/${to}${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
 	return (
-		<form onSubmit={handleSubmit} class={vstack({ gap: "4", w: "full" })}>
+		<form method="post" onSubmit={handleSubmit} class={vstack({ gap: "4", w: "full" })}>
 			{isSignUp && (
 				<label class={stack({ gap: "1.5" })}>
 					<span
@@ -122,7 +137,7 @@ export default function AuthForm({ mode, next }: AuthFormProps) {
 				/>
 			</label>
 
-			{error && (
+			{errorState && (
 				<div
 					role="alert"
 					class={css({
@@ -136,7 +151,7 @@ export default function AuthForm({ mode, next }: AuthFormProps) {
 						fontFamily: FONT,
 					})}
 				>
-					{error}
+					{errorState}
 				</div>
 			)}
 

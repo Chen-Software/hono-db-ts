@@ -69,18 +69,29 @@ const app = createApp({
 		// not understood by this Workers build), so `if (false)` here drops the
 		// entire Better Auth subtree from the deployed bundle.
 		if (__BETTER_AUTH_ENABLED__) {
-			server.on(['GET', 'POST'], '/api/auth/*', (c) => {
+			server.on(['GET', 'POST'], '/api/auth/*', async (c) => {
 				const db = (c.env as { DB?: D1Database }).DB
 				if (!db) return c.json({ error: 'auth: no D1 binding' }, 500)
-				return createAuth(
-					drizzle(db),
-					authEnvFromBindings(
-						c.env as unknown as {
-							BETTER_AUTH_URL?: string
-							BETTER_AUTH_SECRET?: string
-						},
-					),
-				).handler(c.req.raw)
+				try {
+					return await createAuth(
+						drizzle(db),
+						authEnvFromBindings(
+							c.env as unknown as {
+								BETTER_AUTH_URL?: string
+								BETTER_AUTH_SECRET?: string
+							},
+						),
+					).handler(c.req.raw)
+				} catch (e) {
+					// Surface the real error rather than letting it become an
+					// opaque empty-body 500 from the Worker runtime. This makes
+					// the cause visible both to the client (the island now
+					// renders the message) and to a direct `curl`. Typical
+					// culprits: a missing BETTER_AUTH_SECRET secret, or Better
+					// Auth's D1 tables not having been migrated to prod.
+					const message = e instanceof Error ? e.message : String(e)
+					return c.json({ error: message }, 500)
+				}
 			})
 		}
 

@@ -65,3 +65,14 @@ export async function getSession(c: Context) {
 	if (!inst) return null;
 	return inst.api.getSession({ headers: c.req.raw.headers });
 }
+
+/**
+ * Resolve the Better Auth instance for the current request.
+ *
+ * Same resolution order as `getSession` (`c.env.auth` first, then the Workers
+ * D1 binding), but returns the *instance* rather than a session — used by the
+ * SSR auth-form POST handlers to forward a submission to `auth.handler`.
+ */
+export async function getAuthInstance(c: Context) {
+	return instanceFromContext(c) ?? (await authFromD1(c));
+}
