@@ -1,6 +1,6 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
-import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
+import { Anchor, Badge, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
 import { getSession } from '../../../src/auth/context'
 
@@ -65,7 +65,7 @@ function timeAgo(iso: string): string {
 }
 
 export default createRoute(async (c) => {
-	const id = c.req.param('id')
+	const id = c.req.param('id') ?? ''
 
 	// Authenticated + owner-only gate. `__BETTER_AUTH_ENABLED__` is the Vite
 	// build-time flag (see vite.ui.config.ts / vite.ui.cf.config.ts): with
@@ -75,6 +75,9 @@ export default createRoute(async (c) => {
 	// invalid session cookie sends the visitor to sign-in (remembering where
 	// they were), and a session that does not belong to this profile id is
 	// rejected with 403 (you may only view your own profile).
+	let sessionUser:
+		| { id: string; name: string; email: string; createdAt: string }
+		| null = null
 	if (__BETTER_AUTH_ENABLED__) {
 		const session = await getSession(c)
 		if (!session?.user) {
@@ -83,12 +86,34 @@ export default createRoute(async (c) => {
 		if (session.user.id !== id) {
 			return c.json({ error: "forbidden" }, 403)
 		}
+		sessionUser = {
+			id: session.user.id,
+			name: session.user.name,
+			email: session.user.email,
+			createdAt: String(session.user.createdAt),
+		}
 	}
 
-	let user: UserRow | null = null
+	let user: UserRow
 	let threads: UserThread[] = []
 	let posts: UserPost[] = []
 	let replies: UserReply[] = []
+
+	// The Better Auth id (e.g. `TX31…`) and the BBS `users` table id (a demo
+	// UUID like `e6c0…`) live in two separate id spaces with no linkage yet,
+	// so a signed-up account has no BBS `users` row — which used to make this
+	// owner-only page 404. Since the page is owner-only we can always derive a
+	// profile from the authenticated session; we only enrich it with a BBS row
+	// (and that user's activity) when one actually exists. Activity stays empty
+	// for a plain Better Auth account (they haven't authored demo content).
+	const fallback = (): UserRow => ({
+		id,
+		name: sessionUser?.name ?? "Member",
+		email: sessionUser?.email ?? "",
+		role: "member",
+		age: 0,
+		created_at: sessionUser?.createdAt ?? new Date().toISOString(),
+	})
 
 	try {
 		const sql = c.env.sql
@@ -97,9 +122,10 @@ export default createRoute(async (c) => {
 				`SELECT id, name, email, role, age, "created_at" FROM "users" WHERE "id" = ? LIMIT 1`,
 				[id],
 			)) as UserRow[]
-			user = rows[0] ?? null
+			const bbs = rows[0]
+			user = bbs ?? fallback()
 
-			if (user) {
+			if (bbs) {
 				threads = (await sql.unsafe(
 					`SELECT t.id, t.title, t."created_at", t."updated_at",
 					        b.name AS board_name,
@@ -130,32 +156,16 @@ export default createRoute(async (c) => {
 					[id],
 				)) as UserReply[]
 			}
+		} else {
+			user = fallback()
 		}
 	} catch {
-		user = null
+		user = fallback()
 		threads = []
 		posts = []
 		replies = []
 	}
 
-	if (!user) {
-		c.status(404)
-		return c.render(
-			<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, sans-serif' })}>
-				<title>User not found · BBS</title>
-				<Nav />
-				<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 16, textAlign: 'center' })}>
-					<Heading class={css({ fontSize: '2xl', fontWeight: 800 })}>User not found</Heading>
-					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
-						No user with id <code>{id}</code>.
-					</Text>
-					<Button as="a" href="/" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
-						Back to forum
-					</Button>
-				</main>
-			</div>,
-		)
-	}
 
 	// Role badge color — keeps the profile glanceable.
 	const rolePalette =

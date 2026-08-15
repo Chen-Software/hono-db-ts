@@ -4,6 +4,7 @@ import { Header as LayoutHeader } from "./ui/layout";
 import SearchBox from "../islands/search";
 import ThemeSwitcher from "../islands/theme-switcher";
 import AuthButton from "../islands/auth-button";
+import UserAvatarCard from "../islands/user-avatar-card";
 
 type Variant = "app" | "home";
 
@@ -73,12 +74,22 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 					<Anchor href={postHref} variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
 						Posts
 					</Anchor>
+					{__BETTER_AUTH_ENABLED__ && (
+						<Anchor href="/users/me" variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
+							Profile
+						</Anchor>
+					)}
 				</nav>
 
 				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: "auto" })}>
 					<SearchBox />
 					<ThemeSwitcher />
-					{__BETTER_AUTH_ENABLED__ && <AuthButton />}
+					{__BETTER_AUTH_ENABLED__ && (
+						<>
+							<UserAvatarCard />
+							<AuthButton />
+						</>
+					)}
 					<Button as="a" href={newThreadHref} colorPalette="orange" size="sm">
 						New thread
 					</Button>
