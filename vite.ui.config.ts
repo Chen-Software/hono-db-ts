@@ -66,6 +66,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'design-system': resolve(process.cwd(), 'design-system'),
+      '@': resolve(process.cwd(), 'src'),
     },
   },
   server: {

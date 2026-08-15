@@ -48,6 +48,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'design-system': resolve(rootDir, 'design-system'),
+			'@': resolve(rootDir, 'src'),
 		},
 	},
 })
