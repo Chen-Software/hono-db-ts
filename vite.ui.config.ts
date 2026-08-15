@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import build from '@hono/vite-build/bun'
 import { defineConfig } from 'vite'
 import honox from 'honox/vite'
-import ttsc from '@ttsc/unplugin/vite'
+import { guardedTtsc } from './scripts/ttsc-island-guard'
 
 /**
  * Vite config for building the Honox UI (in /app) into a Bun-serveable Hono
@@ -28,7 +28,7 @@ import ttsc from '@ttsc/unplugin/vite'
  */
 export default defineConfig({
   plugins: [
-    ttsc(),
+    guardedTtsc(),
     honox({
       entry: 'app/server.ts',
       client: { input: ['/app/client.ts', '/app/style.css'] },
@@ -56,6 +56,10 @@ export default defineConfig({
   build: {
     outDir: resolve(process.cwd(), 'dist'),
     emptyOutDir: false,
+    // honox's server entry uses top-level `await` (reading the client
+    // manifest); esbuild-transpile reads `build.target` (default es2020) and
+    // rejects it. Bun supports top-level await, so raise to esnext.
+    target: 'esnext',
   },
   // `public` holds the UI's static files (favicon.ico, etc.); Vite copies
   // it into the build outDir so `/favicon.ico` is served by `serveStatic`.
