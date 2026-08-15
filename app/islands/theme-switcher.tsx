@@ -150,9 +150,9 @@ export default function ThemeSwitcher() {
 					h: 9,
 					rounded: 'md',
 					border: '1px solid token(colors.border)',
-					bg: 'white',
+					bg: 'colorPalette.surface.bg',
 					cursor: 'pointer',
-					_hover: { bg: '#fafafa' },
+					_hover: { bg: 'colorPalette.surface.bg.hover' },
 				})}
 			>
 				<span
@@ -179,7 +179,8 @@ export default function ThemeSwitcher() {
 						w: 56,
 						rounded: 'xl',
 						border: '1px solid token(colors.border)',
-						bg: 'white',
+						bg: 'colorPalette.surface.bg',
+						color: 'fg.default',
 						boxShadow: '0 12px 32px rgba(17,24,39,0.12)',
 						p: 2,
 					})}
@@ -190,7 +191,7 @@ export default function ThemeSwitcher() {
 							py: 1.5,
 							fontSize: 'xs',
 							fontWeight: 600,
-							color: 'muted',
+							color: 'fg.subtle',
 							textTransform: 'uppercase',
 							letterSpacing: '0.05em',
 						})}
@@ -214,7 +215,7 @@ export default function ThemeSwitcher() {
 							py: 1.5,
 							fontSize: 'xs',
 							fontWeight: 600,
-							color: 'muted',
+							color: 'fg.subtle',
 							textTransform: 'uppercase',
 							letterSpacing: '0.05em',
 							borderTop: '1px solid token(colors.border)',
@@ -240,13 +241,13 @@ export default function ThemeSwitcher() {
 										py: 1.5,
 										rounded: 'md',
 										border: 'none',
-										bg: active ? '#f4f4f5' : 'transparent',
+										bg: active ? 'colorPalette.subtle.bg' : 'transparent',
 										fontSize: 'sm',
-										color: 'ink',
+										color: 'fg.default',
 										cursor: 'pointer',
-										_hover: { bg: '#fafafa' },
+										_hover: { bg: 'colorPalette.subtle.bg.hover' },
 									})}
-								>
+									>
 									<span
 										class={css({
 											display: 'inline-block',
@@ -254,7 +255,7 @@ export default function ThemeSwitcher() {
 											h: 3.5,
 											rounded: 'full',
 											bg: p.swatch,
-											border: active ? '2px solid token(colors.colorPalette.solid.bg)' : '1px solid rgba(0,0,0,0.08)',
+											border: active ? '2px solid token(colors.colorPalette.solid.bg)' : '1px solid token(colors.border)',
 											flexShrink: 0,
 										})}
 									/>

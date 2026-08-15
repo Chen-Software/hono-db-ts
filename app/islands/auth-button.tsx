@@ -44,7 +44,7 @@ export default function AuthButton() {
 
 	if (status === "loading") {
 		return (
-			<span class={css({ fontSize: "sm", color: "muted", fontFamily: FONT })}>…</span>
+			<span class={css({ fontSize: "sm", color: "fg.muted", fontFamily: FONT })}>…</span>
 		);
 	}
 

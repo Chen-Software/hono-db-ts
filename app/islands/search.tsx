@@ -51,25 +51,26 @@ export default function SearchBox() {
 						rounded: 'md',
 						border: '1px solid token(colors.border)',
 						fontSize: 'sm',
-						bg: '#fafafa',
+						bg: 'canvas',
+						color: 'fg.default',
 						outline: 'none',
-						_focus: { borderColor: 'accent', bg: 'white' },
+						_focus: { borderColor: 'colorPalette.solid.bg', bg: 'canvas' },
 					})}
-				/>
-				<button
+					/>
+					<button
 					onClick={() => run()}
 					class={css({
 						px: 3,
 						py: 2,
 						rounded: 'md',
-						bg: 'ink',
-						color: 'white',
+						bg: 'colorPalette.solid.bg',
+						color: 'colorPalette.solid.fg',
 						fontSize: 'sm',
 						fontWeight: 600,
 						cursor: 'pointer',
-						_hover: { bg: '#1f2937' },
+						_hover: { bg: 'colorPalette.solid.bg.hover' },
 					})}
-				>
+					>
 					Search
 				</button>
 			</div>
@@ -85,29 +86,30 @@ export default function SearchBox() {
 						overflowY: 'auto',
 						rounded: 'lg',
 						border: '1px solid token(colors.border)',
-						bg: 'white',
+						bg: 'colorPalette.surface.bg',
+						color: 'fg.default',
 						boxShadow: '0 12px 32px rgba(17,24,39,0.15)',
 						p: 2,
 						zIndex: 20,
-					})}
-				>
-					{error ? (
-						<p class={css({ px: 3, py: 2, fontSize: 'sm', color: '#991b1b' })}>{error}</p>
-					) : (
+						})}
+						>
+						{error ? (
+						<p class={css({ px: 3, py: 2, fontSize: 'sm', color: 'fg.error' })}>{error}</p>
+						) : (
 						<>
 							{result && result.threads.length === 0 && result.posts.length === 0 && (
-								<p class={css({ px: 3, py: 2, fontSize: 'sm', color: 'faint' })}>No results.</p>
+								<p class={css({ px: 3, py: 2, fontSize: 'sm', color: 'fg.subtle' })}>No results.</p>
 							)}
 							{result && result.threads.length > 0 && (
 								<div>
-									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'faint', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'fg.subtle', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
 										Threads
 									</div>
 									{result.threads.map((t) => (
 										<a
 											key={t.id}
 											href={`/threads/${t.id}`}
-											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', fontWeight: 600, color: 'ink', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
+											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', fontWeight: 600, color: 'fg.default', textDecoration: 'none', _hover: { bg: 'colorPalette.subtle.bg.hover' } })}
 										>
 											{t.title}
 										</a>
@@ -116,14 +118,14 @@ export default function SearchBox() {
 							)}
 							{result && result.posts.length > 0 && (
 								<div>
-									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'faint', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+									<div class={css({ px: 3, pt: 2, pb: 1, fontSize: 'xs', fontWeight: 700, color: 'fg.subtle', textTransform: 'uppercase', letterSpacing: '0.05em' })}>
 										Posts
 									</div>
 									{result.posts.map((p) => (
 										<a
 											key={p.id}
 											href={`/posts/${p.id}`}
-											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', color: 'ink', textDecoration: 'none', _hover: { bg: '#fafafa' } })}
+											class={css({ display: 'block', px: 3, py: 2, rounded: 'md', fontSize: 'sm', color: 'fg.default', textDecoration: 'none', _hover: { bg: 'colorPalette.subtle.bg.hover' } })}
 										>
 											{p.title}
 										</a>
@@ -131,7 +133,7 @@ export default function SearchBox() {
 								</div>
 							)}
 						</>
-					)}
+						)}
 				</div>
 			)}
 		</div>

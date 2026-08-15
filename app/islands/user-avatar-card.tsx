@@ -92,7 +92,7 @@ export default function UserAvatarCard() {
 					w: "2rem",
 					h: "2rem",
 					rounded: "full",
-					bg: "bg.muted",
+					bg: "colorPalette.subtle.bg",
 					opacity: 0.5,
 				})}
 				aria-hidden="true"
@@ -137,7 +137,7 @@ export default function UserAvatarCard() {
 							class={css({
 								fontWeight: 700,
 								fontSize: "sm",
-								color: "fg",
+								color: "fg.default",
 							})}
 						>
 							{displayName}
@@ -159,7 +159,7 @@ export default function UserAvatarCard() {
 								marginTop: 2,
 								fontSize: "sm",
 								fontWeight: 600,
-								color: "accent",
+								color: "colorPalette.solid.bg",
 								_hover: { textDecoration: "underline" },
 							})}
 						>

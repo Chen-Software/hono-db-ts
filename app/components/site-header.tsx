@@ -38,7 +38,13 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 	const newThreadHref = "/#new-thread";
 
 	return (
-		<LayoutHeader sticky>
+		<LayoutHeader
+			sticky
+			class={css({
+				bg: "colorPalette.surface.bg",
+				borderBottom: "1px solid token(colors.border)",
+			})}
+		>
 			<Stack direction="horizontal" align="center" gap="6" class={css({ flex: 1 })}>
 				<Anchor
 					href="/"
@@ -49,7 +55,7 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 						gap: 2,
 						fontWeight: 800,
 						fontSize: "lg",
-						color: "ink",
+						color: "fg.default",
 					})}
 				>
 					<span
@@ -58,24 +64,24 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 							w: 3,
 							h: 3,
 							rounded: "sm",
-							bg: "accent",
+							bg: "colorPalette.solid.bg",
 						})}
 					/>
 					BBS Forum
 				</Anchor>
 
 				<nav class={css({ display: "flex", gap: 4, ml: 4 })}>
-					<Anchor href={boardHref} variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
+					<Anchor href={boardHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
 						Boards
 					</Anchor>
-					<Anchor href={threadHref} variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
+					<Anchor href={threadHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
 						Threads
 					</Anchor>
-					<Anchor href={postHref} variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
+					<Anchor href={postHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
 						Posts
 					</Anchor>
 					{__BETTER_AUTH_ENABLED__ && (
-						<Anchor href="/users/me" variant="plain" class={css({ fontSize: "sm", color: "muted" })}>
+						<Anchor href="/users/me" variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
 							Profile
 						</Anchor>
 					)}
