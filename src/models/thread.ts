@@ -1,5 +1,6 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
+import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
 import { Immutable } from "@/capacities/immutable";
@@ -146,6 +147,13 @@ const ThreadModel = defineModel<ThreadSchema>({
 				sort: { field: "updated_at", dir: "desc" },
 				cascadeDelete: [{ table: "replies", column: "threadId" }],
 			},
+		},
+		// Aggregable: `Thread.aggregate` (in-memory) +
+		// `Thread.serveAggregate(app, client)` → `GET /threads/aggregate`, e.g.
+		// "how many threads per board?" via `?groupBy=boardId&count=*`.
+		{
+			capacity: Aggregable,
+			options: { path: "/threads/aggregate" },
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Thread" } },

@@ -1,5 +1,6 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
+import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
 import { Immutable } from "@/capacities/immutable";
@@ -146,6 +147,13 @@ const ReplyModel = defineModel<ReplySchema>({
 				sort: { field: "created_at", dir: "asc" },
 				cascadeDelete: [{ table: "replies", column: "parentId" }],
 			},
+		},
+		// Aggregable: `Reply.aggregate` (in-memory) +
+		// `Reply.serveAggregate(app, client)` → `GET /replies/aggregate`, e.g.
+		// "who replies the most?" via `?groupBy=authorId&count=*&orderBy=count:desc`.
+		{
+			capacity: Aggregable,
+			options: { path: "/replies/aggregate" },
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Reply" } },

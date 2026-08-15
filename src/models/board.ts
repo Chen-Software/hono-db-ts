@@ -1,5 +1,6 @@
 import type { UUID } from "crypto";
 import typia, { type tags } from "typia";
+import { Aggregable } from "@/capacities/aggregable";
 import { Clonable } from "@/capacities/clonable";
 import { Comparable } from "@/capacities/comparable";
 import { Immutable } from "@/capacities/immutable";
@@ -151,6 +152,13 @@ const BoardModel = defineModel<BoardSchema>({
 		{
 			capacity: Servable,
 			options: { sort: { field: "created_at", dir: "desc" } },
+		},
+		// Aggregable: `Board.aggregate` (in-memory) +
+		// `Board.serveAggregate(app, client)` → `GET /boards/aggregate`, e.g.
+		// "how many threads per board?" via `?count=*` per moderator.
+		{
+			capacity: Aggregable,
+			options: { path: "/boards/aggregate" },
 		},
 		Randomisable,
 		{ capacity: Meterable, options: { name: "Board" } },
