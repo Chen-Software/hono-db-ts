@@ -90,7 +90,7 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 							<AuthButton />
 						</>
 					)}
-					<Button as="a" href={newThreadHref} colorPalette="orange" size="sm">
+					<Button as="a" href={newThreadHref} size="sm">
 						New thread
 					</Button>
 				</Stack>

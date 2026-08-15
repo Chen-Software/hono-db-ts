@@ -110,7 +110,7 @@ export default createRoute(async (c) => {
 							{total.toLocaleString()} board{total === 1 ? '' : 's'} · ordered by activity
 						</Text>
 					</div>
-					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+					<Button as="a" href="/#new-thread" size="sm">
 						New thread
 					</Button>
 				</Stack>
@@ -142,7 +142,7 @@ export default createRoute(async (c) => {
 										{b.description}
 									</Text>
 									<Stack direction="horizontal" gap="2" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
-										<Badge colorPalette="orange" variant="subtle">
+										<Badge variant="subtle">
 											/{b.slug}
 										</Badge>
 									</Stack>

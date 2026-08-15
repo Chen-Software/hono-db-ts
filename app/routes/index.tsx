@@ -189,7 +189,7 @@ export default createRoute(async (c) => {
 			{/* ---------- Hero / stats ---------- */}
 			<section class={css({ px: 6, py: 14, bg: '#111827', color: 'white' })}>
 				<div class={css({ maxWidth: '6xl', mx: 'auto' })}>
-					<Badge colorPalette="orange" class={css({ textTransform: 'uppercase', letterSpacing: '0.05em' })}>
+					<Badge class={css({ textTransform: 'uppercase', letterSpacing: '0.05em' })}>
 						Model-driven community
 					</Badge>
 					<Heading as="h1" class={css({ mt: 4, fontSize: '4xl', fontWeight: 800, letterSpacing: '-0.02em', color: 'white' })}>
@@ -282,7 +282,7 @@ export default createRoute(async (c) => {
 													{b.description}
 												</Text>
 												<Stack direction="horizontal" align="center" gap="3" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
-													<Badge colorPalette="orange" variant="subtle">
+													<Badge variant="subtle">
 														/{b.slug}
 													</Badge>
 													<Text as="span">{b.thread_count} threads</Text>
@@ -374,7 +374,7 @@ export default createRoute(async (c) => {
 											))}
 										</select>
 									</div>
-									<Button type="submit" colorPalette="orange" size="sm">
+									<Button type="submit" size="sm">
 										Post thread
 									</Button>
 								</form>
@@ -470,7 +470,7 @@ export default createRoute(async (c) => {
 														_focus: { borderColor: 'accent' },
 													})}
 												/>
-												<Button type="submit" colorPalette="orange" size="xs">
+												<Button type="submit" size="xs">
 													Save
 												</Button>
 												<Anchor

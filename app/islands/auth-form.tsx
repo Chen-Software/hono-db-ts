@@ -159,7 +159,7 @@ export default function AuthForm({
 				type="submit"
 				disabled={submitting}
 				class={cx(
-					button({ variant: "solid", size: "md", colorPalette: "orange" }),
+					button({ variant: "solid", size: "md" }),
 					css({ w: "full", mt: 2, fontFamily: FONT }),
 				)}
 			>

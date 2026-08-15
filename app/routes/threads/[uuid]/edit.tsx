@@ -67,7 +67,7 @@ export default createRoute(async (c) => {
 					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No thread with id <code>{uuid}</code>.
 					</Text>
-					<Button as="a" href="/" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
+					<Button as="a" href="/" size="sm" class={css({ mt: 6 })}>
 						Back to forum
 					</Button>
 				</main>
@@ -167,7 +167,7 @@ export default createRoute(async (c) => {
 
 						{/* Actions */}
 						<Stack direction="horizontal" align="center" gap="3" class={css({ pt: 2 })}>
-							<Button type="submit" colorPalette="orange" size="md">
+							<Button type="submit" size="md">
 								Save changes
 							</Button>
 							<Anchor

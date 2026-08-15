@@ -121,7 +121,7 @@ export default createRoute(async (c) => {
 					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No thread with id <code>{uuid}</code>.
 					</Text>
-					<Button as="a" href="/" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
+					<Button as="a" href="/" size="sm" class={css({ mt: 6 })}>
 						Back to forum
 					</Button>
 				</main>
@@ -169,7 +169,7 @@ export default createRoute(async (c) => {
 									</Badge>
 								)}
 								{thread.board_slug && (
-									<Badge colorPalette="orange" variant="subtle">
+									<Badge variant="subtle">
 										/{thread.board_slug}
 									</Badge>
 								)}
@@ -248,7 +248,7 @@ export default createRoute(async (c) => {
 									rows={4}
 									class={css({ w: 'full', px: 3, py: 2, rounded: 'md', border: '1px solid token(colors.border)', fontSize: 'sm', outline: 'none', resize: 'vertical', _focus: { borderColor: 'accent' } })}
 								/>
-								<Button type="submit" colorPalette="orange" size="sm">
+								<Button type="submit" size="sm">
 									Post reply
 								</Button>
 							</form>

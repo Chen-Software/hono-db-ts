@@ -145,7 +145,7 @@ export default createRoute(async (c) => {
 					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No board with id <code>{uuid}</code>.
 					</Text>
-					<Button as="a" href="/" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
+					<Button as="a" href="/" size="sm" class={css({ mt: 6 })}>
 						Back to forum
 					</Button>
 				</main>
@@ -178,7 +178,7 @@ export default createRoute(async (c) => {
 						<Card class={css({ p: 6, mb: 8, width: 'full' })}>
 							<Stack direction="horizontal" align="center" gap="3">
 								<span class={css({ w: 3, h: 3, rounded: 'full', bg: 'accent' })} />
-								<Badge colorPalette="orange" variant="subtle">
+								<Badge variant="subtle">
 									/{board.slug}
 								</Badge>
 							</Stack>
@@ -236,7 +236,7 @@ export default createRoute(async (c) => {
 											</option>
 										))}
 									</select>
-									<Button type="submit" colorPalette="orange" size="sm">
+									<Button type="submit" size="sm">
 										Post thread
 									</Button>
 								</div>

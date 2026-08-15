@@ -124,7 +124,7 @@ export default createRoute(async (c) => {
 							{boardFilter ? ' in this board' : ''}
 						</Text>
 					</div>
-					<Button as="a" href="/#new-thread" colorPalette="orange" size="sm">
+					<Button as="a" href="/#new-thread" size="sm">
 						New thread
 					</Button>
 				</Stack>

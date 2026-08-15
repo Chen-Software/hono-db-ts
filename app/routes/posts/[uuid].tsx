@@ -74,7 +74,7 @@ export default createRoute(async (c) => {
 					<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted' })}>
 						No post with id <code>{uuid}</code>.
 					</Text>
-					<Button as="a" href="/posts" colorPalette="orange" size="sm" class={css({ mt: 6 })}>
+					<Button as="a" href="/posts" size="sm" class={css({ mt: 6 })}>
 						Back to posts
 					</Button>
 				</main>
