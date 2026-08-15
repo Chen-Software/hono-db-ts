@@ -29,6 +29,14 @@ export default defineConfig({
 	],
 	outdir: "design-system",
 	jsxFramework: "react",
+	// The design system (color tokens, semantic tokens, recipes, …) from
+	// `app/theme/index.ts` must be wired into the theme here — otherwise the
+	// build has no color tokens at all (the preset colors are stripped by the
+	// plugin below) and no recipe styles, so every `colorPalette.*`, `colors.*`
+	// and `recipe()` reference resolves to an undefined CSS variable.
+	theme: {
+		extend: theme,
+	},
 	staticCss: {
 		// Forces generation of the plain `colorPalette` utility class (sets the
 		// `--colors-color-palette-*` scope vars) for every real palette name, so
