@@ -1,10 +1,28 @@
 import { css } from '../../design-system/css'
-import { useState } from 'hono/jsx'
+import { useEffect, useState } from 'hono/jsx'
+import { SegmentGroup } from '../components/ui/segment-group'
 
 /**
- * ThemeSwitcher — a client-side island that switches the whole app's accent
- * color palette at runtime.
+ * ThemeSwitcher — a client-side island that switches the whole app's
+ * appearance: the color scheme (Light / Dark / System) and the accent color
+ * palette.
  *
+ * Color scheme
+ * ------------
+ * The CSS is driven by `html[data-theme=light|dark]` attribute selectors
+ * (`app/theme/conditions.ts` maps Panda's `_light`/`_dark` conditions to
+ * them; there is no `prefers-color-scheme` fallback in the tokens). So the
+ * switcher writes one DOM mutation:
+ *
+ *     document.documentElement.dataset.theme = "dark"
+ *
+ * The *preference* (`light` | `dark` | `system`) is persisted to localStorage
+ * (`bbs.theme`) and resolved to an attribute before first paint by the boot
+ * script in `_renderer.tsx` — `system` is resolved against
+ * `prefers-color-scheme` there and kept live via a `matchMedia` listener.
+ *
+ * Accent palette
+ * --------------
  * The accent color is driven by Panda's `colorPalette` CSS variables
  * (`--colors-color-palette-*`), which `app/theme/global-css.ts` scopes per
  * accent via `html[data-palette=*]` selectors. So flipping the palette is
@@ -13,7 +31,7 @@ import { useState } from 'hono/jsx'
  *     document.documentElement.dataset.palette = "blue"
  *
  * The choice is persisted to localStorage (`bbs.palette`) and restored by the
- * boot script in `_renderer.tsx` before first paint, avoiding a flash.
+ * same boot script before first paint, avoiding a flash.
  *
  * The swatch colors below mirror each palette's `9`-scale (accent solid) token
  * in the light scheme — keep them in sync with `app/theme/colors/*.ts`.
@@ -29,6 +47,8 @@ export type ThemePalette =
 	| 'amber'
 	| 'red'
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 const PALETTES: Array<{ name: ThemePalette; label: string; swatch: string }> = [
 	{ name: 'gray', label: 'Slate', swatch: '#6e7280' },
 	{ name: 'blue', label: 'Blue', swatch: '#0091ff' },
@@ -40,7 +60,14 @@ const PALETTES: Array<{ name: ThemePalette; label: string; swatch: string }> = [
 	{ name: 'red', label: 'Red', swatch: '#e5484d' },
 ]
 
-const STORAGE_KEY = 'bbs.palette'
+const THEME_MODES: Array<{ name: ThemeMode; label: string }> = [
+	{ name: 'light', label: 'Light' },
+	{ name: 'dark', label: 'Dark' },
+	{ name: 'system', label: 'System' },
+]
+
+const PALETTE_KEY = 'bbs.palette'
+const THEME_KEY = 'bbs.theme'
 
 /** Current palette from the DOM (already set by the boot script). */
 function currentPalette(): ThemePalette {
@@ -48,18 +75,60 @@ function currentPalette(): ThemePalette {
 	return (v as ThemePalette) || 'gray'
 }
 
+/** Stored theme preference (the boot script already resolved it to data-theme). */
+function currentTheme(): ThemeMode {
+	if (typeof document === 'undefined') return 'system'
+	try {
+		const v = localStorage.getItem(THEME_KEY)
+		if (v === 'light' || v === 'dark' || v === 'system') return v
+	} catch {
+		// localStorage unavailable — default to system.
+	}
+	return 'system'
+}
+
+/** Resolve the OS preference to a concrete `data-theme` attribute value. */
+function resolveSystemTheme(): 'light' | 'dark' {
+	if (typeof window === 'undefined') return 'light'
+	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 export default function ThemeSwitcher() {
 	const [open, setOpen] = useState(false)
 	const [palette, setPalette] = useState<ThemePalette>(currentPalette)
+	const [theme, setTheme] = useState<ThemeMode>(currentTheme)
 
-	const apply = (p: ThemePalette) => {
+	// Keep an explicit "System" choice live: re-resolve `data-theme` whenever
+	// the OS preference flips (the boot script's listener covers reloads; this
+	// covers switching to System mid-session).
+	useEffect(() => {
+		if (theme !== 'system') return
+		const mq = window.matchMedia('(prefers-color-scheme: dark)')
+		const onChange = (e: MediaQueryListEvent) => {
+			document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'
+		}
+		mq.addEventListener('change', onChange)
+		return () => mq.removeEventListener('change', onChange)
+	}, [theme])
+
+	const applyPalette = (p: ThemePalette) => {
 		document.documentElement.dataset.palette = p
 		try {
-			localStorage.setItem(STORAGE_KEY, p)
+			localStorage.setItem(PALETTE_KEY, p)
 		} catch {
 			// localStorage unavailable (private mode) — the DOM switch still works.
 		}
 		setPalette(p)
+	}
+
+	const applyTheme = (t: ThemeMode) => {
+		document.documentElement.dataset.theme = t === 'system' ? resolveSystemTheme() : t
+		try {
+			localStorage.setItem(THEME_KEY, t)
+		} catch {
+			// localStorage unavailable — the DOM switch still works.
+		}
+		setTheme(t)
 	}
 
 	const current = PALETTES.find((p) => p.name === palette) ?? PALETTES[0]
@@ -69,7 +138,7 @@ export default function ThemeSwitcher() {
 			{/* Trigger */}
 			<button
 				type="button"
-				aria-label="Change accent color"
+				aria-label="Change appearance"
 				aria-haspopup="dialog"
 				aria-expanded={open}
 				onClick={() => setOpen(!open)}
@@ -101,13 +170,13 @@ export default function ThemeSwitcher() {
 			{open && (
 				<div
 					role="dialog"
-					aria-label="Accent color"
+					aria-label="Appearance"
 					class={css({
 						position: 'absolute',
 						right: 0,
 						top: 'calc(100% + 0.5rem)',
 						zIndex: 20,
-						w: 44,
+						w: 56,
 						rounded: 'xl',
 						border: '1px solid token(colors.border)',
 						bg: 'white',
@@ -126,6 +195,32 @@ export default function ThemeSwitcher() {
 							letterSpacing: '0.05em',
 						})}
 					>
+						Theme
+					</div>
+
+					<div class={css({ px: 2, pb: 2 })}>
+						<SegmentGroup
+							size="xs"
+							fitted
+							value={theme}
+							onValueChange={(v) => applyTheme(v as ThemeMode)}
+							items={THEME_MODES.map((t) => ({ value: t.name, label: t.label }))}
+						/>
+					</div>
+
+					<div
+						class={css({
+							px: 2,
+							py: 1.5,
+							fontSize: 'xs',
+							fontWeight: 600,
+							color: 'muted',
+							textTransform: 'uppercase',
+							letterSpacing: '0.05em',
+							borderTop: '1px solid token(colors.border)',
+							mt: 1,
+						})}
+					>
 						Accent color
 					</div>
 
@@ -136,7 +231,7 @@ export default function ThemeSwitcher() {
 								<button
 									key={p.name}
 									type="button"
-									onClick={() => apply(p.name)}
+									onClick={() => applyPalette(p.name)}
 									class={css({
 										display: 'flex',
 										alignItems: 'center',

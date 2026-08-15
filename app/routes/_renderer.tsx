@@ -28,10 +28,18 @@ export default jsxRenderer(({ children }) => {
         <Link href="/app/style.css" rel="stylesheet" prod={true} manifest={manifest} />
         <Script src="/app/client.ts" async prod={true} manifest={manifest} />
         {/*
-          Restore the persisted accent palette BEFORE first paint — a tiny
-          inline boot script so there is no flash between the SSR `gray`
-          default and the user's saved choice. The interactive switcher
-          (app/islands/theme-switcher.tsx) then just mutates data-palette.
+          Restore the persisted accent palette + color scheme BEFORE first
+          paint — a tiny inline boot script so there is no flash between the
+          SSR defaults and the user's saved choices. The interactive switcher
+          (app/islands/theme-switcher.tsx) then just mutates data-palette /
+          data-theme.
+
+          Theme storage (`bbs.theme`) holds the *preference*: `light` | `dark`
+          | `system`. The CSS only knows the *resolved* scheme via
+          `data-theme=light|dark` (see app/theme/conditions.ts), so:
+            - light/dark → set data-theme directly;
+            - system (or unset) → resolve `prefers-color-scheme` and keep
+              following it live via a matchMedia listener.
         */}
         <script dangerouslySetInnerHTML={{ __html: SCRIPT }} />
       </head>
@@ -40,4 +48,4 @@ export default jsxRenderer(({ children }) => {
   )
 })
 
-const SCRIPT = `(function(){try{var p=localStorage.getItem("bbs.palette");if(p){document.documentElement.dataset.palette=p;}}catch(e){}})();`
+const SCRIPT = `(function(){try{var p=localStorage.getItem("bbs.palette");if(p){document.documentElement.dataset.palette=p;}var m=window.matchMedia("(prefers-color-scheme: dark)");var apply=function(){try{var t=localStorage.getItem("bbs.theme");document.documentElement.dataset.theme=t==="light"||t==="dark"?t:(m.matches?"dark":"light");}catch(e){}};apply();if(m.addEventListener){m.addEventListener("change",apply);}}catch(e){}})();`
