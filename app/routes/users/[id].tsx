@@ -125,37 +125,40 @@ export default createRoute(async (c) => {
 			const bbs = rows[0]
 			user = bbs ?? fallback()
 
-			if (bbs) {
-				threads = (await sql.unsafe(
-					`SELECT t.id, t.title, t."created_at", t."updated_at",
-					        b.name AS board_name,
-					        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
-					 FROM "threads" t
-					 LEFT JOIN "boards" b ON b.id = t."boardId"
-					 WHERE t."authorId" = ?
-					 ORDER BY t."updated_at" DESC
-					 LIMIT 10`,
-					[id],
-				)) as UserThread[]
+			// Activity is keyed by `authorId` (= this profile's id) and is loaded
+			// regardless of whether a BBS `users` row exists: a Better Auth
+			// account has no BBS row yet authors threads via the guarded
+			// `POST /threads` (which stamps `authorId` with the session user's
+			// Better Auth id), so its threads must still surface here.
+			threads = (await sql.unsafe(
+				`SELECT t.id, t.title, t."created_at", t."updated_at",
+				        b.name AS board_name,
+				        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
+				 FROM "threads" t
+				 LEFT JOIN "boards" b ON b.id = t."boardId"
+				 WHERE t."authorId" = ?
+				 ORDER BY t."updated_at" DESC
+				 LIMIT 10`,
+				[id],
+			)) as UserThread[]
 
-				posts = (await sql.unsafe(
-					`SELECT id, title, "updated_at" FROM "posts"
-					 WHERE "authorId" = ? AND published = 1
-					 ORDER BY "updated_at" DESC
-					 LIMIT 10`,
-					[id],
-				)) as UserPost[]
+			posts = (await sql.unsafe(
+				`SELECT id, title, "updated_at" FROM "posts"
+				 WHERE "authorId" = ? AND published = 1
+				 ORDER BY "updated_at" DESC
+				 LIMIT 10`,
+				[id],
+			)) as UserPost[]
 
-				replies = (await sql.unsafe(
-					`SELECT r.id, r."threadId", r.body, r."created_at", t.title AS thread_title
-					 FROM "replies" r
-					 LEFT JOIN "threads" t ON t.id = r."threadId"
-					 WHERE r."authorId" = ?
-					 ORDER BY r."created_at" DESC
-					 LIMIT 10`,
-					[id],
-				)) as UserReply[]
-			}
+			replies = (await sql.unsafe(
+				`SELECT r.id, r."threadId", r.body, r."created_at", t.title AS thread_title
+				 FROM "replies" r
+				 LEFT JOIN "threads" t ON t.id = r."threadId"
+				 WHERE r."authorId" = ?
+				 ORDER BY r."created_at" DESC
+				 LIMIT 10`,
+				[id],
+			)) as UserReply[]
 		} else {
 			user = fallback()
 		}

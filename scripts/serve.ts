@@ -112,14 +112,31 @@ const app = new Hono<Env>();
 // better-auth / drizzle-adapter bundle) from this script.
 import { mountBetterAuth } from "../src/auth/mount";
 let mountAuth: ((app: Hono<Env>) => void) | null = null;
+// The resolved auth instance, exposed on the request context so the JSON
+// query app's guarded routes (e.g. `POST /threads`) can read sessions via
+// `getSession` — mirrors `app/server.ts`'s `c.env.auth` middleware.
+let authInstance: unknown = null;
 if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
 	// The auth instance is wired to the same SQLite database via the drizzle
 	// adapter (the auth tables are in drizzle/*_auth_sqlite_create.sql).
 	const localAuth = await mountBetterAuth(client);
 	mountAuth = (app) => localAuth.mount(app);
+	authInstance = localAuth.instance;
 }
 if (mountAuth) mountAuth(app);
+
+// Mirror `app/server.ts`: expose the SQL client (`c.env.sql`) and the Better
+// Auth instance (`c.env.auth`) on the request context so BOTH the JSON query
+// app (`/api`, which the guarded `POST /threads` lives under) and the UI can
+// resolve sessions and query the database. Without this, `getSession` falls
+// back to the (absent) D1 binding and the thread-permission guard would 401
+// every authenticated request.
+app.use("*", async (c, next) => {
+	(c.env as { sql?: unknown }).sql = client;
+	if (authInstance) (c.env as { auth?: unknown }).auth = authInstance;
+	await next();
+});
 
 // --- CLI args: [port] [mode]  OR  --port=  --mode=  /  --port / --mode
 const rawArgs = process.argv.slice(2);
