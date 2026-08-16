@@ -1,4 +1,5 @@
-import { css } from "design-system/css";
+import { css, cx } from "design-system/css";
+import { button } from "design-system/recipes";
 import { useEffect, useState } from "hono/jsx";
 import {
 	Arrow,
@@ -9,6 +10,10 @@ import {
 } from "../components/ui/hover-card-primitive";
 import { AvatarBase } from "../components/ui/avatar-primitive";
 import { Anchor } from "../components/ui/anchor";
+import { getAuthClient } from "../../src/auth/client";
+
+const FONT =
+	"ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 type AuthUser = {
 	id: string;
@@ -21,15 +26,17 @@ type LoadState = "loading" | "anon" | "auth";
 
 /**
  * UserAvatarCard — a client island that shows the signed-in user's avatar in
- * the nav and reveals a hover card with a link to their profile.
+ * the nav and reveals a hover card with a link to their profile and a **Sign
+ * out** button.
  *
  * It self-determines auth state on mount by hitting the same-origin
  * `/api/auth/get-session` (the session cookie is httpOnly, so the browser
  * can't read it directly — same approach as `AuthButton`). When signed out it
- * renders nothing (the nav's `AuthButton` already covers sign-in), so the
- * avatar only ever appears for a logged-in user. When signed in it renders an
- * `Avatar` as the hover-card trigger and, on hover/focus/tap, a card with the
- * user's name, email, and a "View profile" link to `/users/<id>`.
+ * renders nothing (the nav's `AuthButton` covers sign-in), so the avatar only
+ * ever appears for a logged-in user. When signed in it renders an `Avatar` as
+ * the hover-card trigger and, on hover/focus/tap, a card with the user's name,
+ * email, a "View profile" link to `/users/<id>`, and a **Sign out** button
+ * that calls Better Auth's `signOut()` and hard-navigates home.
  *
  * It is only ever rendered behind `__BETTER_AUTH_ENABLED__` (see
  * `components/site-header.tsx`), so with `BETTER_AUTH_ENABLED=false` this
@@ -44,6 +51,7 @@ type LoadState = "loading" | "anon" | "auth";
 export default function UserAvatarCard() {
 	const [state, setState] = useState<LoadState>("loading");
 	const [user, setUser] = useState<AuthUser | null>(null);
+	const [busy, setBusy] = useState(false);
 	const [imgStatus, setImgStatus] = useState<
 		"idle" | "loading" | "loaded" | "error"
 	>("idle");
@@ -107,6 +115,16 @@ export default function UserAvatarCard() {
 	const displayName = user.name || user.email || "Account";
 	const profileHref = `/users/${user.id}`;
 
+	const signOut = async () => {
+		setBusy(true);
+		try {
+			await getAuthClient().signOut();
+			window.location.href = "/";
+		} catch {
+			setBusy(false);
+		}
+	};
+
 	return (
 		<InteractiveHoverCardRoot
 			openDelay={200}
@@ -165,6 +183,21 @@ export default function UserAvatarCard() {
 						>
 							View profile
 						</Anchor>
+						<button
+							type="button"
+							onClick={signOut}
+							disabled={busy}
+							class={cx(
+								button({ variant: "outline", size: "sm" }),
+								css({
+									marginTop: 1,
+									width: "full",
+									fontFamily: FONT,
+								}),
+							)}
+						>
+							{busy ? "Signing out…" : "Sign out"}
+						</button>
 					</div>
 				</Content>
 			</Positioner>

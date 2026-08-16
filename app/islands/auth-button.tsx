@@ -1,7 +1,6 @@
 import { css, cx } from "../../design-system/css";
 import { button } from "../../design-system/recipes";
 import { useEffect, useState } from "hono/jsx";
-import { getAuthClient } from "../../src/auth/client";
 
 const FONT =
 	"ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -9,13 +8,15 @@ const FONT =
 type Status = "loading" | "anon" | "auth";
 
 /**
- * AuthButton — a client island that shows the right auth control in the nav.
+ * AuthButton — a client island that shows the **Sign in** link for anonymous
+ * visitors in the nav.
  *
  * It self-determines state on mount by hitting the same-origin
  * `/api/auth/get-session` (the session cookie is httpOnly, so the browser
- * can't read it directly). When signed in it renders a **Sign out** button
- * that calls Better Auth's `signOut()` (clears the session cookie) and
- * hard-navigates home. When anonymous it renders a **Sign in** link.
+ * can't read it directly). When signed in it renders nothing — the
+ * `UserAvatarCard` next to it already shows the user's avatar and a **Sign
+ * out** button inside its hover card — so this island only ever contributes a
+ * "Sign in" link for logged-out users.
  *
  * It is only ever rendered behind `__BETTER_AUTH_ENABLED__` (see
  * `components/site-header.tsx`), so with `BETTER_AUTH_ENABLED=false` this
@@ -24,7 +25,6 @@ type Status = "loading" | "anon" | "auth";
  */
 export default function AuthButton() {
 	const [status, setStatus] = useState<Status>("loading");
-	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
 		let active = true;
@@ -48,41 +48,19 @@ export default function AuthButton() {
 		);
 	}
 
-	if (status === "anon") {
-		return (
-			<a
-				href="/sign-in"
-				class={cx(
-					button({ variant: "outline", size: "sm" }),
-					css({ fontFamily: FONT }),
-				)}
-			>
-				Sign in
-			</a>
-		);
+	if (status === "auth") {
+		return null;
 	}
 
-	const signOut = async () => {
-		setBusy(true);
-		try {
-			await getAuthClient().signOut();
-			window.location.href = "/";
-		} catch {
-			setBusy(false);
-		}
-	};
-
 	return (
-		<button
-			type="button"
-			onClick={signOut}
-			disabled={busy}
+		<a
+			href="/sign-in"
 			class={cx(
 				button({ variant: "outline", size: "sm" }),
 				css({ fontFamily: FONT }),
 			)}
 		>
-			{busy ? "Signing out…" : "Sign out"}
-		</button>
+			Sign in
+		</a>
 	);
 }

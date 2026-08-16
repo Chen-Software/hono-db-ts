@@ -21,14 +21,16 @@ type SiteHeaderProps = {
 /**
  * SiteHeader — the single source of truth for the top navigation, used by
  * every page. It renders the brand, the primary nav, the search box, the theme
- * switcher, the auth control, and the "New thread" button.
+ * switcher, the auth controls, and the "New thread" button.
  *
- * The auth control (`AuthButton`) is gated behind `__BETTER_AUTH_ENABLED__`.
- * With `BETTER_AUTH_ENABLED=false` the `&&` short-circuits to `false`, the
- * `<AuthButton/>` reference becomes dead, and — because that is the only use of
- * the import — Rollup/Vite tree-shakes the `better-auth` client out of the
- * bundle. This is the same DCE mechanism already used by the protected
- * `users/[id]` route.
+ * The auth controls are gated behind `__BETTER_AUTH_ENABLED__`. For signed-in
+ * users the `UserAvatarCard` shows the avatar and a **Sign out** button inside
+ * its hover card; `AuthButton` only contributes the **Sign in** link for
+ * anonymous visitors. With `BETTER_AUTH_ENABLED=false` the `&&`
+ * short-circuits to `false`, the `<AuthButton/>` reference becomes dead, and —
+ * because that is the only use of the import — Rollup/Vite tree-shakes the
+ * `better-auth` client out of the bundle. This is the same DCE mechanism
+ * already used by the protected `users/[id]` route.
  */
 export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 	const boardHref = variant === "home" ? "/#boards" : "/boards";
