@@ -110,7 +110,7 @@ export default createRoute(async (c) => {
 							{total.toLocaleString()} board{total === 1 ? '' : 's'} · ordered by activity
 						</Text>
 					</div>
-					<Button as="a" href="/#new-thread" size="sm">
+					<Button as="a" href="/?compose=1" size="sm">
 						New thread
 					</Button>
 				</Stack>

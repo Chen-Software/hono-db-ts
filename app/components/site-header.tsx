@@ -10,8 +10,8 @@ type Variant = "app" | "home";
 type SiteHeaderProps = {
 	/**
 	 * `app`  — interior pages; nav links point at the real routes
-	 *           (`/boards`, `/threads`, `/posts`) and "New thread" jumps to the
-	 *           home page's composer (`/#new-thread`).
+	 *           (`/boards`, `/threads`, `/posts`) and "New thread" opens the
+	 *           home page's composer drawer (`/?compose=1`).
 	 * `home` — the landing page; nav links are in-page anchors (`/#boards` …)
 	 *           so the hero doesn't reload.
 	 */
@@ -36,7 +36,7 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 	const boardHref = variant === "home" ? "/#boards" : "/boards";
 	const threadHref = variant === "home" ? "/#threads" : "/threads";
 	const postHref = variant === "home" ? "/#posts" : "/posts";
-	const newThreadHref = "/#new-thread";
+	const newThreadHref = "/?compose=1";
 
 	return (
 		<LayoutHeader

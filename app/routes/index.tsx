@@ -11,6 +11,7 @@ import {
 	Text,
 } from '../components/ui'
 import { SiteHeader } from '../components/site-header'
+import { NewThreadDrawer } from '../components/new-thread-drawer'
 import { getSession } from '../../src/auth/context'
 
 /**
@@ -80,6 +81,10 @@ function timeAgo(iso: string): string {
 }
 
 export default createRoute(async (c) => {
+	// `?compose=1` opens the "New thread" drawer on load (used by the nav/links
+	// on other pages so the composer is reachable from anywhere).
+	const compose = c.req.query('compose') === '1'
+
 	// SSR: read the shared SQL client directly (set by app/server.ts init).
 	let stats: Stats | null = null
 	let boards: Board[] = []
@@ -299,60 +304,10 @@ export default createRoute(async (c) => {
 						{hasDb && allBoards.length > 0 ? (
 							<section id="new-thread">
 								<Heading class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>New thread</Heading>
-								<form
-									method="post"
-									action="/"
-									class={css({
-										rounded: 'xl',
-										border: '1px solid token(colors.border)',
-										bg: 'white',
-										p: 5,
-										spaceY: 3,
-									})}
-								>
-									<input type="hidden" name="action" value="create" />
-									<input
-										name="title"
-										placeholder="Thread title…"
-										required
-										maxLength={300}
-										class={css({
-											w: 'full',
-											px: 3,
-											py: 2,
-											rounded: 'md',
-											border: '1px solid token(colors.border)',
-											fontSize: 'sm',
-											outline: 'none',
-											_focus: { borderColor: 'accent' },
-										})}
-									/>
-									<div class={css({ display: 'flex', gap: 3 })}>
-										<select
-											name="boardId"
-											required
-											class={css({
-												flex: 1,
-												px: 3,
-												py: 2,
-												rounded: 'md',
-												border: '1px solid token(colors.border)',
-												fontSize: 'sm',
-												bg: 'white',
-											})}
-										>
-											<option value="">Board…</option>
-											{allBoards.map((b) => (
-												<option key={b.id} value={b.id}>
-													{b.name}
-												</option>
-											))}
-										</select>
-									</div>
-									<Button type="submit" size="sm">
-										Post thread
-									</Button>
-								</form>
+								<Text class={css({ mb: 4, color: 'muted', fontSize: 'sm' })}>
+									Start a conversation in one of the boards.
+								</Text>
+								<NewThreadDrawer boards={allBoards} defaultOpen={compose} />
 							</section>
 						) : null}
 

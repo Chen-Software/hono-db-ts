@@ -23,6 +23,10 @@ import { shouldHydrate } from "./island-utils";
 
 interface RootProps extends DrawerPrimitiveRootProps {
 	interactive?: boolean;
+	/** Initial open state for the interactive (island) variant. Mirrors the
+	 * underlying `InteractiveDrawer`'s `defaultOpen`; ignored by the static
+	 * non-interactive Root (which uses `open`/`mounted`). */
+	defaultOpen?: boolean;
 }
 
 function Root(props: RootProps) {
