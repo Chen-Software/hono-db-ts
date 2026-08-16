@@ -70,7 +70,7 @@ const app = createApp({
 		authMount(server)
 
 		// Mount the JSON query API under /api (the honox UI routes render at /).
-		if (sql) server.route('/api', buildQueryApp(sql))
+		if (sql) server.route('/api', buildQueryApp(sql, authInstance))
 
 		// Provide the SQL client to route handlers via c.env.sql, and the auth
 		// instance via c.env.auth so SSR routes can check sessions (see

@@ -99,7 +99,7 @@ if (created) {
 	);
 }
 
-const queryApp = buildQueryApp(client);
+const queryApp = buildQueryApp(client, authInstance);
 
 // The combined server: /api → JSON queries; / → Honox UI (per mode).
 // Typed with the augmented `Env` so `c.env` carries the sql/DB/auth bindings
@@ -126,17 +126,10 @@ if (betterAuthEnabled()) {
 }
 if (mountAuth) mountAuth(app);
 
-// Mirror `app/server.ts`: expose the SQL client (`c.env.sql`) and the Better
-// Auth instance (`c.env.auth`) on the request context so BOTH the JSON query
-// app (`/api`, which the guarded `POST /threads` lives under) and the UI can
-// resolve sessions and query the database. Without this, `getSession` falls
-// back to the (absent) D1 binding and the thread-permission guard would 401
-// every authenticated request.
-app.use("*", async (c, next) => {
-	(c.env as { sql?: unknown }).sql = client;
-	if (authInstance) (c.env as { auth?: unknown }).auth = authInstance;
-	await next();
-});
+// The JSON query app (`buildQueryApp`) carries its own middleware that exposes
+// the SQL client + Better Auth instance on its request context (so guarded
+// routes like `POST /threads` resolve sessions via `getSession`). The UI app
+// (dist) does the same internally. No parent-level middleware is needed.
 
 // --- CLI args: [port] [mode]  OR  --port=  --mode=  /  --port / --mode
 const rawArgs = process.argv.slice(2);

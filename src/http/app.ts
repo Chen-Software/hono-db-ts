@@ -61,12 +61,30 @@ function cursorOrder(col: string, dir: "asc" | "desc" = "desc"): string {
 }
 
 /** Build the Hono query app bound to the given SQL executor. */
-export function buildQueryApp(client: SqlQueryExecutor): Hono {
+export function buildQueryApp(
+	client: SqlQueryExecutor,
+	authInstance?: unknown | null,
+): Hono {
 	async function fetchAll(q: string, params: unknown[] = []): Promise<any[]> {
 		return client.unsafe(q, params) as Promise<any[]>;
 	}
 
 	const app = new Hono();
+
+	// Expose the SQL client + optional Better Auth instance on the request
+	// context. This middleware lives INSIDE this app — which the server entries
+	// mount as a *sub-app* under `/api` — so it sets `c.env` on the sub-app's
+	// OWN context. A parent-app middleware cannot reach it, which is why the
+	// guarded routes (e.g. `POST /threads`) would otherwise read an undefined
+	// `c.env.auth` and always 401. `getSession` (src/auth/context.ts) reads
+	// `c.env.auth`.
+	app.use("*", async (c, next) => {
+		const env = ((c.env as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+		env["sql"] = client;
+		if (authInstance) env["auth"] = authInstance;
+		(c as unknown as { env: unknown }).env = env;
+		await next();
+	});
 
 	// GET /stats
 	app.get("/stats", async () => {

@@ -29,4 +29,20 @@ export const betterAuthOptions: BetterAuthOptions = {
 		 */
 		autoSignIn: true,
 	},
+	/**
+	 * Generate UUID v4 ids for every Better Auth entity (users, sessions,
+	 * accounts, …). The forum's domain schema types all id columns as
+	 * `crypto.UUID` (and validates them as such), so the authenticated user's
+	 * id — which the guarded `POST /threads` stamps onto `authorId` — must be a
+	 * UUID too. Without this, sign-ups would produce nanoid-style ids that fail
+	 * the `threads.authorId` UUID assertion.
+	 */
+	advanced: {
+		// Emit UUID v4 ids for every Better Auth entity (users, sessions,
+		// accounts, …) so the authenticated user's id — which the guarded
+		// `POST /threads` stamps onto `authorId` — matches the forum schema's
+		// `crypto.UUID` type. Without this, sign-ups produce nanoid-style ids
+		// that fail the `threads.authorId` UUID assertion.
+		database: { generateId: "uuid" },
+	},
 };
