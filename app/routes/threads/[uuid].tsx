@@ -2,6 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { ThreadDrawer } from '../../components/thread-drawer'
 
 /**
  * Thread detail page — `/threads/:uuid`.
@@ -18,12 +19,15 @@ type ThreadRow = {
 	title: string
 	pinned: number
 	locked: number
+	boardId: string
 	created_at: string
 	updated_at: string
 	author_name: string | null
 	board_name: string | null
 	board_slug: string | null
 }
+
+type Board = { id: string; name: string }
 
 type ReplyRow = {
 	id: string
@@ -63,12 +67,13 @@ export default createRoute(async (c) => {
 	let replies: ReplyRow[] = []
 	let hot: HotThread[] = []
 	let authors: Author[] = []
+	let boards: Board[] = []
 
 	try {
 		const sql = c.env.sql
 		if (sql) {
 			const rows = (await sql.unsafe(
-				`SELECT t.id, t.title, t.pinned, t.locked, t."created_at", t."updated_at",
+				`SELECT t.id, t.title, t.pinned, t.locked, t."boardId", t."created_at", t."updated_at",
 				        u.name AS author_name,
 				        b.name AS board_name, b.slug AS board_slug
 				 FROM "threads" t
@@ -79,6 +84,10 @@ export default createRoute(async (c) => {
 				[uuid],
 			)) as ThreadRow[]
 			thread = rows[0] ?? null
+
+			boards = (await sql.unsafe(
+				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
+			)) as Board[]
 
 			replies = (await sql.unsafe(
 				`SELECT r.id, r."parentId", r.body, r."created_at", u.name AS author_name
@@ -107,7 +116,8 @@ export default createRoute(async (c) => {
 		replies = []
 		hot = []
 		authors = []
-	}
+		boards = []
+		}
 
 	// 404 when the thread doesn't exist (or the db is unavailable).
 	if (!thread) {
@@ -191,15 +201,38 @@ export default createRoute(async (c) => {
 									Updated {timeAgo(thread.updated_at)}
 								</Text>
 								<Text as="span">{replies.length} replies</Text>
-								<Anchor
-									href={`/threads/${thread.id}/edit`}
-									variant="plain"
-									class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-								>
-									<span aria-hidden>✏️</span>
-									Edit
-								</Anchor>
-							</Stack>
+								{boards.length > 0 ? (
+									<ThreadDrawer
+										boards={boards}
+										thread={{
+											id: thread.id,
+											title: thread.title,
+											boardId: thread.boardId,
+											pinned: thread.pinned === 1,
+											locked: thread.locked === 1,
+										}}
+										trigger={
+											<Anchor
+												href={`/threads/${thread.id}/edit`}
+												variant="plain"
+												class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+											>
+												<span aria-hidden>✏️</span>
+												Edit
+											</Anchor>
+										}
+									/>
+								) : (
+									<Anchor
+										href={`/threads/${thread.id}/edit`}
+										variant="plain"
+										class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+									>
+										<span aria-hidden>✏️</span>
+										Edit
+									</Anchor>
+								)}
+								</Stack>
 						</Card>
 
 						{/* Replies */}

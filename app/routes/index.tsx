@@ -11,7 +11,7 @@ import {
 	Text,
 } from '../components/ui'
 import { SiteHeader } from '../components/site-header'
-import { NewThreadDrawer } from '../components/new-thread-drawer'
+import { ThreadDrawer } from '../components/thread-drawer'
 import { getSession } from '../../src/auth/context'
 
 /**
@@ -307,7 +307,7 @@ export default createRoute(async (c) => {
 								<Text class={css({ mb: 4, color: 'muted', fontSize: 'sm' })}>
 									Start a conversation in one of the boards.
 								</Text>
-								<NewThreadDrawer boards={allBoards} defaultOpen={compose} />
+								<ThreadDrawer boards={allBoards} defaultOpen={compose} />
 							</section>
 						) : null}
 

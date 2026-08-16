@@ -1,4 +1,4 @@
-import { css } from "../design-system/css";
+import { css } from "design-system/css";
 import { Button } from "./ui/button";
 import { Drawer } from "./ui/drawer";
 
