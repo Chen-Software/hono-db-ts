@@ -2,7 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
-import { NewBoardDrawer } from '../../components/new-board-drawer'
+import { BoardDrawer } from '../../components/board-drawer'
 import { getSession } from '../../../src/auth/context'
 
 /**
@@ -128,7 +128,7 @@ export default createRoute(async (c) => {
 							New thread
 						</Button>
 						{users.length > 0 ? (
-							<NewBoardDrawer users={users} defaultModeratorId={currentUserId} defaultOpen={newBoard} />
+							<BoardDrawer users={users} defaultOpen={newBoard} />
 						) : null}
 					</Stack>
 				</Stack>

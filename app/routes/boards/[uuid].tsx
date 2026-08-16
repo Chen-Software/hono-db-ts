@@ -2,6 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { BoardDrawer } from '../../components/board-drawer'
 import { getSession } from '../../../src/auth/context'
 
 /**
@@ -17,6 +18,7 @@ type BoardRow = {
 	name: string
 	slug: string
 	description: string
+	moderatorId: string
 	moderator_name: string | null
 	created_at: string
 	thread_count: number
@@ -67,12 +69,13 @@ export default createRoute(async (c) => {
 	let total = 0
 	let authors: Author[] = []
 	let hot: HotThread[] = []
+	let users: { id: string; name: string; email: string }[] = []
 
 	try {
 		const sql = c.env.sql
 		if (sql) {
 			const rows = (await sql.unsafe(
-				`SELECT b.id, b.name, b.slug, b.description, b."created_at",
+				`SELECT b.id, b.name, b.slug, b.description, b."moderatorId", b."created_at",
 				        u.name AS moderator_name,
 				        (SELECT COUNT(*) FROM "threads" t WHERE t."boardId" = b.id) AS thread_count
 				 FROM "boards" b
@@ -124,6 +127,10 @@ export default createRoute(async (c) => {
 					 LIMIT 6`,
 					[uuid],
 				)) as HotThread[]
+
+				users = (await sql.unsafe(
+					`SELECT id, name, email FROM "users" ORDER BY "created_at" DESC LIMIT 50`,
+				)) as { id: string; name: string; email: string }[]
 			}
 		}
 	} catch {
@@ -132,6 +139,7 @@ export default createRoute(async (c) => {
 		total = 0
 		authors = []
 		hot = []
+		users = []
 	}
 
 	// 404 when the board doesn't exist.
@@ -196,14 +204,37 @@ export default createRoute(async (c) => {
 								</Text>
 								<Text as="span">{board.thread_count} threads</Text>
 								<Text as="span">Created {timeAgo(board.created_at)}</Text>
-								<Anchor
-									href={`/boards/${board.id}/edit`}
-									variant="plain"
-									class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-								>
-									<span aria-hidden>✏️</span>
-									Edit
-								</Anchor>
+								{users.length > 0 ? (
+									<BoardDrawer
+										users={users}
+										board={{
+											id: board.id,
+											name: board.name,
+											slug: board.slug,
+											description: board.description,
+											moderatorId: board.moderatorId,
+										}}
+										trigger={
+											<Anchor
+												href={`/boards/${board.id}/edit`}
+												variant="plain"
+												class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+											>
+												<span aria-hidden>✏️</span>
+												Edit
+											</Anchor>
+										}
+									/>
+								) : (
+									<Anchor
+										href={`/boards/${board.id}/edit`}
+										variant="plain"
+										class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+									>
+										<span aria-hidden>✏️</span>
+										Edit
+									</Anchor>
+								)}
 							</Stack>
 						</Card>
 
