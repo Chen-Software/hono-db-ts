@@ -204,37 +204,25 @@ export default createRoute(async (c) => {
 								</Text>
 								<Text as="span">{board.thread_count} threads</Text>
 								<Text as="span">Created {timeAgo(board.created_at)}</Text>
-								{users.length > 0 ? (
-									<BoardDrawer
-										users={users}
-										board={{
-											id: board.id,
-											name: board.name,
-											slug: board.slug,
-											description: board.description,
-											moderatorId: board.moderatorId,
-										}}
-										trigger={
-											<Anchor
-												href={`/boards/${board.id}/edit`}
-												variant="plain"
-												class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-											>
-												<span aria-hidden>✏️</span>
-												Edit
-											</Anchor>
-										}
-									/>
-								) : (
-									<Anchor
-										href={`/boards/${board.id}/edit`}
-										variant="plain"
-										class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-									>
-										<span aria-hidden>✏️</span>
-										Edit
-									</Anchor>
-								)}
+								<BoardDrawer
+									users={users}
+									board={{
+										id: board.id,
+										name: board.name,
+										slug: board.slug,
+										description: board.description,
+										moderatorId: board.moderatorId,
+									}}
+									trigger={
+										<Button
+											variant="plain"
+											class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+										>
+											<span aria-hidden>✏️</span>
+											Edit
+										</Button>
+									}
+								/>
 							</Stack>
 						</Card>
 
@@ -433,6 +421,22 @@ export const POST = createRoute(async (c) => {
 				return c.redirect(`/threads/${id}`)
 			} catch {
 				return c.redirect(`/boards/${uuid}`)
+			}
+		}
+	}
+
+	if (body['action'] === 'save') {
+		const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+		const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
+		const moderatorId = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
+		if (name && moderatorId) {
+			try {
+				await sql.unsafe(
+					`UPDATE "boards" SET "name" = ?, "description" = ? WHERE "id" = ?`,
+					[name, description, uuid],
+				)
+			} catch {
+				// Ignore update failures; redirect keeps the UX consistent.
 			}
 		}
 	}

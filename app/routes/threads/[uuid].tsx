@@ -201,37 +201,25 @@ export default createRoute(async (c) => {
 									Updated {timeAgo(thread.updated_at)}
 								</Text>
 								<Text as="span">{replies.length} replies</Text>
-								{boards.length > 0 ? (
-									<ThreadDrawer
-										boards={boards}
-										thread={{
-											id: thread.id,
-											title: thread.title,
-											boardId: thread.boardId,
-											pinned: thread.pinned === 1,
-											locked: thread.locked === 1,
-										}}
-										trigger={
-											<Anchor
-												href={`/threads/${thread.id}/edit`}
-												variant="plain"
-												class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-											>
-												<span aria-hidden>✏️</span>
-												Edit
-											</Anchor>
-										}
-									/>
-								) : (
-									<Anchor
-										href={`/threads/${thread.id}/edit`}
-										variant="plain"
-										class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
-									>
-										<span aria-hidden>✏️</span>
-										Edit
-									</Anchor>
-								)}
+								<ThreadDrawer
+									boards={boards}
+									thread={{
+										id: thread.id,
+										title: thread.title,
+										boardId: thread.boardId,
+										pinned: thread.pinned === 1,
+										locked: thread.locked === 1,
+									}}
+									trigger={
+										<Button
+											variant="plain"
+											class={css({ display: 'flex', alignItems: 'center', gap: 1, color: 'muted' })}
+										>
+											<span aria-hidden>✏️</span>
+											Edit
+										</Button>
+									}
+								/>
 								</Stack>
 						</Card>
 
@@ -413,6 +401,23 @@ export const POST = createRoute(async (c) => {
 				)
 			} catch {
 				// Drop the reply on failure; the redirect keeps the UX simple.
+			}
+		}
+	}
+
+	if (action === 'save') {
+		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+		const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
+		const pinned = body['pinned'] === 'on'
+		const locked = body['locked'] === 'on'
+		if (title && boardId) {
+			try {
+				await sql.unsafe(
+					`UPDATE "threads" SET "title" = ?, "boardId" = ?, "pinned" = ?, "locked" = ? WHERE "id" = ?`,
+					[title, boardId, pinned ? 1 : 0, locked ? 1 : 0, uuid],
+				)
+			} catch {
+				// Ignore update failures; redirect keeps the UX consistent.
 			}
 		}
 	}

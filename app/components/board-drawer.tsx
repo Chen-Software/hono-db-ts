@@ -48,11 +48,11 @@ const fieldCss = css({
  * "edit" (a `board` prop) flows — same fields, differing only in the submit
  * target and `action` value. The form is a native no-JS submit:
  *   - create → POST `/boards` with `action=create`
- *   - edit   → POST `/boards/:id/edit` with `action=save`
+ *   - edit   → POST `/boards/:id` with `action=save`
  */
 export function BoardDrawer({ users, board, defaultOpen = false, trigger }: BoardDrawerProps) {
   const isEdit = Boolean(board);
-  const formAction = board ? `/boards/${board.id}/edit` : "/boards";
+  const formAction = board ? `/boards/${board.id}` : "/boards";
   const actionValue = board ? "save" : "create";
 
   const triggerEl = trigger ?? (

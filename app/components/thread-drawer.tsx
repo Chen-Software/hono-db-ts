@@ -47,11 +47,11 @@ const fieldCss = css({
  * the hidden `action` value, the prefilled values, and the edit-only pinned/
  * locked toggles. The form is a native no-JS submit:
  *   - create → POST `/` with `action=create` (home route handler)
- *   - edit   → POST `/threads/:id/edit` with `action=save` (edit route handler)
+ *   - edit   → POST `/threads/:id` with `action=save` (detail route handler)
  */
 export function ThreadDrawer({ boards, thread, defaultOpen = false, trigger }: ThreadDrawerProps) {
   const isEdit = Boolean(thread);
-  const formAction = thread ? `/threads/${thread.id}/edit` : "/";
+  const formAction = thread ? `/threads/${thread.id}` : "/";
   const actionValue = thread ? "save" : "create";
 
   const triggerEl = trigger ?? (
