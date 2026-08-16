@@ -7,8 +7,8 @@ import { databaseUrl } from "@/macros/envs" with { type: "macro" };
  * `drizzle-orm/bun-sql` + the `databaseUrl()` macro (the Bun + Drizzle client
  * pattern: `new SQL(url)` → `drizzle({ client })`, exactly as the app does).
  *
- * `<table>` is a model/table name (e.g. `users`, `UserSchema`, `boards`,
- * `threads`, `replies`, `posts`) resolved through the model registry.
+ * `<table>` is a model/table name (e.g. `users`, `UserSchema`, `repositories`,
+ * `RepositorySchema`) resolved through the model registry.
  *
  * The filter is a JSON object with per-column matchers:
  *   - equality:      `{"role": "admin"}`
@@ -24,15 +24,14 @@ import { databaseUrl } from "@/macros/envs" with { type: "macro" };
  *
  * Examples:
  *   cli query users '{"role": "admin"}'
- *   cli query threads '{"boardId": "<id>", "pinned": "true"}' --sort updated_at:desc --limit 20
- *   cli query replies '{"threadId": "<id>"}' --count
+ *   cli query repositories '{"isPrivate": "false"}' --sort numStars:desc --limit 20
  *   cli query users '{"name": {"contains": "a"}}' --sort created_at:asc
  */
 export async function runQuery(args: string[]): Promise<void> {
 	const tableArg = args[0];
 	if (!tableArg) {
 		console.error(
-			"Error: query requires a <table> name. Known tables: users, boards, threads, replies, posts.",
+			"Error: query requires a <table> name. Known tables: users, repositories.",
 		);
 		process.exit(1);
 	}
@@ -40,10 +39,7 @@ export async function runQuery(args: string[]): Promise<void> {
 	// Import the models (runs the typia transform + SqlSerialisable) so the
 	// registry is populated and every `.table` is derived.
 	await import("@/models/user");
-	await import("@/models/post");
-	await import("@/models/board");
-	await import("@/models/thread");
-	await import("@/models/reply");
+	await import("@/models/repository");
 
 	const { drizzle } = await import("drizzle-orm/bun-sql");
 	const { listModels } = await import("@/registry");

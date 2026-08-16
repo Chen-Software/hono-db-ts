@@ -9,27 +9,21 @@
  * now a zero-SQL facade that simply re-exports this service.
  *
  * REFERENCE IMPLEMENTATION — this service is written entirely with the Drizzle
- * query builder, using the tables that the `SqlSerialisable` capacity derives
- * from each model's reflected schema and registers in `tableRegistry`. No raw
- * `sql.unsafe` and no hand-written SQL strings: `db.select()` / `db.insert()` /
- * `db.update()` bind every value through Drizzle. (For queries that are
- * awkward to express in the builder, the other services fall back to the
- * `all` / `run` helpers in `./types`, which still execute through Drizzle's
- * parameterised path — never `unsafe`.)
+ * query builder, using the table that the `SqlSerialisable` capacity derives
+ * from the `User` model's reflected schema and registers in `tableRegistry`.
+ * No raw `sql.unsafe` and no hand-written SQL strings: `db.select()` /
+ * `db.insert()` / `db.update()` bind every value through Drizzle.
  */
-import { and, count, desc, eq, sql as dsql } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { resolveTableThunk } from '@/capacities/sql-serialisable'
 import type { Db } from './types'
+import { listByOwner } from './repository'
 
-// Drizzle tables derived by `SqlSerialisable` and registered under the model
+// Drizzle table derived by `SqlSerialisable` and registered under the model
 // name. Cast to `any` so we can use the column references (e.g. `users.id`)
 // without fighting the untyped `Table` — the service layer is intentionally
 // loosely typed, and the real gate is the Vite build.
 const users = resolveTableThunk('UserSchema', 'sqlite')() as any
-const threads = resolveTableThunk('ThreadSchema', 'sqlite')() as any
-const posts = resolveTableThunk('PostData', 'sqlite')() as any
-const replies = resolveTableThunk('ReplySchema', 'sqlite')() as any
-const boards = resolveTableThunk('BoardSchema', 'sqlite')() as any
 
 /** The Better Auth session shape used to resolve (or upsert) a forum user. */
 export type ForumSession = {
@@ -80,46 +74,18 @@ export async function listAuthors(db: Db, limit = 20) {
 		.limit(limit)
 }
 
-/** Full profile page payload: the user plus their threads / posts / replies. */
+/**
+ * Full profile page payload. The forum version also returned the user's
+ * threads / posts / replies; those relations are being ported to
+ * repositories / issues, so for now the profile is just the user row.
+ */
 export async function getProfile(db: Db, id: string) {
 	const user = await getById(db, id)
-	const threadsRows = await db
-		.select({
-			id: threads.id,
-			title: threads.title,
-			created_at: threads.created_at,
-			updated_at: threads.updated_at,
-			board_name: boards.name,
-			reply_count: dsql<number>`(SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = ${threads.id})`,
-		})
-		.from(threads)
-		.leftJoin(boards, eq(threads.boardId, boards.id))
-		.where(eq(threads.authorId, id))
-		.orderBy(desc(threads.updated_at))
-		.limit(10)
-	const postsRows = await db
-		.select({ id: posts.id, title: posts.title, updated_at: posts.updated_at })
-		.from(posts)
-		.where(and(eq(posts.authorId, id), eq(posts.published, 1)))
-		.orderBy(desc(posts.updated_at))
-		.limit(10)
-	const repliesRows = await db
-		.select({
-			id: replies.id,
-			threadId: replies.threadId,
-			body: replies.body,
-			created_at: replies.created_at,
-			thread_title: threads.title,
-		})
-		.from(replies)
-		.leftJoin(threads, eq(replies.threadId, threads.id))
-		.where(eq(replies.authorId, id))
-		.orderBy(desc(replies.created_at))
-		.limit(10)
-	return { user, threads: threadsRows, posts: postsRows, replies: repliesRows }
+	const repositories = user ? await listByOwner(db, id) : []
+	return { user, repositories }
 }
 
-/** Users who authored the most posts (the `/stats/top-posters` read model). */
+/** Most active users (the `/stats/top-posters` read model). */
 export async function topPosters(db: Db, limit = 10): Promise<any[]> {
 	const n = Number.isFinite(limit) && limit > 0 ? limit : 10
 	return db
@@ -128,12 +94,10 @@ export async function topPosters(db: Db, limit = 10): Promise<any[]> {
 			name: users.name,
 			email: users.email,
 			role: users.role,
-			post_count: count(posts.id),
+			post_count: users.all_activities,
 		})
 		.from(users)
-		.leftJoin(posts, eq(posts.authorId, users.id))
-		.groupBy(users.id)
-		.orderBy(desc(count(posts.id)))
+		.orderBy(desc(users.all_activities))
 		.limit(n)
 }
 
@@ -198,44 +162,16 @@ export async function ensureForumUser(
 }
 
 /**
- * Recompute a user's cached activity counters (`thread_count`, `reply_count`,
- * `post_count`, `all_activities`) from the actual relations. These counters are
- * NOT derived on read except in profile *list* views, so the materialised
- * `users` columns must be kept in sync by the write path — otherwise a user's
- * profile (and the `/users/:id` JSON) reports "0 thread" even after they've
- * authored content.
- *
- * We recompute from truth (COUNT of rows) rather than increment/decrement, so
- * the counters never drift if a create/delete is missed or races.
+ * Recompute a user's cached activity counters. The forum version summed
+ * thread/reply/post counts; that relation is being ported to
+ * repositories / issues, so this is currently a no-op (kept so callers don't
+ * break mid-pivot). TODO: recompute from `repositories` + `issues`.
  */
 export async function refreshUserActivity(
-	db: Db,
-	userId: string | null | undefined,
+	_db: Db,
+	_userId: string | null | undefined,
 ): Promise<void> {
-	if (!userId) return
-	try {
-		const [thread, reply, post] = await Promise.all([
-			db.select({ n: count() }).from(threads).where(eq(threads.authorId, userId)),
-			db.select({ n: count() }).from(replies).where(eq(replies.authorId, userId)),
-			db.select({ n: count() }).from(posts).where(eq(posts.authorId, userId)),
-		])
-		const threadCount = Number(thread[0]?.n ?? 0)
-		const replyCount = Number(reply[0]?.n ?? 0)
-		const postCount = Number(post[0]?.n ?? 0)
-		const allActivities = threadCount + replyCount + postCount
-		await db
-			.update(users)
-			.set({
-				thread_count: threadCount,
-				reply_count: replyCount,
-				post_count: postCount,
-				all_activities: allActivities,
-			})
-			.where(eq(users.id, userId))
-	} catch (err) {
-		// Activity counters are best-effort; never fail the primary write.
-		console.error('[users.refreshUserActivity] failed:', err)
-	}
+	// no-op until repository/issue counters land
 }
 
 /**

@@ -1,107 +1,96 @@
 import { describe, expect, it } from "bun:test";
 import { defaultIdentityMap } from "../storage/identity-map";
-import { User } from "../models/user";
-import { Board } from "../models/board";
-import { Thread } from "../models/thread";
+import { Repository } from "../models/repository";
 
 // ---------------------------------------------------------------------------
-// Fixtures — a board with 5 threads at distinct updated_at values.
+// Fixtures — 5 repositories at distinct updated_at values.
 // ---------------------------------------------------------------------------
-const uid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-
-function seed(): { board: Board } {
+function seed(): Repository[] {
 	defaultIdentityMap.clear();
-	User.from({
-		id: uid,
-		name: "Ada",
-		email: "ada@example.com",
-		role: "admin",
-		age: 36,
-		created_at: "2026-08-01T00:00:00.000Z",
-	});
-	const board = Board.from({
-		id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-		name: "General",
-		slug: "general",
-		description: "Talk",
-		moderatorId: uid,
-		created_at: "2026-08-01T00:00:00.000Z",
-	});
+	const repos: any[] = [];
 	for (let i = 1; i <= 5; i++) {
 		const d = `2026-08-0${i + 1}`;
-		Thread.from({
-			id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
-			boardId: board.id,
-			authorId: uid,
-			title: `T${i}`,
-			pinned: false,
-			locked: false,
-			created_at: `${d}T00:00:00.000Z`,
-			updated_at: `${d}T00:00:00.000Z`,
-		});
+		repos.push(
+			Repository.from({
+				id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+				ownerId: null,
+				name: `repo-${i}`,
+				lowerName: `repo-${i}`,
+				description: "",
+				defaultBranch: "main",
+				website: "",
+				isPrivate: false,
+				isArchived: false,
+				isMirror: false,
+				isTemplate: false,
+				objectFormatName: "sha1",
+				topics: [],
+				numStars: 0,
+				numForks: 0,
+				numOpenIssues: 0,
+				numClosedIssues: 0,
+				size: 0,
+				avatar: "",
+				status: 0,
+				created_at: `${d}T00:00:00.000Z`,
+				updated_at: `${d}T00:00:00.000Z`,
+			}),
+		);
 	}
-	return { board };
+	return repos;
 }
 
 describe("Siftable — cursor pagination", () => {
 	it("desc (default): newest-first, one page at a time", () => {
-		const { board } = seed();
+		const repos = seed();
 		const collected: string[] = [];
 		let cursor: string | null = null;
 		let guard = 0;
 		do {
-			const page = Thread.sift(board.getThreads(), {}, { limit: 2, cursor });
-			collected.push(...page.rows.map((t) => t.title));
+			const page = Repository.sift(repos, {}, { limit: 2, cursor });
+			collected.push(...page.rows.map((r: any) => r.name));
 			cursor = page.nextCursor;
 			if (++guard > 10) break;
 		} while (cursor);
-		expect(collected).toEqual(["T5", "T4", "T3", "T2", "T1"]);
+		expect(collected).toEqual(["repo-5", "repo-4", "repo-3", "repo-2", "repo-1"]);
 	});
 
 	it("asc: oldest-first, one page at a time", () => {
-		const { board } = seed();
+		const repos = seed();
 		const collected: string[] = [];
 		let cursor: string | null = null;
 		let guard = 0;
 		do {
-			const page = Thread.sift(
-				board.getThreads(),
-				{},
-				{
-					limit: 2,
-					cursor,
-					sort: { field: "updated_at", dir: "asc" },
-				},
-			);
-			collected.push(...page.rows.map((t) => t.title));
+			const page = Repository.sift(repos, {}, {
+				limit: 2,
+				cursor,
+				sort: { field: "created_at", dir: "asc" },
+			});
+			collected.push(...page.rows.map((r: any) => r.name));
 			cursor = page.nextCursor;
 			if (++guard > 10) break;
 		} while (cursor);
-		expect(collected).toEqual(["T1", "T2", "T3", "T4", "T5"]);
+		expect(collected).toEqual(["repo-1", "repo-2", "repo-3", "repo-4", "repo-5"]);
 	});
 
 	it("null nextCursor on the final page", () => {
-		const { board } = seed();
-		const page = Thread.sift(board.getThreads(), {}, { limit: 100 });
+		const repos = seed();
+		const page = Repository.sift(repos, {}, { limit: 100 });
 		expect(page.rows.length).toBe(5);
 		expect(page.nextCursor).toBeNull();
 	});
 
 	it("limit bounds the page size", () => {
-		const { board } = seed();
-		const page = Thread.sift(board.getThreads(), {}, { limit: 3 });
+		const repos = seed();
+		const page = Repository.sift(repos, {}, { limit: 3 });
 		expect(page.rows.length).toBe(3);
 		expect(page.nextCursor).not.toBeNull();
 	});
 
 	it("combines with Queriable filtering", () => {
-		const { board } = seed();
-		// Filter to pinned=false then page. All are unpinned, so all 5 come back.
-		const page = Thread.sift(
-			board.getThreads(),
-			{ pinned: "false" },
-			{ limit: 10 },
-		);
+		const repos = seed();
+		// Filter to isPrivate=false then page. All are public, so all 5 come back.
+		const page = Repository.sift(repos, { isPrivate: "false" }, { limit: 10 });
 		expect(page.rows.length).toBe(5);
 	});
 });

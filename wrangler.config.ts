@@ -136,9 +136,11 @@ export function buildWranglerConfig(): WranglerConfig {
 		};
 	}
 
-	// R2 asset bucket — emitted when R2_ENABLED !== "false" and R2_BUCKET set.
+	// R2 bucket ("REPOS") — emitted when R2_ENABLED !== "false" and R2_BUCKET set.
+	// Binding name is intentionally "REPOS", NOT "ASSETS": the latter is already
+	// taken by Workers Static Assets (config.assets.binding above).
 	if (r2Bucket()) {
-		config.r2_buckets = [{ binding: "ASSETS", bucket_name: r2Bucket()! }];
+		config.r2_buckets = [{ binding: "REPOS", bucket_name: r2Bucket()! }];
 	}
 
 	// Useful references, not credentials (secrets go to secret bindings).

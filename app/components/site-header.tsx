@@ -10,8 +10,8 @@ type Variant = "app" | "home";
 type SiteHeaderProps = {
 	/**
 	 * `app`  — interior pages; nav links point at the real routes
-	 *           (`/boards`, `/threads`, `/posts`).
-	 * `home` — the landing page; nav links are in-page anchors (`/#boards` …)
+	 *           (`/repositories`).
+	 * `home` — the landing page; nav links are in-page anchors (`/#repositories`)
 	 *           so the hero doesn't reload.
 	 */
 	variant?: Variant;
@@ -32,9 +32,7 @@ type SiteHeaderProps = {
  * already used by the protected `users/[id]` route.
  */
 export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
-	const boardHref = variant === "home" ? "/#boards" : "/boards";
-	const threadHref = variant === "home" ? "/#threads" : "/threads";
-	const postHref = variant === "home" ? "/#posts" : "/posts";
+	const repoHref = variant === "home" ? "/#repositories" : "/repositories";
 
 	return (
 		<LayoutHeader
@@ -66,18 +64,12 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 							bg: "colorPalette.solid.bg",
 						})}
 					/>
-					BBS Forum
+					Git Forge
 				</Anchor>
 
 				<nav class={css({ display: "flex", gap: 4, ml: 4 })}>
-					<Anchor href={boardHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
-						Boards
-					</Anchor>
-					<Anchor href={threadHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
-						Threads
-					</Anchor>
-					<Anchor href={postHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
-						Posts
+					<Anchor href={repoHref} variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
+						Repositories
 					</Anchor>
 					{__BETTER_AUTH_ENABLED__ && (
 						<Anchor href="/users/me" variant="plain" class={css({ fontSize: "sm", color: "fg.muted" })}>
@@ -88,7 +80,7 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 
 				<Stack direction="horizontal" align="center" gap="3" class={css({ ml: "auto" })}>
 					<Search
-						placeholder="Search threads & posts…"
+						placeholder="Search repositories…"
 						class={css({ maxWidth: "24rem" })}
 					/>
 					<ThemeSwitcher />

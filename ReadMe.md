@@ -1,6 +1,6 @@
-# Hono + HonoX + Drizzle ORM + Typia Starter
+# CodeForge
 
-A [Hono](https://hono.dev) + [HonoX](https://github.com/honojs/honox) + [Drizzle ORM](https://orm.drizzle.team/) + [Typia](https://typia.io) (TypeScript-first validation and data modelling) starter: models are composed
+CodeForge is made with [Hono](https://hono.dev) + [HonoX](https://github.com/honojs/honox) + [Drizzle ORM](https://orm.drizzle.team/) + [Typia](https://typia.io) (TypeScript-first validation and data modelling) starter: models are composed
 from reusable [**capacities**](docs/capacity-introduction.md).
 
 ## Quick start

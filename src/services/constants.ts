@@ -9,4 +9,5 @@ export const PAGE = {
 	homePosts: 6,
 	homeHot: 6,
 	allBoards: 50,
+	repositoriesIndex: 24,
 } as const

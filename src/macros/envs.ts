@@ -166,7 +166,7 @@ function otelHeaders(): string | undefined {
 	return process.env.OTEL_EXPORTER_OTLP_HEADERS;
 }
 
-/** `service.name` resource attribute. Defaults to "artefact". */
+/** `service.name` resource attribute. Defaults to "codeforge". */
 function otelServiceName(): string | undefined {
 	return process.env.OTEL_SERVICE_NAME;
 }

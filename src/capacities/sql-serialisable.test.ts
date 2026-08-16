@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Table } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import typia from "typia";
-import { PostSchemaModule } from "../models/post";
+import { RepositorySchemaModule } from "../models/repository";
 import { UserSchemaModule } from "../models/user";
 import { Triggerable, type CapacityComposer } from "./triggerable";
 import type { SchemaModule } from "./schema-module";
@@ -242,41 +242,42 @@ describe("toDrizzleTable is dialect-agnostic (sql-serialisable unit)", () => {
 describe("toDrizzleTable reads the Reference tag (sql-serialisable)", () => {
 	it("derives a many-to-one FK relation from a Reference-tagged column", () => {
 		const def = toDrizzleTable(
-			PostSchemaModule.schema as unknown as JsonSchema,
+			RepositorySchemaModule.schema as unknown as JsonSchema,
 			{
-				name: "posts",
-				modelName: "PostData",
+				name: "repositories",
+				modelName: "Repository",
 			},
 		);
 		expect(def.relations).toBeDefined();
 		expect(def.relations).toHaveLength(1);
 		const rel = def.relations![0];
-		expect(rel.column).toBe("authorId");
+		expect(rel.column).toBe("ownerId");
 		expect(rel.target).toBe("UserSchema");
 		expect(rel.targetColumn).toBe("id");
 		expect(rel.cardinality).toBe("many-to-one");
-		expect(rel.onDelete).toBe("cascade");
+		// Repository follows the Board pattern: nullable owner, setNull on delete.
+		expect(rel.onDelete).toBe("setNull");
 	});
 
-	it("wires a real drizzle .references() FK on the table (cascade)", () => {
-		const tbl = PostSchemaModule.sql!.table as any;
+	it("wires a real drizzle .references() FK on the table (setNull)", () => {
+		const tbl = RepositorySchemaModule.sql!.table as any;
 		const fkSym = Object.getOwnPropertySymbols(tbl).find((s) =>
 			String(s).toLowerCase().includes("foreignkey"),
 		);
 		expect(fkSym).toBeDefined();
 		const fks = tbl[fkSym as symbol];
 		expect(fks.length).toBe(1);
-		expect(fks[0].onDelete).toBe("cascade");
+		expect(fks[0].onDelete).toBe("setNull");
 	});
 
 	it("registers both models so cross-table FKs resolve (no throw)", () => {
-		expect(PostSchemaModule.sql).toBeDefined();
+		expect(RepositorySchemaModule.sql).toBeDefined();
 		expect(UserSchemaModule.sql).toBeDefined();
-		const postTbl = PostSchemaModule.sql!.table as any;
-		const fkSym = Object.getOwnPropertySymbols(postTbl).find((s) =>
+		const repoTbl = RepositorySchemaModule.sql!.table as any;
+		const fkSym = Object.getOwnPropertySymbols(repoTbl).find((s) =>
 			String(s).toLowerCase().includes("foreignkey"),
 		);
-		const fk = postTbl[fkSym as symbol][0];
+		const fk = repoTbl[fkSym as symbol][0];
 		expect(fk.reference).toBeDefined();
 	});
 });

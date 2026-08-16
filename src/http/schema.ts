@@ -11,14 +11,39 @@
  * against a file DB), nothing is touched — existing data is preserved.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { SQL } from "bun";
 
 import type { SqlQueryExecutor } from "@/capacities/servable";
 
-const MIGRATIONS_DIR = resolve(import.meta.dir, "../../drizzle");
+/**
+ * Locate the `drizzle/` migration directory. It lives at the PROJECT ROOT
+ * (`<root>/drizzle`), but `import.meta.dir`-relative resolution is fragile:
+ *   - in SOURCE this file is `src/http/schema.ts` → `../../drizzle` is correct;
+ *   - in the bundled SSR output (`dist/index.js`) `import.meta.dir` is `dist`,
+ *     so `../../drizzle` escapes PAST the project root (→ `<parent>/drizzle`),
+ *     which is exactly the `ENOENT: scandir …/drizzle` crash seen when the
+ *     server boots from the bundle.
+ * Resolve defensively: prefer `process.cwd()/drizzle` (the app is always run
+ * from the project root), then fall back to the source/bundle-relative
+ * candidates, and finally to `cwd/drizzle` so a missing dir still surfaces a
+ * clear error rather than a wrong-path ENOENT.
+ */
+function resolveMigrationsDir(): string {
+	const candidates = [
+		resolve(process.cwd(), "drizzle"),
+		resolve(import.meta.dir, "../../drizzle"),
+		resolve(import.meta.dir, "../drizzle"),
+	];
+	for (const c of candidates) {
+		if (existsSync(c)) return c;
+	}
+	return candidates[0]!;
+}
+
+const MIGRATIONS_DIR = resolveMigrationsDir();
 
 /** The deliberate `DATABASE_URL` targets a service can run against. */
 export type DatabaseTargetKind = "memory" | "file" | "d1" | "turso";

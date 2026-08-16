@@ -15,9 +15,7 @@
 // `resolveTableThunk(...)` at module load to grab those tables).
 import '@/models'
 
-export * as boards from './boards'
-export * as threads from './threads'
-export * as posts from './posts'
+export * as repository from './repository'
 export * as home from './home'
 export * as search from './search'
 export * as users from './users'

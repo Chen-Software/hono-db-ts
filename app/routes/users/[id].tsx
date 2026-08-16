@@ -9,9 +9,9 @@ import { apiFetch } from '../../lib/api'
  * User profile page — `/users/:id`.
  *
  * Authenticated-only (SSR). Shows the signed-in member's public profile (name,
- * email, role, age, joined) plus their recent activity split into three
- * sections: the threads they started, the posts they authored, and the replies
- * they left. Every activity row links back to the relevant resource.
+ * email, role, age, joined) plus their repositories — the forge equivalent of
+ * the forum's threads/posts/replies activity. Every repository row links to the
+ * repository page.
  *
  * The route checks the Better Auth session cookie first (`getSession`); if no
  * valid session is found it redirects to `/sign-in` so unauthenticated
@@ -27,27 +27,15 @@ type UserRow = {
 	created_at: string
 }
 
-type UserThread = {
+type UserRepo = {
 	id: string
-	title: string
-	created_at: string
-	updated_at: string
-	board_name: string | null
-	reply_count: number
-}
-
-type UserPost = {
-	id: string
-	title: string
-	updated_at: string
-}
-
-type UserReply = {
-	id: string
-	threadId: string
-	thread_title: string | null
-	body: string
-	created_at: string
+	name: string
+	lowerName: string
+	description: string
+	isPrivate: boolean
+	numStars: number
+	numForks: number
+	owner_name: string | null
 }
 
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
@@ -96,17 +84,14 @@ export default createRoute(async (c) => {
 	}
 
 	let user: UserRow
-	let threads: UserThread[] = []
-	let posts: UserPost[] = []
-	let replies: UserReply[] = []
+	let repositories: UserRepo[] = []
 
-	// The Better Auth id (e.g. `TX31…`) and the BBS `users` table id (a demo
+	// The Better Auth id (e.g. `TX31…`) and the `users` table id (a demo
 	// UUID like `e6c0…`) live in two separate id spaces with no linkage yet,
-	// so a signed-up account has no BBS `users` row — which used to make this
+	// so a signed-up account has no `users` row — which used to make this
 	// owner-only page 404. Since the page is owner-only we can always derive a
-	// profile from the authenticated session; we only enrich it with a BBS row
-	// (and that user's activity) when one actually exists. Activity stays empty
-	// for a plain Better Auth account (they haven't authored demo content).
+	// profile from the authenticated session; we only enrich it with a `users`
+	// row (and that user's repositories) when one actually exists.
 	const fallback = (): UserRow => ({
 		id,
 		name: sessionUser?.name ?? "Member",
@@ -117,19 +102,13 @@ export default createRoute(async (c) => {
 	})
 
 	// SSR: the profile is fetched over HTTP from the JSON API (service layer).
-	// The owner-only auth gate above stays in the route; only the data fetch
-	// moves behind the service layer. `getProfile` returns the BBS `users` row
-	// (or null) plus the activity keyed by this id.
 	const profile: any = await apiFetch(c, `/page/users/${id}`)
 	if (profile) {
 		user = profile.user ?? fallback()
-		threads = profile.threads ?? []
-		posts = profile.posts ?? []
-		replies = profile.replies ?? []
+		repositories = profile.repositories ?? []
 	} else {
 		user = fallback()
 	}
-
 
 	// Role badge color — keeps the profile glanceable.
 	const rolePalette =
@@ -137,7 +116,7 @@ export default createRoute(async (c) => {
 
 	return c.render(
 		<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' })}>
-			<title>{user.name} · BBS</title>
+			<title>{user.name} · Git Forge</title>
 			<Nav />
 
 			<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 10 })}>
@@ -151,85 +130,33 @@ export default createRoute(async (c) => {
 				</Stack>
 
 				<div class={css({ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 })}>
-					{/* ---- main column: activity ---- */}
-					<Stack direction="vertical" gap="10">
-						{/* Threads */}
-						<section>
-							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>
-								Threads started ({threads.length})
-							</Heading>
-							{threads.length > 0 ? (
-								<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
-									{threads.map((t) => (
-										<Anchor
-											key={t.id}
-											href={`/threads/${t.id}`}
-											variant="plain"
-											class={css({ px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' }, color: 'ink' })}
-										>
-											<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 1 })}>{t.title}</Text>
-											<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
-												{t.board_name ?? '—'} · {t.reply_count} replies · {timeAgo(t.updated_at)}
-											</Text>
-										</Anchor>
-									))}
-								</Stack>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No threads started yet.</Text>
-							)}
-						</section>
-
-						{/* Posts */}
-						<section>
-							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>
-								Published posts ({posts.length})
-							</Heading>
-							{posts.length > 0 ? (
-								<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
-									{posts.map((p) => (
-										<Anchor
-											key={p.id}
-											href={`/posts/${p.id}`}
-											variant="plain"
-											class={css({ px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' }, color: 'ink' })}
-										>
-											<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 1 })}>{p.title}</Text>
-											<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>{timeAgo(p.updated_at)}</Text>
-										</Anchor>
-									))}
-								</Stack>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No published posts yet.</Text>
-							)}
-						</section>
-
-						{/* Replies */}
-						<section>
-							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>
-								Replies ({replies.length})
-							</Heading>
-							{replies.length > 0 ? (
-								<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
-									{replies.map((r) => (
-										<Anchor
-											key={r.id}
-											href={`/threads/${r.threadId}`}
-											variant="plain"
-											class={css({ px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' }, color: 'ink' })}
-										>
-											<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 1 })}>
-												{r.thread_title ?? 'Untitled thread'}
-											</Text>
-											<Text class={css({ mt: 1, fontSize: 'xs', color: 'muted', lineClamp: 2 })}>{r.body}</Text>
-											<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>{timeAgo(r.created_at)}</Text>
-										</Anchor>
-									))}
-								</Stack>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No replies yet.</Text>
-							)}
-						</section>
-					</Stack>
+					{/* ---- main column: repositories ---- */}
+					<section>
+						<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>
+							Repositories ({repositories.length})
+						</Heading>
+						{repositories.length > 0 ? (
+							<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
+								{repositories.map((r) => (
+									<Anchor
+										key={r.id}
+										href={`/repositories/${r.id}`}
+										variant="plain"
+										class={css({ px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' }, color: 'ink' })}
+									>
+										<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 1 })}>
+											{r.owner_name ?? 'unknown'}/{r.name}
+										</Text>
+										<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
+											{r.numStars} stars · {r.numForks} forks
+										</Text>
+									</Anchor>
+								))}
+							</Stack>
+						) : (
+							<Text class={css({ fontSize: 'sm', color: 'faint' })}>No repositories yet.</Text>
+						)}
+					</section>
 
 					{/* ---- sidebar: profile card ---- */}
 					<aside>
@@ -282,7 +209,7 @@ export default createRoute(async (c) => {
 			<footer class={css({ mt: 4, borderTop: '1px solid token(colors.border)', bg: 'white', px: 6, py: 8 })}>
 				<Stack direction="horizontal" class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
 					<Text>
-						<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
+						<span class={css({ fontWeight: 700, color: 'ink' })}>Git Forge</span> — model-driven forge demo.
 					</Text>
 				</Stack>
 			</footer>

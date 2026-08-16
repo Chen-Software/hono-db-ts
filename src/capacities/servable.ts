@@ -76,7 +76,7 @@ import {
 	type JsonSchema,
 	type SqlDialect,
 } from "./sql-serialisable";
-import { all, type Db } from "@/services/types";
+import { all, run, type Db } from "@/services/types";
 
 /**
  * The SQL query surface `Servable` needs. Bun's `SQL` client
@@ -591,7 +591,7 @@ export function Servable<TBase extends CapacityComposer>(
 			const cols = Object.keys(row);
 			if (cols.length === 0) return fail("no columns to insert");
 			const placeholders = cols.map(() => "?").join(", ");
-			await all(exec,
+			await run(exec,
 				`INSERT INTO ${quote(tableName)} (${cols.map(quote).join(", ")}) ` +
 					`VALUES (${placeholders})`,
 				cols.map((k) => row[k]),
@@ -665,7 +665,7 @@ export function Servable<TBase extends CapacityComposer>(
 			const row = toRow ? toRow(merged) : merged;
 			const sets = Object.keys(row).filter((k) => k !== idCol);
 			if (sets.length === 0) return json(current);
-			await all(exec,
+			await run(exec,
 				`UPDATE ${quote(tableName)} SET ${sets.map((k) => `${quote(k)} = ?`).join(", ")} ` +
 					`WHERE ${quote(idCol)} = ?`,
 				[...sets.map((k) => row[k]), id],
@@ -700,12 +700,12 @@ export function Servable<TBase extends CapacityComposer>(
 
 			// Delete FK children first when SQLite/D1 won't cascade for us.
 			for (const child of cascades) {
-				await all(exec,
+				await run(exec,
 					`DELETE FROM ${quote(child.table)} WHERE ${quote(child.column)} = ?`,
 					[id],
 				);
 			}
-			await all(exec,
+			await run(exec,
 				`DELETE FROM ${quote(tableName)} WHERE ${quote(idCol)} = ?`,
 				[id],
 			);

@@ -5,26 +5,19 @@ import { CloseIcon } from '../icons/close'
 import { SearchIcon } from '../icons/search'
 
 type SearchResult = {
-	threads: Array<{
+	repositories: Array<{
 		id: string
-		title: string
-		boardId: string
-		authorId: string
-		updated_at: string
-		author_name: string | null
-		board_name: string | null
-	}>
-	posts: Array<{
-		id: string
-		title: string
-		authorId: string
-		updated_at: string
-		author_name: string | null
+		name: string
+		lowerName: string
+		description: string
+		isPrivate: boolean
+		numStars: number
+		owner_name: string | null
 	}>
 }
 
 type Suggestion = {
-	kind: 'thread' | 'post'
+	kind: 'repository'
 	href: string
 	title: string
 	description: string
@@ -80,7 +73,7 @@ function timeAgo(iso: string): string {
 export default function SearchBox(props: SearchBoxProps) {
 	const [variantProps, localProps] = search.splitVariantProps(props)
 	const {
-		placeholder = 'Search threads & posts…',
+		placeholder = 'Search repositories…',
 		initialQuery = '',
 		debounceMs = 250,
 		maxSuggestions = 8,
@@ -106,28 +99,17 @@ export default function SearchBox(props: SearchBoxProps) {
 
 	const suggestions: Suggestion[] = []
 	if (result) {
-		for (const t of result.threads) {
+		for (const r of result.repositories) {
 			suggestions.push({
-				kind: 'thread',
-				href: `/threads/${t.id}`,
-				title: t.title,
-				description: timeAgo(t.updated_at),
-				tag: t.board_name ?? t.author_name ?? undefined,
-			})
-		}
-		for (const p of result.posts) {
-			suggestions.push({
-				kind: 'post',
-				href: `/posts/${p.id}`,
-				title: p.title,
-				description: timeAgo(p.updated_at),
-				tag: p.author_name ?? undefined,
+				kind: 'repository',
+				href: `/repositories/${r.id}`,
+				title: `${r.owner_name ?? 'unknown'}/${r.name}`,
+				description: `${r.numStars} stars`,
+				tag: r.isPrivate ? 'private' : undefined,
 			})
 		}
 	}
-	const threadCount = result?.threads.length ?? 0
-	const postCount = result?.posts.length ?? 0
-	const total = threadCount + postCount
+	const total = result?.repositories.length ?? 0
 	const open = result !== null || error !== null || loading
 
 	const run = async (query: string) => {
@@ -336,20 +318,10 @@ export default function SearchBox(props: SearchBoxProps) {
 									{total.toLocaleString()} {itemLabel}
 								</p>
 							)}
-							{threadCount > 0 && (
+							{total > 0 && (
 								<div>
-									<p class={groupHeader}>Threads</p>
-									{suggestions
-										.filter((s) => s.kind === 'thread')
-										.map((s) => renderItem(s, suggestions.indexOf(s)))}
-								</div>
-							)}
-							{postCount > 0 && (
-								<div>
-									<p class={groupHeader}>Posts</p>
-									{suggestions
-										.filter((s) => s.kind === 'post')
-										.map((s) => renderItem(s, suggestions.indexOf(s)))}
+									<p class={groupHeader}>Repositories</p>
+									{suggestions.map((s) => renderItem(s, suggestions.indexOf(s)))}
 								</div>
 							)}
 						</>

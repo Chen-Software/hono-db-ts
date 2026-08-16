@@ -16,7 +16,7 @@ async function runScript(script: string, args: string[] = []): Promise<void> {
 	if (code !== 0) process.exit(code);
 }
 
-function printHelp(bin = "artefact") {
+function printHelp(bin = "codeforge") {
 	console.log(`
 Usage: ${bin} <command> [args]
 
@@ -36,14 +36,14 @@ Commands:
   db:migrate              Depends on models:build. Apply the generated migrations to the
                           database from the databaseUrl() macro (drizzle-orm/bun-sql)
 
-  db:seed [counts…]       Seed the DB with BBS data (Randomisable.random()): defaults
-                          50 users / 100 boards / 1000 posts / 1000 threads / 2000 replies
+  db:seed [counts…]       Seed the DB with forge data (Randomisable.random()): defaults
+                          50 users / 200 repositories
 
   query <table> [jsonFilter] [--limit N] [--sort f[:asc|desc]] [--count]
                           Query a model table via drizzle-orm/bun-sql + databaseUrl().
-                          <table> = users|boards|threads|replies|posts (or schemaName).
+                          <table> = users|repositories (or schemaName).
                           jsonFilter supports equality {"role":"admin"}, comparisons
-                          {"age":{">":30}}, and LIKE search {"title":{"contains":"x"}}.
+                          {"age":{">":30}}, and LIKE search {"name":{"contains":"x"}}.
                           Booleans are coerced to 0/1. Default order: updated_at desc.
 
   serve [port] [mode]     Run the local server (scripts/serve.ts, default :8787).

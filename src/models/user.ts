@@ -21,7 +21,6 @@ import type { SqlSchemaModule } from "../capacities/sql-serialisable";
 import { SqlSerialisable } from "../capacities/sql-serialisable";
 import { Timestamped, type TimestampedSchema } from "../capacities/timestamped";
 import { defineModel } from "./base";
-import { Post } from "./post";
 
 /**
  * User schema — the plain-data contract.

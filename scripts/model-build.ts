@@ -31,10 +31,7 @@ import { resolve } from "node:path";
 // import the model files for their side effect — each one calls `defineModel`,
 // which registers the class in the model registry.
 import "@/models/user";
-import "@/models/post";
-import "@/models/board";
-import "@/models/thread";
-import "@/models/reply";
+import "@/models/repository";
 
 import type { SqlDialect, SqlModelPlan } from "../src/capacities/sql-serialisable";
 import { deriveSqlPlan } from "../src/capacities/sql-serialisable";

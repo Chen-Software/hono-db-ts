@@ -107,10 +107,7 @@ describe("ensureSchema", () => {
 		)) as Array<{ name: string }>;
 		const names = rows.map((r) => r.name);
 		expect(names).toContain("users");
-		expect(names).toContain("boards");
-		expect(names).toContain("threads");
-		expect(names).toContain("replies");
-		expect(names).toContain("posts");
+		expect(names).toContain("repositories");
 		client.close();
 	});
 

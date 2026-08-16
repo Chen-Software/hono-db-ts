@@ -105,15 +105,34 @@ function tableNameIndex(plans: SqlModelPlan[]): Map<string, string> {
  * level FOREIGN KEY clauses are derived from the plan relations, with the
  * `target` model name resolved to the target table name.
  */
+/**
+ * Map a model `OnDelete` vocabulary to the SQL FK action keyword. The model
+ * uses lowercase (`setNull`/`cascade`/`restrict`/`noAction`); SQLite/PG DDL
+ * expects `SET NULL` / `CASCADE` / `RESTRICT` / `NO ACTION`.
+ */
+const FK_ACTION: Record<string, string> = {
+	setNull: "SET NULL",
+	cascade: "CASCADE",
+	restrict: "RESTRICT",
+	noAction: "NO ACTION",
+};
+
 function renderTable(plan: SqlModelPlan, index: Map<string, string>): string {
 	const defs = columnDefs(plan);
 	for (const rel of plan.relations) {
 		const targetTable = index.get(rel.target) ?? rel.target;
+		// Emit the referential action only when it diverges from the implicit
+		// default (`NO ACTION`) — keeps the DDL lean while still honouring an
+		// explicit `setNull`/`cascade`/`restrict` declared on the model's
+		// `Reference` tag. (`noAction` is SQLite's default, so we omit it.)
+		const action = rel.onDelete && rel.onDelete !== "noAction"
+			? ` ON DELETE ${FK_ACTION[rel.onDelete] ?? "NO ACTION"}`
+			: "";
 		defs.push(
 			`CONSTRAINT ${q(`${plan.name}_${rel.column}_fk`)} ` +
 				`FOREIGN KEY (${q(rel.column)}) REFERENCES ${q(targetTable)}(${q(
 					rel.targetColumn,
-				)})`,
+				)})${action}`,
 		);
 	}
 	// Join column/check/fk defs with commas (no trailing comma before `)`).

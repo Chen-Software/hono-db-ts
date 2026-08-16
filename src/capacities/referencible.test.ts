@@ -1,26 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import { Post } from "../models/post";
+import { Repository } from "../models/repository";
 import { Referencible } from "../capacities/referencible";
 import { User } from "../models/user";
 import { hasModel } from "../registry";
 import { defaultIdentityMap } from "../storage/identity-map";
 
 /**
- * `Referencible` should consume the `Reference` tag on `authorId` to derive the
- * owner-side accessor (`post.getUser()`) — no manual `relations` entry needed.
- * The inverse side (`user.getPosts()`) stays manual but its `cardinality` /
- * `onDelete` are guarded against the tag.
+ * `Referencible` should consume the `Reference` tag on `ownerId` to derive the
+ * owner-side accessor (`repository.getOwner()`) — no manual `relations` entry
+ * needed. Unlike the old `Post`/`authorId` (`inner` join, throw-on-missing),
+ * `Repository` uses a `left` join with `setNull`, so `getOwner()` returns
+ * `undefined` (not a throw) when the owner is not registered.
  */
 
-// 64-hex placeholder — `Hashable` recomputes the real hash from
-// `body`, so this only needs to satisfy the `Sha256` format check at the
-// boundary (mirrors `post.test.ts`).
-const HASH_PLACEHOLDER = "a".repeat(64);
-
-// A plain UserSchema-shaped payload (matches `post.test.ts`'s `authorData`).
-// `Post.author` is typed `UserSchema`, so the nested author must be plain data,
-// not a `User` instance.
-const authorData = {
+const ownerData = {
 	id: "11111111-1111-4111-8111-111111111111",
 	name: "Ada",
 	email: "ada@example.com",
@@ -29,61 +22,68 @@ const authorData = {
 	created_at: "2026-08-09T12:00:00.000Z",
 };
 
-function makePost(id: string, authorId: string) {
-	return Post.from({
+function makeRepo(id: string, ownerId: string) {
+	return Repository.from({
 		id,
-		title: "Hello",
-		body: "world",
-		author: { ...authorData, id: authorId },
-		authorId,
-		published: false,
+		ownerId,
+		name: `repo-${id.slice(0, 8)}`,
+		lowerName: `repo-${id.slice(0, 8)}`,
+		description: "a repository",
+		defaultBranch: "main",
+		website: "",
+		isPrivate: false,
+		isArchived: false,
+		isMirror: false,
+		isTemplate: false,
+		objectFormatName: "sha1",
+		topics: [],
+		numStars: 0,
+		numForks: 0,
+		numOpenIssues: 0,
+		numClosedIssues: 0,
+		size: 0,
+		avatar: "",
+		status: 0,
 		created_at: "2026-08-09T12:00:00.000Z",
 		updated_at: "2026-08-09T12:00:00.000Z",
-		contentHash: HASH_PLACEHOLDER,
 	});
 }
 
 describe("Referencible derives the owner accessor from the Reference tag", () => {
-	it("exposes getUser() on Post (derived from the tag, not declared manually)", () => {
+	it("exposes getOwner() on Repository (derived from the tag, not declared manually)", () => {
 		// The accessor is generated on the prototype from the `Reference` tag.
-		expect(typeof (Post.prototype as any).getUser).toBe("function");
-		// Sanity: the inverse accessor is still present (manual).
-		expect(typeof (User.prototype as any).getPosts).toBe("function");
+		expect(typeof (Repository.prototype as any).getOwner).toBe("function");
 	});
 
-	it("getUser() resolves the FK authorId to the live User via the identity map", () => {
+	it("getOwner() resolves the FK ownerId to the live User via the identity map", () => {
 		defaultIdentityMap.clear();
-		const user = User.from({ ...authorData });
-		const post = makePost(
-			"22222222-2222-4222-8222-222222222222",
-			authorData.id,
-		);
+		const user = User.from({ ...ownerData });
+		const repo = makeRepo("22222222-2222-4222-8222-222222222222", ownerData.id);
 
-		// inner join (per the tag's `join: "inner"`) → returns the user, not
-		// undefined, and it is the SAME instance registered in the map.
-		expect(post.getUser()).toBe(user);
-		// inverse (manual) → collection scan.
-		expect(user.getPosts()).toEqual([post]);
+		// left join (per the tag's `join: "left"`) → returns the user, or null.
+		expect(repo.getOwner()).toBe(user);
 	});
 
-	it("getUser() throws on inner join when no matching User is registered", () => {
+	it("getOwner() returns undefined on left join when no matching User is registered", () => {
 		defaultIdentityMap.clear();
-		const post = makePost(
+		const repo = makeRepo(
 			"33333333-3333-4333-8333-333333333333",
 			"44444444-4444-4444-8444-444444444444",
 		);
-		expect(() => post.getUser()).toThrow(/inner join/);
+		// `Repository.ownerId` is a `left` join with `setNull` (per the Reference
+		// tag), so the derived `getOwner()` returns `undefined` (not `null`, not
+		// a throw) when no matching `User` is registered in the identity map.
+		expect(repo.getOwner()).toBeUndefined();
 	});
 });
 
 describe("Referencible drift guard", () => {
-	it("wires the guard so an owner manual spec must agree with the tag", () => {
-		// We can't flip Post's tag at runtime, but we can assert the guard
-		// wiring is live: constructing Post/User succeeded with consistent
-		// metadata (tag cascade ↔ getPosts cascade). If they had drifted,
-		// defineModel would have thrown at module load. This is a smoke check.
-		expect(typeof (User.prototype as any).getPosts).toBe("function");
-		expect(typeof (Post.prototype as any).getUser).toBe("function");
+	it("wires the guard so the tag-derived accessor is present on the model", () => {
+		// We can't flip Repository's tag at runtime, but we can assert the guard
+		// wiring is live: constructing Repository/User succeeded with consistent
+		// metadata (tag → getOwner). If they had drifted, defineModel would have
+		// thrown at module load. This is a smoke check.
+		expect(typeof (Repository.prototype as any).getOwner).toBe("function");
 	});
 });
 
@@ -124,11 +124,11 @@ describe("Referencible owner accessor — lighter existence check", () => {
 		// Regression guard: the string-target path must still key the identity
 		// map by the target's schemaName and find the instance.
 		defaultIdentityMap.clear();
-		const user = User.from({ ...authorData });
-		const post = makePost(
+		const user = User.from({ ...ownerData });
+		const repo = makeRepo(
 			"55555555-5555-4555-8555-555555555555",
-			authorData.id,
+			ownerData.id,
 		);
-		expect(post.getUser()).toBe(user);
+		expect(repo.getOwner()).toBe(user);
 	});
 });

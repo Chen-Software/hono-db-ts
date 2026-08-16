@@ -1,48 +1,66 @@
 import { describe, expect, it } from "bun:test";
-import { Post } from "../models/post";
+import { Repository } from "../models/repository";
 import { User } from "../models/user";
-import { withContentHash } from "./hashable";
 
-/** Build a valid Post instance from raw random data (mirrors seed.ts). */
-function makePost(overrides: Record<string, any> = {}) {
-	const data = Post.random();
-	Object.assign(data, overrides);
-	return Post.from(withContentHash(data, "body")) as unknown as Record<
-		string,
-		any
-	>;
+/** Build a valid Repository instance from raw data (mirrors seed.ts stamping). */
+function makeRepo(overrides: Record<string, any> = {}): Record<string, any> {
+	return Repository.from({
+		id: crypto.randomUUID(),
+		ownerId: null,
+		name: "my-repo",
+		lowerName: "my-repo",
+		description: "a repository",
+		defaultBranch: "main",
+		website: "",
+		isPrivate: false,
+		isArchived: false,
+		isMirror: false,
+		isTemplate: false,
+		objectFormatName: "sha1",
+		topics: [],
+		numStars: 0,
+		numForks: 0,
+		numOpenIssues: 0,
+		numClosedIssues: 0,
+		size: 0,
+		avatar: "",
+		status: 0,
+		created_at: "2026-08-09T12:00:00.000Z",
+		updated_at: "2026-08-09T12:00:00.000Z",
+		...overrides,
+	}) as unknown as Record<string, any>;
 }
 
-describe("Queriable — schema-inferred matching (Post)", () => {
-	const posts = [
-		makePost({
-			published: true,
-			title: "Hello World",
+describe("Queriable — schema-inferred matching (Repository)", () => {
+	const repos = [
+		makeRepo({
+			isPrivate: true,
+			name: "Hello World",
 			created_at: "1998-01-01T00:00:00.000Z",
 		}),
-		makePost({
-			published: false,
-			title: "Deep dive",
+		makeRepo({
+			isPrivate: false,
+			name: "Deep dive",
 			created_at: "2005-06-15T00:00:00.000Z",
 		}),
-		makePost({
-			published: true,
-			title: "Getting started",
+		makeRepo({
+			isPrivate: true,
+			name: "Getting started",
 			created_at: "2026-08-09T00:00:00.000Z",
 		}),
 	];
 
-	it("infers boolean equality for `published`", () => {
-		expect(Post.filter(posts as any, { published: "true" })).toHaveLength(2);
-		expect(Post.filter(posts as any, { published: "false" })).toHaveLength(1);
+	it("infers boolean equality for `isPrivate`", () => {
+		expect(Repository.filter(repos as any, { isPrivate: "true" })).toHaveLength(2);
+		expect(Repository.filter(repos as any, { isPrivate: "false" })).toHaveLength(1);
 	});
 
-	it("infers substring for `title`", () => {
-		expect(Post.filter(posts as any, { title: "deep" })).toHaveLength(1);
+	it("infers substring for `name`", () => {
+		expect(Repository.filter(repos as any, { name: "deep" })).toHaveLength(1);
 	});
 
 	it("infers closed date RANGE for `created_at` via [min,max] tuple", () => {
-		const r = Post.filter(posts as any, {
+		const r = Repository.filter(repos as any, {
 			created_at: "[2000-01-01,2027-01-01]",
 		});
 		expect(r).toHaveLength(2); // 2005, 2026
@@ -50,20 +68,20 @@ describe("Queriable — schema-inferred matching (Post)", () => {
 
 	it("bare date value is an EXACT (day-level) match, not a range", () => {
 		expect(
-			Post.filter(posts as any, { created_at: "1998-01-01" }),
+			Repository.filter(repos as any, { created_at: "1998-01-01" }),
 		).toHaveLength(1);
 		// without brackets it is NOT a range
 		expect(
-			Post.filter(posts as any, { created_at: "1998-01-01,2099-01-01" }),
+			Repository.filter(repos as any, { created_at: "1998-01-01,2099-01-01" }),
 		).toHaveLength(0);
 	});
 
 	it("ignores unknown params (permissive)", () => {
-		expect(Post.filter(posts as any, { notAField: "x" })).toHaveLength(3);
+		expect(Repository.filter(repos as any, { notAField: "x" })).toHaveLength(3);
 	});
 
 	it("applies `limit`", () => {
-		expect(Post.filter(posts as any, { limit: "2" })).toHaveLength(2);
+		expect(Repository.filter(repos as any, { limit: "2" })).toHaveLength(2);
 	});
 });
 

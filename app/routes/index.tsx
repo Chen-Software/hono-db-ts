@@ -1,68 +1,41 @@
 import { css } from '../../design-system/css'
-import { Fragment } from 'hono/jsx'
 import { createRoute } from 'honox/factory'
 import {
 	Anchor,
 	Badge,
-	Button,
 	Card,
 	Heading,
 	Stack,
 	Text,
 } from '../components/ui'
 import { SiteHeader } from '../components/site-header'
-import { ThreadDrawer } from '../components/thread-drawer'
+import { RepositoryDrawer } from '../components/repository-drawer'
 import { apiFetch, apiPostForm } from '../lib/api'
 
 /**
- * BBS home page — a forum-style landing UI rendered entirely on the server.
+ * Forge home page — a Git-forge landing UI rendered entirely on the server.
  *
  * Everything is read over HTTP from the JSON query app mounted under `/api`
  * (the service layer runs every query through Drizzle), so the page works with
- * zero client JS: stats, board cards, recent threads, latest posts and hot
- * threads are all SSR queries. When `DATABASE_URL` is unset (or a query fails)
- * the sections degrade to an empty state instead of crashing.
- *
- * The render layer composes the design-system components in
- * `app/components/ui/*` (Layout, Card, Badge, Heading, Text, Anchor, Button,
- * Breadcrumb, Grid, Stack). Forms keep native `<select>`/`<input>` elements —
- * the interactive `Select`/`Field` components are client-hydrated and not
- * suitable for a no-JS SSR form.
+ * zero client JS: stats, repository cards and the owner picker are all SSR
+ * queries. When `DATABASE_URL` is unset (or a query fails) the sections degrade
+ * to an empty state instead of crashing.
  */
 
 type Stats = {
 	users: number
-	boards: number
-	threads: number
-	replies: number
-	posts: number
+	repositories: number
 }
 
-type Board = {
+type Repository = {
 	id: string
 	name: string
-	slug: string
+	lowerName: string
 	description: string
-	moderator_name: string | null
-	thread_count: number
-}
-
-type Thread = {
-	id: string
-	title: string
-	pinned: number
-	locked: number
-	updated_at: string
-	author_name: string | null
-	board_name: string | null
-	reply_count: number
-}
-
-type Post = {
-	id: string
-	title: string
-	updated_at: string
-	author_name: string | null
+	isPrivate: boolean
+	numStars: number
+	numForks: number
+	owner_name: string | null
 }
 
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
@@ -81,54 +54,31 @@ function timeAgo(iso: string): string {
 }
 
 export default createRoute(async (c) => {
-	// `?compose=1` opens the "New thread" drawer on load (used by the nav/links
-	// on other pages so the composer is reachable from anywhere).
-	const compose = c.req.query('compose') === '1'
+	// `?new=1` opens the "New repository" drawer on load.
+	const newRepo = c.req.query('new') === '1'
 	// `?status=` carries post-action feedback back from a form submission.
 	const status = c.req.query('status')
-	const reason = c.req.query('reason')
 	const notice =
 		status === 'created'
-			? { tone: 'success' as const, text: 'Thread posted.' }
+			? { tone: 'success' as const, text: 'Repository created.' }
 			: status === 'error'
-				? reason === 'auth'
-					? { tone: 'error' as const, text: 'Please sign in before posting a thread.' }
-					: reason === 'missing'
-						? { tone: 'error' as const, text: 'Add a title and pick a board, then try again.' }
-						: reason === 'nodb'
-							? { tone: 'error' as const, text: 'The database is unavailable right now — try again shortly.' }
-							: { tone: 'error' as const, text: 'Could not post the thread. Please try again.' }
+				? { tone: 'error' as const, text: 'Could not create the repository. Please try again.' }
 				: null
 
 	// SSR: data is fetched over HTTP from the JSON API (`/api/page/*`), which
 	// delegates to the service layer. The UI never opens a SQL connection.
 	let stats: Stats | null = null
-	let boards: Board[] = []
-	let threads: Thread[] = []
-	let posts: Post[] = []
-	let hot: (Thread & { reply_count: number })[] = []
-	// Options for the "new thread" form.
-	let allBoards: { id: string; name: string }[] = []
-	// When `?edit=<id>` is set, that thread renders its inline title editor.
-	const editId = c.req.query('edit') ?? null
-
+	let repositories: Repository[] = []
 	const home: any = await apiFetch(c, '/page/home')
 	if (home) {
 		stats = home.stats ?? null
-		boards = home.boards ?? []
-		threads = home.threads ?? []
-		posts = home.posts ?? []
-		hot = home.hot ?? []
-		allBoards = home.allBoards ?? []
+		repositories = home.repositories ?? []
 	}
 
 	const hasDb = stats !== null
-	const statItems: { label: string; value: number; key: string }[] = [
-		{ label: 'Members', value: stats?.users ?? 0, key: 'users' },
-		{ label: 'Boards', value: stats?.boards ?? 0, key: 'boards' },
-		{ label: 'Threads', value: stats?.threads ?? 0, key: 'threads' },
-		{ label: 'Replies', value: stats?.replies ?? 0, key: 'replies' },
-		{ label: 'Posts', value: stats?.posts ?? 0, key: 'posts' },
+	const statItems: { label: string; value: number }[] = [
+		{ label: 'Members', value: stats?.users ?? 0 },
+		{ label: 'Repositories', value: stats?.repositories ?? 0 },
 	]
 
 	return c.render(
@@ -141,7 +91,7 @@ export default createRoute(async (c) => {
 					'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
 			})}
 		>
-			<title>BBS Forum</title>
+			<title>Git Forge</title>
 
 			{/* ---------- Nav ---------- */}
 			<SiteHeader variant="home" />
@@ -150,21 +100,21 @@ export default createRoute(async (c) => {
 			<section class={css({ px: 6, py: 14, bg: '#111827', color: 'white' })}>
 				<div class={css({ maxWidth: '6xl', mx: 'auto' })}>
 					<Badge class={css({ textTransform: 'uppercase', letterSpacing: '0.05em' })}>
-						Model-driven community
+						Self-hosted Git forge
 					</Badge>
 					<Heading as="h1" class={css({ mt: 4, fontSize: '4xl', fontWeight: 800, letterSpacing: '-0.02em', color: 'white' })}>
-						Welcome to the BBS
+						Welcome to the Forge
 					</Heading>
 					<Text class={css({ mt: 3, maxWidth: '2xl', color: '#9ca3af', fontSize: 'lg' })}>
-						A forum built on composable data models — boards, threads, replies and posts
-						served straight from SQL. Join a board and start a conversation.
+						A model-driven Git forge — repositories, owners and stars served straight
+						from SQL. Create a repository and start collaborating.
 					</Text>
 
 					{hasDb ? (
-						<div class={css({ mt: 10, display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 })}>
+						<div class={css({ mt: 10, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 })}>
 							{statItems.map((s) => (
 								<Card
-									key={s.key}
+									key={s.label}
 									class={css({
 										px: 5,
 										py: 5,
@@ -230,368 +180,94 @@ export default createRoute(async (c) => {
 						{notice.text}
 					</div>
 				)}
-				<div class={css({ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 })}>
-					{/* ---- main column ---- */}
-					<Stack direction="vertical" gap="10">
-						{/* Boards */}
-						<section id="boards">
-							<Heading class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>
-								Boards
-								<Text as="span" class={css({ ml: 2, fontSize: 'sm', fontWeight: 400, color: 'faint' })}>
-									{stats ? `${stats.boards} total` : ''}
-								</Text>
-							</Heading>
 
-							{boards.length > 0 ? (
-								<div class={css({ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 })}>
-									{boards.map((b) => (
-										<Anchor key={b.id} href={`/boards/${b.id}`} variant="plain">
-											<Card
-												class={css({
-													p: 5,
-													width: 'full',
-													boxShadow: 'md',
-													transition: 'box-shadow 150ms, transform 150ms',
-													_hover: {
-														boxShadow: '0 8px 24px rgba(17,24,39,0.08)',
-														transform: 'translateY(-2px)',
-													},
-												})}
-											>
-												<Stack direction="horizontal" align="center" gap="2">
-													<span class={css({ w: 2, h: 2, rounded: 'full', bg: 'accent', flexShrink: 0 })} />
-													<Heading as="h3" class={css({ fontWeight: 700, fontSize: 'md', color: 'ink' })}>
-														{b.name}
-													</Heading>
-												</Stack>
-												<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted', lineClamp: 2 })}>
-													{b.description}
-												</Text>
-												<Stack direction="horizontal" align="center" gap="3" class={css({ mt: 3, fontSize: 'xs', color: 'faint' })}>
-													<Badge variant="subtle">
-														/{b.slug}
-													</Badge>
-													<Text as="span">{b.thread_count} threads</Text>
-													<Text as="span" class={css({ display: 'flex', alignItems: 'center', gap: 1 })}>
-														<span aria-hidden>👤</span>
-														{b.moderator_name ?? 'unknown'}
-													</Text>
-												</Stack>
-											</Card>
-										</Anchor>
-									))}
-								</div>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No boards yet.</Text>
-							)}
-						</section>
+				<Stack direction="horizontal" justify="between" align="flex-end" wrap gap="4" class={css({ mb: 8 })}>
+					<div>
+						<Text class={css({ fontSize: 'xs', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'accent' })}>
+							Explore
+						</Text>
+						<Heading class={css({ mt: 1, fontSize: '2xl', fontWeight: 800 })}>Repositories</Heading>
+						<Text class={css({ mt: 1, fontSize: 'sm', color: 'muted' })}>
+							{((stats?.repositories ?? 0)).toLocaleString()} repositor{stats?.repositories === 1 ? 'y' : 'ies'} · by stars
+						</Text>
+					</div>
+					{hasDb ? (
+						<RepositoryDrawer defaultOpen={newRepo} />
+					) : null}
+				</Stack>
 
-						{/* New thread */}
-						{hasDb && allBoards.length > 0 ? (
-							<section id="new-thread">
-								<Heading class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>New thread</Heading>
-								<Text class={css({ mb: 4, color: 'muted', fontSize: 'sm' })}>
-									Start a conversation in one of the boards.
-								</Text>
-								<ThreadDrawer boards={allBoards} defaultOpen={compose} />
-							</section>
-						) : null}
-
-						{/* Recent threads */}
-						<section id="threads">
-							<Heading class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>Recent activity</Heading>
-							{threads.length > 0 ? (
-								<div class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', overflow: 'hidden' })}>
-									{threads.map((t, i) => (
-										<Fragment key={t.id}>
-										<article
-											class={css({
-												px: 5,
-												py: 4,
-												display: 'flex',
-												alignItems: 'center',
-												gap: 4,
-												borderTop: i === 0 ? 'none' : '1px solid token(colors.border)',
-												_hover: { bg: '#fafafa' },
-											})}
-										>
-											<div class={css({ flex: 1, minWidth: 0 })}>
-												<Stack direction="horizontal" align="center" gap="2">
-													{t.pinned === 1 && (
-														<Badge colorPalette="amber" variant="subtle">
-															Pin
-														</Badge>
-													)}
-													{t.locked === 1 && (
-														<Badge colorPalette="red" variant="subtle">
-															Locked
-														</Badge>
-													)}
-													<Anchor
-														href={`/threads/${t.id}`}
-														variant="plain"
-														class={css({ fontWeight: 600, fontSize: 'sm', lineClamp: 1, color: 'ink' })}
-													>
-														{t.title}
-													</Anchor>
-												</Stack>
-												<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
-													{t.author_name ?? 'unknown'} · {t.board_name ?? '—'} ·{' '}
-													{timeAgo(t.updated_at)}
-												</Text>
-											</div>
-											<div
-												class={css({
-													display: 'flex',
-													alignItems: 'center',
-													gap: 1.5,
-													fontSize: 'sm',
-													color: 'muted',
-													flexShrink: 0,
-												})}
-											>
-												<span aria-hidden>💬</span>
-												{t.reply_count}
-											</div>
-										</article>
-
-										{/* Inline title editor (shown when ?edit=<id>) */}
-										{t.id === editId ? (
-											<form
-												method="post"
-												action="/"
-												class={css({
-													px: 5,
-													py: 3,
-													borderTop: '1px solid token(colors.border)',
-													bg: '#fff7ed',
-													display: 'flex',
-													gap: 3,
-												})}
-											>
-												<input type="hidden" name="action" value="update-title" />
-												<input type="hidden" name="id" value={t.id} />
-												<input
-													name="title"
-													defaultValue={t.title}
-													maxLength={300}
-													class={css({
-														flex: 1,
-														px: 3,
-														py: 1.5,
-														rounded: 'md',
-														border: '1px solid token(colors.border)',
-														fontSize: 'sm',
-														outline: 'none',
-														_focus: { borderColor: 'accent' },
-													})}
-												/>
-												<Button type="submit" size="xs">
-													Save
-												</Button>
-												<Anchor
-													href="/"
-													variant="plain"
-													class={css({ border: '1px solid token(colors.border)', color: 'muted', fontSize: 'xs' })}
-												>
-													Cancel
-												</Anchor>
-											</form>
-										) : null}
-
-										{/* Row actions */}
-										<div
-											class={css({
-												px: 5,
-												pb: 3,
-												borderTop: i === 0 ? 'none' : 'none',
-												display: 'flex',
-												alignItems: 'center',
-												gap: 2,
-												fontSize: 'xs',
-											})}
-										>
-											<Anchor
-												href={`/?edit=${t.id}`}
-												variant="plain"
-												class={css({ color: 'muted', fontSize: 'xs' })}
-											>
-												Edit
-											</Anchor>
-											<form method="post" action="/" class={css({ m: 0 })}>
-												<input type="hidden" name="action" value="toggle-pin" />
-												<input type="hidden" name="id" value={t.id} />
-												<button
-													type="submit"
-													class={css({
-														bg: 'transparent',
-														border: 'none',
-														p: 0,
-														fontSize: 'xs',
-														color: 'muted',
-														cursor: 'pointer',
-														_hover: { color: 'accent' },
-													})}
-												>
-													{t.pinned === 1 ? 'Unpin' : 'Pin'}
-												</button>
-											</form>
-											<form method="post" action="/" class={css({ m: 0 })}>
-												<input type="hidden" name="action" value="toggle-lock" />
-												<input type="hidden" name="id" value={t.id} />
-												<button
-													type="submit"
-													class={css({
-														bg: 'transparent',
-														border: 'none',
-														p: 0,
-														fontSize: 'xs',
-														color: 'muted',
-														cursor: 'pointer',
-														_hover: { color: 'accent' },
-													})}
-												>
-													{t.locked === 1 ? 'Unlock' : 'Lock'}
-												</button>
-											</form>
-											<form method="post" action="/" class={css({ m: 0 })}>
-												<input type="hidden" name="action" value="delete" />
-												<input type="hidden" name="id" value={t.id} />
-												<button
-													type="submit"
-													class={css({
-														bg: 'transparent',
-														border: 'none',
-														p: 0,
-														fontSize: 'xs',
-														color: '#dc2626',
-														cursor: 'pointer',
-														_hover: { color: '#b91c1c' },
-													})}
-												>
-													Delete
-												</button>
-											</form>
-										</div>
-										</Fragment>
-									))}
-								</div>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No threads yet.</Text>
-							)}
-						</section>
-					</Stack>
-
-					{/* ---- sidebar ---- */}
-					<aside class={css({ spaceY: 8 })}>
-						{/* Latest posts */}
-						<section id="posts">
-							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>Latest posts</Heading>
-							{posts.length > 0 ? (
-								<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
-									{posts.map((p, i) => (
-										<Anchor
-											key={`${p.updated_at}-${i}`}
-											href={`/posts/${p.id}`}
-											variant="plain"
-											class={css({
-												px: 3,
-												py: 3,
-												rounded: 'lg',
-												_hover: { bg: '#fafafa' },
-												color: 'ink',
-											})}
-										>
-											<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 2 })}>{p.title}</Text>
-											<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
-												{p.author_name ?? 'unknown'} · {timeAgo(p.updated_at)}
-											</Text>
-										</Anchor>
-									))}
-								</Stack>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No posts yet.</Text>
-							)}
-						</section>
-
-						{/* Hot threads */}
-						<section>
-							<Heading class={css({ mb: 4, fontSize: 'lg', fontWeight: 700 })}>Hot threads</Heading>
-							{hot.length > 0 ? (
-								<Stack direction="vertical" gap="1" class={css({ rounded: 'xl', border: '1px solid token(colors.border)', bg: 'white', p: 2 })}>
-									{hot.map((t, i) => (
-										<Anchor
-											key={t.id}
-											href={`/threads/${t.id}`}
-											variant="plain"
-											class={css({
-												px: 3,
-												py: 3,
-												rounded: 'lg',
-												display: 'flex',
-												gap: 3,
-												alignItems: 'flex-start',
-												_hover: { bg: '#fafafa' },
-												color: 'ink',
-											})}
-										>
-											<span
-												class={css({
-													display: 'inline-flex',
-													alignItems: 'center',
-													justifyContent: 'center',
-													w: 5,
-													h: 5,
-													rounded: 'md',
-													fontSize: 'xs',
-													fontWeight: 700,
-													bg: i < 3 ? 'accent' : '#f3f4f6',
-													color: i < 3 ? 'white' : 'muted',
-													flexShrink: 0,
-												})}
-											>
-												{i + 1}
-											</span>
-											<div class={css({ minWidth: 0 })}>
-												<Text class={css({ fontSize: 'sm', fontWeight: 600, lineClamp: 2 })}>{t.title}</Text>
-												<Text class={css({ mt: 1, fontSize: 'xs', color: 'faint' })}>
-													{t.reply_count} replies
-												</Text>
-											</div>
-										</Anchor>
-									))}
-								</Stack>
-							) : (
-								<Text class={css({ fontSize: 'sm', color: 'faint' })}>No hot threads yet.</Text>
-							)}
-						</section>
-					</aside>
-				</div>
+				{repositories.length > 0 ? (
+					<div class={css({ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 })}>
+						{repositories.map((r) => (
+							<Anchor key={r.id} href={`/repositories/${r.id}`} variant="plain">
+								<Card
+									class={css({
+										p: 5,
+										width: 'full',
+										boxShadow: 'md',
+										transition: 'box-shadow 150ms, transform 150ms',
+										_hover: {
+											boxShadow: '0 8px 24px rgba(17,24,39,0.08)',
+											transform: 'translateY(-2px)',
+										},
+									})}
+								>
+									<Stack direction="horizontal" align="center" gap="2">
+										<span class={css({ w: 2, h: 2, rounded: 'full', bg: 'accent', flexShrink: 0 })} />
+										<Heading as="h3" class={css({ fontWeight: 700, fontSize: 'md', truncate: true, color: 'ink' })}>
+											{r.owner_name ?? 'unknown'}/{r.name}
+										</Heading>
+										{r.isPrivate && (
+											<Badge variant="subtle" colorPalette="gray">
+												private
+											</Badge>
+										)}
+									</Stack>
+									<Text class={css({ mt: 2, fontSize: 'sm', color: 'muted', lineClamp: 2, minHeight: '2.5rem' })}>
+										{r.description || 'No description.'}
+									</Text>
+									<Stack
+										direction="horizontal"
+										justify="between"
+										align="center"
+										class={css({ mt: 3, pt: 3, borderTop: '1px solid token(colors.border)', fontSize: 'xs', color: 'faint' })}
+									>
+										<Text as="span">
+											<strong class={css({ color: 'ink', fontWeight: 700 })}>{r.numStars}</strong> stars
+										</Text>
+										<Text as="span">
+											<strong class={css({ color: 'ink', fontWeight: 700 })}>{r.numForks}</strong> forks
+										</Text>
+									</Stack>
+								</Card>
+							</Anchor>
+						))}
+					</div>
+				) : (
+					<div class={css({ py: 16, textAlign: 'center', rounded: 'xl', border: '1px dashed token(colors.border)', bg: 'white' })}>
+						<Text class={css({ fontSize: 'sm', color: 'muted' })}>No repositories yet.</Text>
+					</div>
+				)}
 			</main>
 
 			{/* ---------- Footer ---------- */}
 			<footer class={css({ mt: 4, borderTop: '1px solid token(colors.border)', bg: 'white', px: 6, py: 8 })}>
-				<Stack direction="horizontal" justify="between" align="center" wrap class={css({ maxWidth: '6xl', mx: 'auto', gap: 4 })}>
-					<Text class={css({ fontSize: 'sm', color: 'muted' })}>
-						<span class={css({ fontWeight: 700, color: 'ink' })}>BBS Forum</span> — model-driven community demo.
-					</Text>
-					<Text class={css({ fontSize: 'xs', color: 'faint' })}>
-						API: <code>/api/stats</code> · <code>/api/boards</code> · <code>/api/search?q=</code>
+				<Stack direction="horizontal" class={css({ maxWidth: '6xl', mx: 'auto', fontSize: 'sm', color: 'muted' })}>
+					<Text>
+						<span class={css({ fontWeight: 700, color: 'ink' })}>Git Forge</span> — model-driven forge demo.
 					</Text>
 				</Stack>
 			</footer>
-		</div>
+		</div>,
 	)
 })
 
 /**
- * POST / — handle the thread CRUD forms (create / update-title / toggle-pin /
- * toggle-lock / delete). Pure SSR: every action is a `<form method="post">`
- * submit, so no client JS is required. On success it redirects back to `/`.
+ * POST / — handle the repository create form. Pure SSR: the submit is a
+ * `<form method="post">`, so no client JS is required. On success it redirects
+ * back to `/`.
  */
 export const POST = createRoute(async (c) => {
-	// All thread mutations (create / update-title / pin / lock / delete) are
-	// delegated to the service layer via the JSON API. The API returns a
-	// redirect, which we stream straight back to the browser.
-	return apiPostForm(c, '/page/threads')
+	// Repository creation is delegated to the service layer via the JSON API.
+	return apiPostForm(c, '/page/repositories')
 })
