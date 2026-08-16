@@ -4,6 +4,7 @@ import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../compone
 import { SiteHeader } from '../../components/site-header'
 import { BoardDrawer } from '../../components/board-drawer'
 import { getSession } from '../../../src/auth/context'
+import { ensureForumUser } from '../../../src/auth/author'
 
 /**
  * Boards list page — `/boards`.
@@ -45,6 +46,14 @@ export default createRoute(async (c) => {
 	const cursor = c.req.query('cursor') ?? ''
 	// `?new=1` opens the "New board" drawer on load.
 	const newBoard = c.req.query('new') === '1'
+	// `?status=` carries post-action feedback back from a form submission.
+	const status = c.req.query('status')
+	const notice =
+		status === 'created'
+			? { tone: 'success' as const, text: 'Board created.' }
+			: status === 'error'
+				? { tone: 'error' as const, text: 'Could not create the board. Please try again.' }
+				: null
 
 	let boards: BoardRow[] = []
 	let total = 0
@@ -112,6 +121,32 @@ export default createRoute(async (c) => {
 			<Nav />
 
 			<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 10 })}>
+				{notice && (
+					<div
+						role="status"
+						class={css({
+							mb: 6,
+							px: 4,
+							py: 3,
+							rounded: 'md',
+							fontSize: 'sm',
+							fontWeight: 600,
+							...(notice.tone === 'success'
+								? {
+										backgroundColor: '#ecfdf5',
+										color: '#047857',
+										border: '1px solid #a7f3d0',
+									}
+								: {
+										backgroundColor: '#fef2f2',
+										color: '#b91c1c',
+										border: '1px solid #fecaca',
+									}),
+						})}
+					>
+						{notice.text}
+					</div>
+				)}
 				{/* Heading */}
 				<Stack direction="horizontal" justify="between" align="flex-end" wrap gap="4" class={css({ mb: 8 })}>
 					<div>
@@ -232,10 +267,9 @@ function Nav() {
  */
 export const POST = createRoute(async (c) => {
 	const sql = c.env.sql
-	if (!sql) return c.redirect('/boards')
+	if (!sql) return c.redirect('/boards?status=error&reason=nodb')
 
 	const session = await getSession(c).catch(() => null)
-	if (!session?.user) return c.redirect('/boards')
 
 	try {
 		const body = await c.req.parseBody()
@@ -243,20 +277,40 @@ export const POST = createRoute(async (c) => {
 			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
 			const slug = typeof body['slug'] === 'string' ? body['slug'].trim() : ''
 			const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
-			const moderatorId = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
-			const mod = moderatorId || session.user.id
+			const submittedMod = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
 
-			if (name && slug) {
-				const newId = crypto.randomUUID()
-				const now = new Date().toISOString()
+			// Resolve a moderator that exists in the forum `users` table. Prefer
+			// an explicit, valid submission; otherwise attribute to the signed-in
+			// user (creating their forum profile row on first post) so their
+			// profile reflects the boards they create.
+			let mod: string | null = null
+			if (submittedMod) {
+				const hit = (await sql.unsafe(
+					`SELECT "id" FROM "users" WHERE "id" = ? LIMIT 1`,
+					[submittedMod],
+				)) as Array<{ id: string }>
+				mod = hit[0]?.id ?? null
+			}
+			if (!mod) mod = await ensureForumUser(sql, session)
+			if (!name || !slug || !mod) {
+				return c.redirect('/boards?status=error&reason=missing&new=1')
+			}
+
+			const newId = crypto.randomUUID()
+			const now = new Date().toISOString()
+			try {
 				await sql.unsafe(
 					`INSERT INTO "boards" ("id","created_at","name","slug","description","moderatorId") VALUES (?,?,?,?,?,?)`,
 					[newId, now, name, slug, description, mod],
 				)
+			} catch (err) {
+				console.error('[POST /boards] create board failed:', err)
+				return c.redirect('/boards?status=error&reason=exception&new=1')
 			}
+			return c.redirect('/boards?status=created')
 		}
 	} catch {
-		// Bounce back on failure (e.g. duplicate slug).
+		// Bounce back on unexpected failure.
 	}
 
 	return c.redirect('/boards')

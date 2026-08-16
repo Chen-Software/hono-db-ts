@@ -1,5 +1,5 @@
 import { css } from "../../design-system/css";
-import { Anchor, Button, Search, Stack } from "./ui";
+import { Anchor, Search, Stack } from "./ui";
 import { Header as LayoutHeader } from "./ui/layout";
 import ThemeSwitcher from "../islands/theme-switcher";
 import AuthButton from "../islands/auth-button";
@@ -10,8 +10,7 @@ type Variant = "app" | "home";
 type SiteHeaderProps = {
 	/**
 	 * `app`  — interior pages; nav links point at the real routes
-	 *           (`/boards`, `/threads`, `/posts`) and "New thread" opens the
-	 *           home page's composer drawer (`/?compose=1`).
+	 *           (`/boards`, `/threads`, `/posts`).
 	 * `home` — the landing page; nav links are in-page anchors (`/#boards` …)
 	 *           so the hero doesn't reload.
 	 */
@@ -21,7 +20,7 @@ type SiteHeaderProps = {
 /**
  * SiteHeader — the single source of truth for the top navigation, used by
  * every page. It renders the brand, the primary nav, the search box, the theme
- * switcher, the auth controls, and the "New thread" button.
+ * switcher, and the auth controls.
  *
  * The auth controls are gated behind `__BETTER_AUTH_ENABLED__`. For signed-in
  * users the `UserAvatarCard` shows the avatar and a **Sign out** button inside
@@ -36,7 +35,6 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 	const boardHref = variant === "home" ? "/#boards" : "/boards";
 	const threadHref = variant === "home" ? "/#threads" : "/threads";
 	const postHref = variant === "home" ? "/#posts" : "/posts";
-	const newThreadHref = "/?compose=1";
 
 	return (
 		<LayoutHeader
@@ -100,9 +98,6 @@ export function SiteHeader({ variant = "app" }: SiteHeaderProps) {
 							<AuthButton />
 						</>
 					)}
-					<Button as="a" href={newThreadHref} size="sm">
-						New thread
-					</Button>
 				</Stack>
 			</Stack>
 		</LayoutHeader>

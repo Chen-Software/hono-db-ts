@@ -13,6 +13,7 @@ import {
 import { SiteHeader } from '../components/site-header'
 import { ThreadDrawer } from '../components/thread-drawer'
 import { getSession } from '../../src/auth/context'
+import { ensureForumUser } from '../../src/auth/author'
 
 /**
  * BBS home page — a forum-style landing UI rendered entirely on the server.
@@ -84,6 +85,21 @@ export default createRoute(async (c) => {
 	// `?compose=1` opens the "New thread" drawer on load (used by the nav/links
 	// on other pages so the composer is reachable from anywhere).
 	const compose = c.req.query('compose') === '1'
+	// `?status=` carries post-action feedback back from a form submission.
+	const status = c.req.query('status')
+	const reason = c.req.query('reason')
+	const notice =
+		status === 'created'
+			? { tone: 'success' as const, text: 'Thread posted.' }
+			: status === 'error'
+				? reason === 'auth'
+					? { tone: 'error' as const, text: 'Please sign in before posting a thread.' }
+					: reason === 'missing'
+						? { tone: 'error' as const, text: 'Add a title and pick a board, then try again.' }
+						: reason === 'nodb'
+							? { tone: 'error' as const, text: 'The database is unavailable right now — try again shortly.' }
+							: { tone: 'error' as const, text: 'Could not post the thread. Please try again.' }
+				: null
 
 	// SSR: read the shared SQL client directly (set by app/server.ts init).
 	let stats: Stats | null = null
@@ -244,6 +260,32 @@ export default createRoute(async (c) => {
 
 			{/* ---------- Body ---------- */}
 			<main class={css({ maxWidth: '6xl', mx: 'auto', px: 6, py: 10 })}>
+				{notice && (
+					<div
+						role="status"
+						class={css({
+							mb: 6,
+							px: 4,
+							py: 3,
+							rounded: 'md',
+							fontSize: 'sm',
+							fontWeight: 600,
+							...(notice.tone === 'success'
+								? {
+										backgroundColor: '#ecfdf5',
+										color: '#047857',
+										border: '1px solid #a7f3d0',
+									}
+								: {
+										backgroundColor: '#fef2f2',
+										color: '#b91c1c',
+										border: '1px solid #fecaca',
+									}),
+						})}
+					>
+						{notice.text}
+					</div>
+				)}
 				<div class={css({ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 })}>
 					{/* ---- main column ---- */}
 					<Stack direction="vertical" gap="10">
@@ -604,32 +646,47 @@ export default createRoute(async (c) => {
  * submit, so no client JS is required. On success it redirects back to `/`.
  */
 export const POST = createRoute(async (c) => {
-	const sql = c.env.sql
-	if (!sql) return c.redirect('/')
-
-	const body = await c.req.parseBody()
-	const action = typeof body['action'] === 'string' ? body['action'] : ''
-	const id = typeof body['id'] === 'string' ? body['id'] : ''
-
 	try {
+		const sql = c.env.sql
+		if (!sql) return c.redirect('/?status=error&reason=nodb')
+
+		// Parsing lives inside the try so a malformed body surfaces as feedback
+		// instead of an unhandled 500.
+		const body = await c.req.parseBody()
+		const action = typeof body['action'] === 'string' ? body['action'] : ''
+		const id = typeof body['id'] === 'string' ? body['id'] : ''
+
 		if (action === 'create') {
 			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
 			const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
-			// Only an authenticated user may create a thread, and only under
-			// their own name. Bind the author to the session user and ignore
-			// any client-submitted authorId (the form's author dropdown).
+			// Resolve an author that actually exists in the forum `users` table.
+			// Better Auth's session user lives in a separate table, so we fall
+			// back to a seeded default user rather than failing silently (which
+			// previously dropped the insert via the foreign-key constraint).
 			const session = await getSession(c).catch(() => null)
-			if (!session?.user) return c.redirect('/')
-			const authorId = session.user.id
-			if (!title || !boardId || !authorId) return c.redirect('/')
+			if (!session?.user) {
+				// Not signed in — tell the user explicitly instead of silently
+				// bouncing back with no explanation.
+				return c.redirect('/?status=error&reason=auth&compose=1')
+			}
+			const authorId = await ensureForumUser(sql, session).catch(() => null)
+			if (!title || !boardId || !authorId) {
+				return c.redirect('/?status=error&reason=missing&compose=1')
+			}
 
 			const newId = crypto.randomUUID()
 			const now = new Date().toISOString()
-			await sql.unsafe(
-				`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
-					`VALUES (?,?,?,?,?,?,0,0)`,
-				[newId, now, now, boardId, authorId, title],
-			)
+			try {
+				await sql.unsafe(
+					`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
+						`VALUES (?,?,?,?,?,?,0,0)`,
+					[newId, now, now, boardId, authorId, title],
+				)
+			} catch (err) {
+				console.error('[POST /] create thread failed:', err)
+				return c.redirect('/?status=error&reason=exception&compose=1')
+			}
+			return c.redirect('/?status=created')
 		} else if (action === 'update-title' && id) {
 			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
 			if (title) {
@@ -652,9 +709,13 @@ export const POST = createRoute(async (c) => {
 			await sql.unsafe(`DELETE FROM "replies" WHERE "threadId" = ?`, [id])
 			await sql.unsafe(`DELETE FROM "threads" WHERE "id" = ?`, [id])
 		}
-	} catch {
-		// Keep the UX simple: any failure just bounces back to the list.
+	} catch (err) {
+		// Surface the failure as feedback instead of bouncing back to "/" with
+		// no explanation (the original silent redirect hid create failures).
+		console.error('[POST /] unexpected error:', err)
+		return c.redirect('/?status=error&reason=exception&compose=1')
 	}
 
+	// Non-create actions (pin/lock/delete/edit) succeeded — return to the list.
 	return c.redirect('/')
 })
