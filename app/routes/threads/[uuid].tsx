@@ -3,6 +3,7 @@ import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
 import { ThreadDrawer } from '../../components/thread-drawer'
+import { ReplyDrawer } from '../../components/reply-drawer'
 import { apiFetch, apiPostForm } from '../../lib/api'
 
 /**
@@ -36,6 +37,7 @@ type ReplyRow = {
 	body: string
 	created_at: string
 	author_name: string | null
+	authorId: string | null
 }
 
 type HotThread = {
@@ -69,6 +71,7 @@ export default createRoute(async (c) => {
 	let hot: HotThread[] = []
 	let authors: Author[] = []
 	let boards: Board[] = []
+	let currentUserId: string | null = null
 
 	// SSR: thread detail is fetched over HTTP from the JSON API (service
 	// layer). The UI never opens a SQL connection.
@@ -79,6 +82,7 @@ export default createRoute(async (c) => {
 		hot = page.hot ?? []
 		authors = page.authors ?? []
 		boards = page.boards ?? []
+		currentUserId = page.currentUserId ?? null
 	}
 
 	// 404 when the thread doesn't exist (or the db is unavailable).
@@ -192,7 +196,7 @@ export default createRoute(async (c) => {
 							{topLevel.length > 0 ? (
 								<div class={css({ spaceY: 3 })}>
 									{topLevel.map((r) => (
-										<ReplyCard key={r.id} reply={r} nested={replies.filter((x) => x.parentId === r.id)} />
+										<ReplyCard key={r.id} threadId={thread.id} currentUserId={currentUserId} reply={r} nested={replies.filter((x) => x.parentId === r.id)} />
 									))}
 								</div>
 							) : (
@@ -283,7 +287,7 @@ export default createRoute(async (c) => {
 })
 
 /** A reply card — renders the body, author meta and any nested replies. */
-function ReplyCard({ reply, nested }: { reply: ReplyRow; nested: ReplyRow[] }) {
+function ReplyCard({ reply, nested, threadId, currentUserId }: { reply: ReplyRow; nested: ReplyRow[]; threadId: string; currentUserId: string | null }) {
 	return (
 		<Card class={css({ width: 'full' })}>
 			<div class={css({ px: 5, py: 4 })}>
@@ -297,6 +301,12 @@ function ReplyCard({ reply, nested }: { reply: ReplyRow; nested: ReplyRow[] }) {
 				<Text class={css({ mt: 2, fontSize: 'sm', lineHeight: 1.7, whiteSpace: 'pre-wrap' })}>{reply.body}</Text>
 			</div>
 
+			{canEditReply(reply, currentUserId) && (
+				<div class={css({ px: 5, pb: 4 })}>
+					<ReplyEditButton threadId={threadId} reply={reply} />
+				</div>
+			)}
+
 			{nested.length > 0 && (
 				<div class={css({ ml: 6, borderTop: '1px solid token(colors.border)', borderLeft: '3px solid #fdba74', spaceY: 2, p: 3 })}>
 					{nested.map((r) => (
@@ -306,11 +316,36 @@ function ReplyCard({ reply, nested }: { reply: ReplyRow; nested: ReplyRow[] }) {
 								<Text as="span">{timeAgo(r.created_at)}</Text>
 							</Stack>
 							<Text class={css({ mt: 1.5, fontSize: 'sm', lineHeight: 1.6, whiteSpace: 'pre-wrap' })}>{r.body}</Text>
+							{canEditReply(r, currentUserId) && (
+								<div class={css({ mt: 2 })}>
+									<ReplyEditButton threadId={threadId} reply={r} />
+								</div>
+							)}
 						</div>
 					))}
 				</div>
 			)}
 		</Card>
+	)
+}
+
+/** True only when the current user is the reply's original author. */
+function canEditReply(reply: ReplyRow, currentUserId: string | null): boolean {
+	return currentUserId !== null && reply.authorId === currentUserId
+}
+
+/** The permission-gated Edit trigger that opens the reply-edit drawer. */
+function ReplyEditButton({ threadId, reply }: { threadId: string; reply: ReplyRow }) {
+	return (
+		<ReplyDrawer
+			threadId={threadId}
+			reply={{ id: reply.id, body: reply.body }}
+			trigger={
+				<Button variant="plain" size="sm" type="button">
+					✏️ Edit
+				</Button>
+			}
+		/>
 	)
 }
 
@@ -323,8 +358,9 @@ function Nav() {
  * POST /threads/:uuid — handle the reply + inline-edit forms.
  *
  * The reply form posts `action=reply`; the inline thread drawer posts
- * `action=save`. Both are delegated to the service layer via the JSON API
- * (which returns a redirect we stream back). We peek the `action` field from a
+ * `action=save`; the reply-edit drawer posts `action=edit-reply`. All are
+ * delegated to the service layer via the JSON API (which returns a redirect we
+ * stream back). We peek the `action` (and, for edits, `replyId`) field from a
  * *clone* of the request so we can pick the right `/page` endpoint without
  * draining the body — `apiPostForm` must still be able to forward the original
  * (still-unread) form body to that endpoint.
@@ -333,6 +369,12 @@ export const POST = createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
 	const peek = await c.req.raw.clone().text()
 	const action = /(?:^|&)action=([^&]+)/.exec(peek)?.[1] ?? ''
-	const target = action === 'save' ? `/page/threads/${uuid}/edit` : `/page/threads/${uuid}/reply`
+	const replyId = /(?:^|&)replyId=([^&]+)/.exec(peek)?.[1] ?? ''
+	const target =
+		action === 'edit-reply'
+			? `/page/threads/${uuid}/reply/${replyId}/update`
+			: action === 'save'
+				? `/page/threads/${uuid}/edit`
+				: `/page/threads/${uuid}/reply`
 	return apiPostForm(c, target)
 })
