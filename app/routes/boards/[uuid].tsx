@@ -2,6 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { getSession } from '../../../src/auth/context'
 
 /**
  * Board detail page — `/boards/:uuid`.
@@ -382,7 +383,12 @@ export const POST = createRoute(async (c) => {
 	if (body['action'] === 'create-thread') {
 		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
 		const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : uuid
-		const authorId = typeof body['authorId'] === 'string' ? body['authorId'] : ''
+		// Only an authenticated user may create a thread, and only under their
+		// own name. Bind the author to the session user and ignore the
+		// client-submitted authorId (the form's author dropdown).
+		const session = await getSession(c).catch(() => null)
+		if (!session?.user) return c.redirect(`/boards/${uuid}`)
+		const authorId = session.user.id
 
 		if (title && boardId && authorId) {
 			try {

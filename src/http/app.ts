@@ -22,6 +22,7 @@
 import { Hono } from "hono";
 
 import type { SqlQueryExecutor } from "@/capacities/servable";
+import { getSession } from "@/auth/context";
 import * as Models from "@/models";
 
 /** UUID path segment — matches the id shape every table uses. */
@@ -337,7 +338,73 @@ export function buildQueryApp(client: SqlQueryExecutor): Hono {
 	// (which have no hand-written counterpart) take effect.
 	(Models.User.User as any).serve(app, client);
 	(Models.Board.Board as any).serve(app, client);
-	(Models.Thread.Thread as any).serve(app, client);
+	/**
+	 * Thread permission check (the "thread service"): only an authenticated
+	 * user may create a thread, and only under their own name. Any
+	 * client-supplied `authorId` is ignored and replaced with the session
+	 * user's id, so a user can never author a thread as someone else. We also
+	 * forbid reassigning authorship via an update. Wired at serve-time (not
+	 * baked into the model) so `Thread.serve` unit tests stay unaffected.
+	 */
+	async function guardThreadCreate(
+		c: Parameters<NonNullable<ServableBeforeCreate>>[0],
+		entity: Record<string, unknown>,
+	): Promise<Response | undefined> {
+		const session = await getSession(c);
+		if (!session?.user) {
+			return new Response(
+				JSON.stringify({
+					ok: false,
+					data: { error: "authentication required to create a thread" },
+				}),
+				{
+					status: 401,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				},
+			);
+		}
+		// A user may only create a thread under their own name. If a (different)
+		// authorId was submitted, reject with 403 — posting as another user is
+		// forbidden, not just ignored.
+		const submitted = entity["authorId"];
+		if (submitted != null && submitted !== session.user.id) {
+			return new Response(
+				JSON.stringify({
+					ok: false,
+					data: { error: "Access Denied: you may only post threads under your own name" },
+				}),
+				{
+					status: 403,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				},
+			);
+		}
+		// Bind the thread to the authenticated user — ignore any submitted name.
+		entity["authorId"] = session.user.id;
+		return undefined;
+	}
+
+	async function guardThreadUpdate(
+		_c: Parameters<NonNullable<ServableBeforeUpdate>>[0],
+		entity: Record<string, unknown>,
+	): Promise<Response | undefined> {
+		// Authorship is immutable: drop any client-supplied authorId so the
+		// thread's author can never be reassigned through a PATCH/PUT.
+		delete entity["authorId"];
+		return undefined;
+	}
+
+	type ServableBeforeCreate = NonNullable<
+		import("@/capacities/servable").ServableOptions["onBeforeCreate"]
+	>;
+	type ServableBeforeUpdate = NonNullable<
+		import("@/capacities/servable").ServableOptions["onBeforeUpdate"]
+	>;
+
+	(Models.Thread.Thread as any).serve(app, client, {
+		onBeforeCreate: guardThreadCreate,
+		onBeforeUpdate: guardThreadUpdate,
+	});
 	(Models.Reply.Reply as any).serve(app, client);
 
 	return app;

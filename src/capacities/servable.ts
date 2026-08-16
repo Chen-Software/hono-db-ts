@@ -124,6 +124,22 @@ export interface ServableOptions {
 	 * e.g. `Thread` → `{ table: "replies", column: "threadId" }`.
 	 */
 	cascadeDelete?: Array<{ table: string; column: string }>;
+	/**
+	 * Permission hook run immediately before a CREATE. Receives the request
+	 * context and the (defaults-applied) entity. Return a `Response` to abort
+	 * the write (e.g. a 401); otherwise mutate `entity` to enforce ownership /
+	 * authorization. Wired at serve-time so it does not leak into tests that
+	 * call `serve` directly on the bare model.
+	 */
+	onBeforeCreate?: (
+		c: Context,
+		entity: Record<string, unknown>,
+	) => Promise<void | Response>;
+	/** Same as {@link onBeforeCreate}, but for PATCH/PUT updates. */
+	onBeforeUpdate?: (
+		c: Context,
+		entity: Record<string, unknown>,
+	) => Promise<void | Response>;
 }
 
 /** The introspection surface `routeSpec()` returns — what a route accepts. */
@@ -516,6 +532,7 @@ export function Servable<TBase extends CapacityComposer>(
 	async function runCreate(
 		c: Context,
 		exec: SqlQueryExecutor,
+		opts: ServableOptions,
 	): Promise<Response> {
 		try {
 			const body = await c.req.json();
@@ -552,6 +569,13 @@ export function Servable<TBase extends CapacityComposer>(
 				if (col.kind === "boolean") entity[col.name] = false;
 			}
 
+			// Permission hook (auth / ownership). May abort with a Response or
+			// mutate `entity` (e.g. bind the author to the session user).
+			if (opts.onBeforeCreate) {
+				const hookRes = await opts.onBeforeCreate(c, entity);
+				if (hookRes instanceof Response) return hookRes;
+			}
+
 			// Validatable guard (strictest): a bad create never reaches SQL.
 			if (assertFn) {
 				try {
@@ -586,6 +610,7 @@ export function Servable<TBase extends CapacityComposer>(
 	async function runUpdate(
 		c: Context,
 		exec: SqlQueryExecutor,
+		opts: ServableOptions,
 	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
@@ -618,6 +643,14 @@ export function Servable<TBase extends CapacityComposer>(
 			merged[idCol] = id;
 			if (kinds.has("updated_at"))
 				merged["updated_at"] = new Date().toISOString();
+
+			// Permission hook (auth / ownership). May abort with a Response or
+			// mutate `merged` (e.g. drop a client-supplied authorId so authorship
+			// can never be reassigned via an update).
+			if (opts.onBeforeUpdate) {
+				const hookRes = await opts.onBeforeUpdate(c, merged);
+				if (hookRes instanceof Response) return hookRes;
+			}
 
 			if (assertFn) {
 				try {
@@ -687,19 +720,25 @@ export function Servable<TBase extends CapacityComposer>(
 	(Base as any).serve = function serve(
 		app: Hono,
 		client?: SqlQueryExecutor,
+		serveOptions?: Partial<ServableOptions>,
 	): void {
-		const exec = client ?? options.client;
+		const eff = { ...options, ...serveOptions } as ServableOptions;
+		const exec = client ?? eff.client;
 		if (!exec) {
 			throw new Error(
 				`Servable: no SQL client for ${basePath} — pass one to ` +
 					`serve(app, client) or set options.client at compose time.`,
 			);
 		}
+		const withById = eff.byId !== false;
+		const withWrites = eff.write !== false;
 		app.get(basePath, (c) => runList(c, exec));
 		if (withById) app.get(`${basePath}/:id`, (c) => runById(c, exec));
 		if (withWrites) {
-			app.post(basePath, (c) => runCreate(c, exec));
-			app.put(`${basePath}/:id`, (c) => runUpdate(c, exec));
+			// `eff` (incl. any onBeforeCreate/onBeforeUpdate hooks) flows into
+			// the handlers so permission checks are honoured at serve-time.
+			app.post(basePath, (c) => runCreate(c, exec, eff));
+			app.put(`${basePath}/:id`, (c) => runUpdate(c, exec, eff));
 			app.delete(`${basePath}/:id`, (c) => runDelete(c, exec));
 		}
 	};

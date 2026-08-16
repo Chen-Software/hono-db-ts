@@ -11,6 +11,7 @@ import {
 	Text,
 } from '../components/ui'
 import { SiteHeader } from '../components/site-header'
+import { getSession } from '../../src/auth/context'
 
 /**
  * BBS home page — a forum-style landing UI rendered entirely on the server.
@@ -87,7 +88,6 @@ export default createRoute(async (c) => {
 	let hot: (Thread & { reply_count: number })[] = []
 	// Options for the "new thread" form.
 	let allBoards: { id: string; name: string }[] = []
-	let authors: { id: string; name: string }[] = []
 	// When `?edit=<id>` is set, that thread renders its inline title editor.
 	const editId = c.req.query('edit') ?? null
 
@@ -147,10 +147,6 @@ export default createRoute(async (c) => {
 			allBoards = (await sql.unsafe(
 				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
 			)) as { id: string; name: string }[]
-
-			authors = (await sql.unsafe(
-				`SELECT id, name FROM "users" ORDER BY "created_at" DESC LIMIT 20`,
-			)) as { id: string; name: string }[]
 		}
 	} catch {
 		stats = null
@@ -159,7 +155,6 @@ export default createRoute(async (c) => {
 		posts = []
 		hot = []
 		allBoards = []
-		authors = []
 	}
 
 	const hasDb = stats !== null
@@ -301,7 +296,7 @@ export default createRoute(async (c) => {
 						</section>
 
 						{/* New thread */}
-						{hasDb && allBoards.length > 0 && authors.length > 0 ? (
+						{hasDb && allBoards.length > 0 ? (
 							<section id="new-thread">
 								<Heading class={css({ mb: 4, fontSize: 'xl', fontWeight: 700 })}>New thread</Heading>
 								<form
@@ -350,26 +345,6 @@ export default createRoute(async (c) => {
 											{allBoards.map((b) => (
 												<option key={b.id} value={b.id}>
 													{b.name}
-												</option>
-											))}
-										</select>
-										<select
-											name="authorId"
-											required
-											class={css({
-												flex: 1,
-												px: 3,
-												py: 2,
-												rounded: 'md',
-												border: '1px solid token(colors.border)',
-												fontSize: 'sm',
-												bg: 'white',
-											})}
-										>
-											<option value="">Author…</option>
-											{authors.map((u) => (
-												<option key={u.id} value={u.id}>
-													{u.name}
 												</option>
 											))}
 										</select>
@@ -685,7 +660,12 @@ export const POST = createRoute(async (c) => {
 		if (action === 'create') {
 			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
 			const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
-			const authorId = typeof body['authorId'] === 'string' ? body['authorId'] : ''
+			// Only an authenticated user may create a thread, and only under
+			// their own name. Bind the author to the session user and ignore
+			// any client-submitted authorId (the form's author dropdown).
+			const session = await getSession(c).catch(() => null)
+			if (!session?.user) return c.redirect('/')
+			const authorId = session.user.id
 			if (!title || !boardId || !authorId) return c.redirect('/')
 
 			const newId = crypto.randomUUID()
