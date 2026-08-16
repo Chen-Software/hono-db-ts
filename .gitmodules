@@ -1,0 +1,3 @@
+[submodule "packages/forgejo"]
+	path = packages/forgejo
+	url = https://codeberg.org/yumchen/forgejo.git
