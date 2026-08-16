@@ -2,6 +2,8 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { NewBoardDrawer } from '../../components/new-board-drawer'
+import { getSession } from '../../../src/auth/context'
 
 /**
  * Boards list page — `/boards`.
@@ -41,9 +43,13 @@ function timeAgo(iso: string): string {
 
 export default createRoute(async (c) => {
 	const cursor = c.req.query('cursor') ?? ''
+	// `?new=1` opens the "New board" drawer on load.
+	const newBoard = c.req.query('new') === '1'
 
 	let boards: BoardRow[] = []
 	let total = 0
+	let users: { id: string; name: string; email: string }[] = []
+	let currentUserId: string | undefined
 
 	try {
 		const sql = c.env.sql
@@ -81,10 +87,17 @@ export default createRoute(async (c) => {
 				 LIMIT ${PAGE_SIZE}`,
 				params,
 			)) as BoardRow[]
+
+			users = (await sql.unsafe(
+				`SELECT id, name, email FROM "users" ORDER BY "created_at" DESC LIMIT 50`,
+			)) as { id: string; name: string; email: string }[]
 		}
+		const session = await getSession(c).catch(() => null)
+		currentUserId = session?.user?.id
 	} catch {
 		boards = []
 		total = 0
+		users = []
 	}
 
 	const lastBoard = boards[boards.length - 1]
@@ -110,9 +123,14 @@ export default createRoute(async (c) => {
 							{total.toLocaleString()} board{total === 1 ? '' : 's'} · ordered by activity
 						</Text>
 					</div>
-					<Button as="a" href="/?compose=1" size="sm">
-						New thread
-					</Button>
+					<Stack direction="horizontal" gap="2">
+						<Button as="a" href="/?compose=1" size="sm">
+							New thread
+						</Button>
+						{users.length > 0 ? (
+							<NewBoardDrawer users={users} defaultModeratorId={currentUserId} defaultOpen={newBoard} />
+						) : null}
+					</Stack>
 				</Stack>
 
 				{/* Board grid */}
@@ -205,3 +223,41 @@ export default createRoute(async (c) => {
 function Nav() {
 	return <SiteHeader />
 }
+
+/**
+ * POST /boards — create a new board (`action=create`). Requires an
+ * authenticated session (the moderator defaults to the current user when the
+ * form's dropdown is left unchanged). On success the user is returned to the
+ * boards list; any failure (e.g. a duplicate slug) bounces back.
+ */
+export const POST = createRoute(async (c) => {
+	const sql = c.env.sql
+	if (!sql) return c.redirect('/boards')
+
+	const session = await getSession(c).catch(() => null)
+	if (!session?.user) return c.redirect('/boards')
+
+	try {
+		const body = await c.req.parseBody()
+		if (body['action'] === 'create') {
+			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+			const slug = typeof body['slug'] === 'string' ? body['slug'].trim() : ''
+			const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
+			const moderatorId = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
+			const mod = moderatorId || session.user.id
+
+			if (name && slug) {
+				const newId = crypto.randomUUID()
+				const now = new Date().toISOString()
+				await sql.unsafe(
+					`INSERT INTO "boards" ("id","created_at","name","slug","description","moderatorId") VALUES (?,?,?,?,?,?)`,
+					[newId, now, name, slug, description, mod],
+				)
+			}
+		}
+	} catch {
+		// Bounce back on failure (e.g. duplicate slug).
+	}
+
+	return c.redirect('/boards')
+})
