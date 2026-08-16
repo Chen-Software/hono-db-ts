@@ -90,6 +90,11 @@ if (target.kind === "d1" || target.kind === "turso") {
 
 const client = new SQL(target.url);
 
+// Resolved auth instance (assigned below once Better Auth mounts). Declared up
+// here so `buildQueryApp` can reference it without hitting the TDZ — the
+// guarded query routes read it lazily at request time.
+let authInstance: unknown = null;
+
 // Zero-setup: create the schema when the DB is empty (fresh :memory: or a new
 // file DB). Existing databases are left untouched.
 const created = await ensureSchema(client);
@@ -115,7 +120,6 @@ let mountAuth: ((app: Hono<Env>) => void) | null = null;
 // The resolved auth instance, exposed on the request context so the JSON
 // query app's guarded routes (e.g. `POST /threads`) can read sessions via
 // `getSession` — mirrors `app/server.ts`'s `c.env.auth` middleware.
-let authInstance: unknown = null;
 if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
 	// The auth instance is wired to the same SQLite database via the drizzle
