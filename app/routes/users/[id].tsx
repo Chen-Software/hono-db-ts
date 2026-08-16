@@ -3,6 +3,7 @@ import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
 import { getSession } from '../../../src/auth/context'
+import { apiFetch } from '../../lib/api'
 
 /**
  * User profile page — `/users/:id`.
@@ -115,58 +116,18 @@ export default createRoute(async (c) => {
 		created_at: sessionUser?.createdAt ?? new Date().toISOString(),
 	})
 
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const rows = (await sql.unsafe(
-				`SELECT id, name, email, role, age, "created_at" FROM "users" WHERE "id" = ? LIMIT 1`,
-				[id],
-			)) as UserRow[]
-			const bbs = rows[0]
-			user = bbs ?? fallback()
-
-			// Activity is keyed by `authorId` (= this profile's id) and is loaded
-			// regardless of whether a BBS `users` row exists: a Better Auth
-			// account has no BBS row yet authors threads via the guarded
-			// `POST /threads` (which stamps `authorId` with the session user's
-			// Better Auth id), so its threads must still surface here.
-			threads = (await sql.unsafe(
-				`SELECT t.id, t.title, t."created_at", t."updated_at",
-				        b.name AS board_name,
-				        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
-				 FROM "threads" t
-				 LEFT JOIN "boards" b ON b.id = t."boardId"
-				 WHERE t."authorId" = ?
-				 ORDER BY t."updated_at" DESC
-				 LIMIT 10`,
-				[id],
-			)) as UserThread[]
-
-			posts = (await sql.unsafe(
-				`SELECT id, title, "updated_at" FROM "posts"
-				 WHERE "authorId" = ? AND published = 1
-				 ORDER BY "updated_at" DESC
-				 LIMIT 10`,
-				[id],
-			)) as UserPost[]
-
-			replies = (await sql.unsafe(
-				`SELECT r.id, r."threadId", r.body, r."created_at", t.title AS thread_title
-				 FROM "replies" r
-				 LEFT JOIN "threads" t ON t.id = r."threadId"
-				 WHERE r."authorId" = ?
-				 ORDER BY r."created_at" DESC
-				 LIMIT 10`,
-				[id],
-			)) as UserReply[]
-		} else {
-			user = fallback()
-		}
-	} catch {
+	// SSR: the profile is fetched over HTTP from the JSON API (service layer).
+	// The owner-only auth gate above stays in the route; only the data fetch
+	// moves behind the service layer. `getProfile` returns the BBS `users` row
+	// (or null) plus the activity keyed by this id.
+	const profile: any = await apiFetch(c, `/page/users/${id}`)
+	if (profile) {
+		user = profile.user ?? fallback()
+		threads = profile.threads ?? []
+		posts = profile.posts ?? []
+		replies = profile.replies ?? []
+	} else {
 		user = fallback()
-		threads = []
-		posts = []
-		replies = []
 	}
 
 

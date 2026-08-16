@@ -70,19 +70,20 @@ import {
 	type QueriableOptions,
 	type QueryParams,
 } from "./queriable";
-import { buildFilters, type SqlQueryExecutor } from "./servable";
+import { buildFilters } from "./servable";
 import {
 	deriveSqlPlan,
 	type JsonSchema,
 	type SqlDialect,
 } from "./sql-serialisable";
+import { all, type Db } from "@/services/types";
 
 /** Options for the {@link Aggregable} capacity. */
 export interface AggregableOptions {
 	/** Route base path. Default `/<tableName>/aggregate`. */
 	path?: string;
 	/** Default SQL client used by `serveAggregate(app)` when the caller omits one. */
-	client?: SqlQueryExecutor;
+	client?: Db;
 	/** Per-field matcher overrides — the EXACT `Queriable` option shape. */
 	fields?: QueriableOptions["fields"];
 	/** Dialect the SQL targets. Default `"sqlite"` (must match `SqlSerialisable`). */
@@ -101,7 +102,7 @@ export interface AggregableStatic {
 		query?: QueryParams,
 	): Array<Record<string, unknown>>;
 	/** Register `GET <path>` (SQL `GROUP BY`) onto a Hono app. */
-	serveAggregate(app: Hono, client?: SqlQueryExecutor): void;
+	serveAggregate(app: Hono, client?: Db): void;
 	/** Introspect the generated route: path, groupable fields, aggregates. */
 	aggregateSpec(): AggregableSpec;
 }
@@ -451,7 +452,7 @@ export function Aggregable<TBase extends CapacityComposer>(
 	// ---- SQL surface ------------------------------------------------------
 	async function runAggregate(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 	): Promise<Response> {
 		try {
 			const query = c.req.query();
@@ -511,7 +512,7 @@ export function Aggregable<TBase extends CapacityComposer>(
 				orderClause +
 				` LIMIT ?`;
 
-			const rows = (await exec.unsafe(sql, params)) as Record<
+			const rows = (await all(exec,sql, params)) as Record<
 				string,
 				unknown
 			>[];
@@ -523,7 +524,7 @@ export function Aggregable<TBase extends CapacityComposer>(
 
 	(Base as any).serveAggregate = function serveAggregate(
 		app: Hono,
-		client?: SqlQueryExecutor,
+		client?: Db,
 	): void {
 		const exec = client ?? options.client;
 		if (!exec) {

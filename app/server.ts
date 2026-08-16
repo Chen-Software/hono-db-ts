@@ -2,7 +2,8 @@ import { SQL } from 'bun'
 import { showRoutes } from 'hono/dev'
 import { createApp } from 'honox/server'
 import { buildQueryApp } from '../src/http/app'
-import { ensureSchema, resolveDatabaseTarget } from '../src/http/schema'
+import { resolveDatabaseTarget } from '../src/http/schema'
+import { createQueryDb } from '@/db/client'
 import { databaseType, databaseUrl } from '../src/macros/envs' with { type: 'macro' }
 
 /**
@@ -27,20 +28,12 @@ const rawUrl = databaseUrl() ?? ''
 if (!rawUrl) {
 	console.error('[app/server] no DATABASE_URL — set it in .env or the shell.')
 }
+const target = rawUrl ? resolveDatabaseTarget(rawUrl, databaseType()) : null
 
-const sql = rawUrl
-	? new SQL(resolveDatabaseTarget(rawUrl, databaseType()).url)
-	: null
-
-// Zero-setup: create the schema when the target DB is empty.
-if (sql) {
-	const created = await ensureSchema(sql)
-	if (created) {
-		console.log(
-			'[app/server] database had no schema — applied drizzle/*.sql from the generated migrations.',
-		)
-	}
-}
+// Optional Better Auth. It still seeds its schema through `sql.unsafe` on a
+// Bun `SQL` client (legacy path); gated off by default via the build-time
+// `BETTER_AUTH_ENABLED` define, so this block is dead-code-eliminated.
+let sql: SQL | null = null
 
 // ---------------------------------------------------------------------------
 // Better Auth — OPTIONAL. `betterAuthEnabled()` is a Bun macro: with
@@ -58,11 +51,18 @@ let authInstance: ReturnType<typeof import('../src/auth').createAuth> | null = n
 // `__BETTER_AUTH_ENABLED__` is a Vite `define` literal (Bun macros are not
 // understood by this UI build), so `if (false)` drops the Better Auth mount —
 // and its better-auth + drizzle-adapter imports — from the bundle.
-if (__BETTER_AUTH_ENABLED__ && sql) {
+if (__BETTER_AUTH_ENABLED__ && target) {
+	// Better Auth still seeds its schema through `sql.unsafe` on a Bun `SQL`
+	// client (legacy path); off by default, so this is dead code in the build.
+	sql = new SQL(target.url)
 	const localAuth = await mountBetterAuth(sql)
 	authMount = localAuth.mount
 	authInstance = localAuth.instance
 }
+
+// Build the request-path Drizzle db. `createQueryDb` seeds the schema on the
+// same libSQL client (via an `unsafe` adapter), so queries see the tables.
+const db = target ? await createQueryDb(target) : null
 
 const app = createApp({
 	init(server) {
@@ -70,13 +70,17 @@ const app = createApp({
 		authMount(server)
 
 		// Mount the JSON query API under /api (the honox UI routes render at /).
-		if (sql) server.route('/api', buildQueryApp(sql, authInstance))
+		// All SQL lives in the service layer mounted there; SSR routes reach it
+		// only over HTTP (see app/lib/api.ts), never via a direct `c.env.sql`.
+		// The db is a Drizzle SQLite database (libSQL driver) so the service
+		// layer (and the generated CRUD capacities) run through Drizzle's
+		// parameterised path — no `sql.unsafe` is reachable from the UI.
+		if (db) server.route('/api', buildQueryApp(db, authInstance))
 
-		// Provide the SQL client to route handlers via c.env.sql, and the auth
-		// instance via c.env.auth so SSR routes can check sessions (see
-		// src/auth/context.ts — which never imports bun:sql directly).
+		// Expose the Better Auth instance to SSR routes via c.env.auth so they
+		// can check sessions (see src/auth/context.ts — which never imports
+		// bun:sql directly). No SQL client is provided to route handlers.
 		server.use('*', async (c, next) => {
-			if (sql) c.env.sql = sql
 			;(c.env as { auth?: unknown }).auth = authInstance
 			await next()
 		})

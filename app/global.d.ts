@@ -1,11 +1,9 @@
-import type { SQL } from 'bun'
-
 declare module 'hono' {
   interface Env {
     Variables: Record<string, never>
-    Bindings: Partial<{
-      /** The shared SQL client (opened in app/server.ts). Present only when DATABASE_URL is set. */
-      sql: SQL
-    }>
+    // SSR routes reach the database only over HTTP via the JSON query app
+    // (mounted under /api). No SQL client is exposed on the request context —
+    // see app/lib/api.ts and src/services/*.
+    Bindings: Record<string, never>
   }
 }

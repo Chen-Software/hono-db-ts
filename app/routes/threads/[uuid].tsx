@@ -3,6 +3,7 @@ import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
 import { ThreadDrawer } from '../../components/thread-drawer'
+import { apiFetch, apiPostForm } from '../../lib/api'
 
 /**
  * Thread detail page — `/threads/:uuid`.
@@ -69,55 +70,16 @@ export default createRoute(async (c) => {
 	let authors: Author[] = []
 	let boards: Board[] = []
 
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const rows = (await sql.unsafe(
-				`SELECT t.id, t.title, t.pinned, t.locked, t."boardId", t."created_at", t."updated_at",
-				        u.name AS author_name,
-				        b.name AS board_name, b.slug AS board_slug
-				 FROM "threads" t
-				 LEFT JOIN "users" u ON u.id = t."authorId"
-				 LEFT JOIN "boards" b ON b.id = t."boardId"
-				 WHERE t.id = ?
-				 LIMIT 1`,
-				[uuid],
-			)) as ThreadRow[]
-			thread = rows[0] ?? null
-
-			boards = (await sql.unsafe(
-				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
-			)) as Board[]
-
-			replies = (await sql.unsafe(
-				`SELECT r.id, r."parentId", r.body, r."created_at", u.name AS author_name
-				 FROM "replies" r
-				 LEFT JOIN "users" u ON u.id = r."authorId"
-				 WHERE r."threadId" = ?
-				 ORDER BY r."created_at" ASC, r.id ASC`,
-				[uuid],
-			)) as ReplyRow[]
-
-			hot = (await sql.unsafe(
-				`SELECT t.id, t.title, COUNT(r.id) AS reply_count
-				 FROM "threads" t
-				 LEFT JOIN "replies" r ON r."threadId" = t.id
-				 GROUP BY t.id
-				 ORDER BY reply_count DESC, t."updated_at" DESC
-				 LIMIT 6`,
-			)) as HotThread[]
-
-			authors = (await sql.unsafe(
-				`SELECT id, name FROM "users" ORDER BY "created_at" DESC LIMIT 20`,
-			)) as Author[]
-		}
-	} catch {
-		thread = null
-		replies = []
-		hot = []
-		authors = []
-		boards = []
-		}
+	// SSR: thread detail is fetched over HTTP from the JSON API (service
+	// layer). The UI never opens a SQL connection.
+	const page: any = await apiFetch(c, `/page/threads/${uuid}`)
+	if (page) {
+		thread = page.thread ?? null
+		replies = page.replies ?? []
+		hot = page.hot ?? []
+		authors = page.authors ?? []
+		boards = page.boards ?? []
+	}
 
 	// 404 when the thread doesn't exist (or the db is unavailable).
 	if (!thread) {
@@ -358,69 +320,19 @@ function Nav() {
 }
 
 /**
- * POST /threads/:uuid — handle the reply form. A `reply` action inserts a new
- * row into `replies` (nested when `parentId` is provided), then redirects back
- * to the thread. The author is resolved from the current `authorId` selection.
+ * POST /threads/:uuid — handle the reply + inline-edit forms.
+ *
+ * The reply form posts `action=reply`; the inline thread drawer posts
+ * `action=save`. Both are delegated to the service layer via the JSON API
+ * (which returns a redirect we stream back). We peek the `action` field from a
+ * *clone* of the request so we can pick the right `/page` endpoint without
+ * draining the body — `apiPostForm` must still be able to forward the original
+ * (still-unread) form body to that endpoint.
  */
 export const POST = createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
-	const sql = c.env.sql
-	if (!sql) return c.redirect(`/threads/${uuid}`)
-
-	const body = await c.req.parseBody()
-	const action = typeof body['action'] === 'string' ? body['action'] : ''
-
-	if (action === 'reply') {
-		const threadId = typeof body['threadId'] === 'string' ? body['threadId'] : uuid
-		const authorId = typeof body['authorId'] === 'string' ? body['authorId'] : ''
-		const parentId = typeof body['parentId'] === 'string' && body['parentId'] ? body['parentId'] : null
-		const replyBody = typeof body['body'] === 'string' ? body['body'].trim() : ''
-
-		// Without an author picker, fall back to the thread author for the demo.
-		let resolvedAuthor = authorId
-		if (!resolvedAuthor) {
-			try {
-				const rows = (await sql.unsafe(
-					`SELECT "authorId" FROM "threads" WHERE "id" = ? LIMIT 1`,
-					[threadId],
-				)) as Array<{ authorId: string }>
-				resolvedAuthor = rows[0]?.authorId ?? ''
-			} catch {
-				resolvedAuthor = ''
-			}
-		}
-
-		if (threadId && replyBody && resolvedAuthor) {
-			try {
-				const id = crypto.randomUUID()
-				const now = new Date().toISOString()
-				await sql.unsafe(
-					`INSERT INTO "replies" ("id","created_at","threadId","authorId","parentId","body") ` +
-						`VALUES (?,?,?,?,?,?)`,
-					[id, now, threadId, resolvedAuthor, parentId, replyBody],
-				)
-			} catch {
-				// Drop the reply on failure; the redirect keeps the UX simple.
-			}
-		}
-	}
-
-	if (action === 'save') {
-		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
-		const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
-		const pinned = body['pinned'] === 'on'
-		const locked = body['locked'] === 'on'
-		if (title && boardId) {
-			try {
-				await sql.unsafe(
-					`UPDATE "threads" SET "title" = ?, "boardId" = ?, "pinned" = ?, "locked" = ? WHERE "id" = ?`,
-					[title, boardId, pinned ? 1 : 0, locked ? 1 : 0, uuid],
-				)
-			} catch {
-				// Ignore update failures; redirect keeps the UX consistent.
-			}
-		}
-	}
-
-	return c.redirect(`/threads/${uuid}`)
+	const peek = await c.req.raw.clone().text()
+	const action = /(?:^|&)action=([^&]+)/.exec(peek)?.[1] ?? ''
+	const target = action === 'save' ? `/page/threads/${uuid}/edit` : `/page/threads/${uuid}/reply`
+	return apiPostForm(c, target)
 })

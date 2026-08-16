@@ -3,16 +3,15 @@ import { createApp } from 'honox/server'
 import { createAuth } from '../src/auth'
 import { authEnvFromBindings } from '../src/auth/hono'
 import { buildQueryApp } from '../src/http/app'
-import type { SqlQueryExecutor } from '../src/capacities/servable'
-import { D1Executor } from '../src/worker/d1'
 
 /**
  * Honox UI server entry — CLOUDFLARE WORKERS variant.
  *
  * Mirrors `app/server.ts` but targets the Workers runtime with a D1 database:
- * the SSR routes read data through `c.env.sql`, which is provided by the
- * middleware below as a lazy D1-backed executor (the D1 binding `env.DB` is
- * only available per-request, so the executor is (re)bound on every request).
+ * the SSR routes read data over HTTP through the JSON query app (mounted under
+ * `/api`), which binds a lazy D1-backed executor per request (the D1 binding
+ * `env.DB` is only available per-request, so the executor is (re)bound on
+ * every request).
  *
  * The JSON query app (`buildQueryApp`) is mounted under `/api` — the same
  * `app.route('/api', …)` prefix the local `scripts/serve.ts` uses — so the
@@ -30,8 +29,15 @@ import { D1Executor } from '../src/worker/d1'
  * which `wrangler.jsonc` points its `main` at.
  */
 
-/** D1 executor bound lazily per-request (env.DB is not available at app init). */
-class LazyD1Executor implements SqlQueryExecutor {
+/**
+ * D1 database bound lazily per-request. Drizzle's D1 driver needs the concrete
+ * `D1Database`, but the binding is only available inside a request handler, so
+ * this facade forwards `prepare` / `exec` / `batch` to whatever `env.DB` the
+ * current request bound. `drizzle(lazyD1)` then wraps it and is handed to
+ * `buildQueryApp` — so the service layer + generated CRUD run through Drizzle
+ * (no `unsafe`) on Cloudflare too.
+ */
+class LazyD1Database {
 	private db: D1Database | null = null
 
 	/** Bind the current request's D1 database. */
@@ -39,27 +45,34 @@ class LazyD1Executor implements SqlQueryExecutor {
 		this.db = db
 	}
 
-	unsafe(sql: string, params: unknown[] = []): Promise<unknown[]> {
+	private get current(): D1Database {
 		if (!this.db) {
-			return Promise.resolve([])
+			throw new Error('LazyD1Database: no D1 binding on this request')
 		}
-		return new D1Executor(this.db).unsafe(sql, params)
+		return this.db
+	}
+
+	prepare(query: string): D1PreparedStatement {
+		return this.current.prepare(query)
+	}
+	exec(query: string): Promise<D1ExecResult> {
+		return this.current.exec(query)
+	}
+	batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+		return this.current.batch(statements)
 	}
 }
 
-const lazyExecutor = new LazyD1Executor()
+const lazyD1 = new LazyD1Database()
 
 const app = createApp({
 	init(server) {
-		// Expose the D1-backed executor to SSR routes as `c.env.sql`.
+		// Bind the per-request D1 database to the shared facade used by the
+		// service-layer query app (mounted under /api). SSR routes no longer
+		// receive a `c.env.sql`; they reach the service layer only over HTTP.
 		server.use('*', async (c, next) => {
 			const db = (c.env as { DB?: D1Database }).DB
-			if (db) {
-				lazyExecutor.setDb(db)
-				// The UI reads `c.env.sql` (typed as bun's SQL); D1Executor satisfies
-				// the same `unsafe(sql, params)` shape at runtime.
-				;(c.env as Record<string, unknown>).sql = lazyExecutor
-			}
+			if (db) lazyD1.setDb(db)
 			await next()
 		})
 
@@ -95,8 +108,10 @@ const app = createApp({
 			})
 		}
 
-		// Mount the JSON query app under /api (same as local serve.ts).
-		server.route('/api', buildQueryApp(lazyExecutor))
+		// Mount the JSON query app under /api (same as local serve.ts). Wrap the
+		// per-request D1 database in Drizzle so the service layer + generated
+		// CRUD run through Drizzle's parameterised path (no `unsafe`).
+		server.route('/api', buildQueryApp(drizzle(lazyD1)))
 	},
 })
 

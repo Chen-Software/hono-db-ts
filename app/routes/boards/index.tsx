@@ -4,7 +4,7 @@ import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../compone
 import { SiteHeader } from '../../components/site-header'
 import { BoardDrawer } from '../../components/board-drawer'
 import { getSession } from '../../../src/auth/context'
-import { ensureForumUser } from '../../../src/auth/author'
+import { apiFetch, apiPostForm } from '../../lib/api'
 
 /**
  * Boards list page — `/boards`.
@@ -24,8 +24,6 @@ type BoardRow = {
 	thread_count: number
 	last_activity: string | null
 }
-
-const PAGE_SIZE = 12
 
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
 function timeAgo(iso: string): string {
@@ -59,61 +57,19 @@ export default createRoute(async (c) => {
 	let total = 0
 	let users: { id: string; name: string; email: string }[] = []
 	let currentUserId: string | undefined
+	let nextCursor: string | null = null
 
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const where: string[] = []
-			const params: unknown[] = []
-			if (cursor) {
-				// Keyset on (thread_count DESC, id ASC) — composite so equal counts
-				// still order deterministically. Cursor encodes `<count>:<id>`.
-				const [cnt, id] = cursor.split(':')
-				const count = Number(cnt)
-				if (id) {
-					where.push(
-						`(tc < ${Number.isNaN(count) ? 0 : count} OR (tc = ${Number.isNaN(count) ? 0 : count} AND b.id > ?))`,
-					)
-					params.push(id)
-				}
-			}
-			const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+	const session = await getSession(c).catch(() => null)
+	currentUserId = session?.user?.id
 
-			const totalRes = (await sql.unsafe(
-				`SELECT COUNT(*) AS n FROM "boards"`,
-			)) as Array<{ n: number }>
-			total = totalRes[0]?.n ?? 0
-
-			boards = (await sql.unsafe(
-				`SELECT b.id, b.name, b.slug, b.description, b."created_at",
-				        u.name AS moderator_name,
-				        (SELECT COUNT(*) FROM "threads" t WHERE t."boardId" = b.id) AS thread_count,
-				        (SELECT MAX(t2."updated_at") FROM "threads" t2 WHERE t2."boardId" = b.id) AS last_activity
-				 FROM "boards" b
-				 LEFT JOIN "users" u ON u.id = b."moderatorId"
-				 ${whereSql}
-				 ORDER BY thread_count DESC, b.id ASC
-				 LIMIT ${PAGE_SIZE}`,
-				params,
-			)) as BoardRow[]
-
-			users = (await sql.unsafe(
-				`SELECT id, name, email FROM "users" ORDER BY "created_at" DESC LIMIT 50`,
-			)) as { id: string; name: string; email: string }[]
-		}
-		const session = await getSession(c).catch(() => null)
-		currentUserId = session?.user?.id
-	} catch {
-		boards = []
-		total = 0
-		users = []
+	const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+	const page: any = await apiFetch(c, `/page/boards${q}`)
+	if (page) {
+		boards = page.boards ?? []
+		total = page.total ?? 0
+		users = page.users ?? []
+		nextCursor = page.nextCursor ?? null
 	}
-
-	const lastBoard = boards[boards.length - 1]
-	const nextCursor =
-		boards.length === PAGE_SIZE && lastBoard
-			? `${lastBoard.thread_count}:${lastBoard.id}`
-			: null
 
 	return c.render(
 		<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' })}>
@@ -266,52 +222,6 @@ function Nav() {
  * boards list; any failure (e.g. a duplicate slug) bounces back.
  */
 export const POST = createRoute(async (c) => {
-	const sql = c.env.sql
-	if (!sql) return c.redirect('/boards?status=error&reason=nodb')
-
-	const session = await getSession(c).catch(() => null)
-
-	try {
-		const body = await c.req.parseBody()
-		if (body['action'] === 'create') {
-			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
-			const slug = typeof body['slug'] === 'string' ? body['slug'].trim() : ''
-			const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
-			const submittedMod = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
-
-			// Resolve a moderator that exists in the forum `users` table. Prefer
-			// an explicit, valid submission; otherwise attribute to the signed-in
-			// user (creating their forum profile row on first post) so their
-			// profile reflects the boards they create.
-			let mod: string | null = null
-			if (submittedMod) {
-				const hit = (await sql.unsafe(
-					`SELECT "id" FROM "users" WHERE "id" = ? LIMIT 1`,
-					[submittedMod],
-				)) as Array<{ id: string }>
-				mod = hit[0]?.id ?? null
-			}
-			if (!mod) mod = await ensureForumUser(sql, session)
-			if (!name || !slug || !mod) {
-				return c.redirect('/boards?status=error&reason=missing&new=1')
-			}
-
-			const newId = crypto.randomUUID()
-			const now = new Date().toISOString()
-			try {
-				await sql.unsafe(
-					`INSERT INTO "boards" ("id","created_at","name","slug","description","moderatorId") VALUES (?,?,?,?,?,?)`,
-					[newId, now, name, slug, description, mod],
-				)
-			} catch (err) {
-				console.error('[POST /boards] create board failed:', err)
-				return c.redirect('/boards?status=error&reason=exception&new=1')
-			}
-			return c.redirect('/boards?status=created')
-		}
-	} catch {
-		// Bounce back on unexpected failure.
-	}
-
-	return c.redirect('/boards')
+	// Board creation is delegated to the service layer via the JSON API.
+	return apiPostForm(c, '/page/boards')
 })

@@ -8,8 +8,9 @@
  * architecture already uses:
  *
  *   1. `SqlSerialisable` — the derived drizzle `table` (name + columns) the
- *      model composes; this is where the SQL actually runs against (via a
- *      caller-supplied client — Bun's `SQL` or anything exposing `unsafe`).
+ *      model composes; this is where the SQL actually runs against — a caller
+ *      supplied Drizzle SQLite database (`drizzle(client)`), executed through
+ *      Drizzle's parameterised query path (no `unsafe`).
  *   2. `Queriable` — the schema-inferred matcher table
  *      (`deriveFieldPlans`), REUSED verbatim so `?param=` means the same thing
  *      over SQL as it does in-memory: boolean → exact, date → range
@@ -75,6 +76,7 @@ import {
 	type JsonSchema,
 	type SqlDialect,
 } from "./sql-serialisable";
+import { all, type Db } from "@/services/types";
 
 /**
  * The SQL query surface `Servable` needs. Bun's `SQL` client
@@ -99,7 +101,7 @@ export interface ServableOptions {
 	 * Default SQL client used by `serve(app)` when the caller omits one.
 	 * Overridable per call: `Model.serve(app, otherClient)`.
 	 */
-	client?: SqlQueryExecutor;
+	client?: Db;
 	/** List sort. Default `{ field: "updated_at", dir: "desc" }` — falls back
 	 *  to `created_at`, then the primary key, when the field doesn't exist. */
 	sort?: { field?: string; dir?: "asc" | "desc" };
@@ -163,7 +165,7 @@ export interface ServableRouteSpec {
 /** The static API {@link Servable} contributes to the adorned class. */
 export interface ServableStatic {
 	/** Register `GET <path>` (+ `GET <path>/:id`) onto a Hono app. */
-	serve(app: Hono, client?: SqlQueryExecutor): void;
+	serve(app: Hono, client?: Db): void;
 	/** Introspect the generated routes: path, sort, accepted query params. */
 	routeSpec(): ServableRouteSpec;
 }
@@ -436,7 +438,7 @@ export function Servable<TBase extends CapacityComposer>(
 
 	async function runList(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 	): Promise<Response> {
 		try {
 			const query = c.req.query();
@@ -471,7 +473,7 @@ export function Servable<TBase extends CapacityComposer>(
 				` ORDER BY ${sortCol} ${sortDir === "asc" ? "ASC" : "DESC"} LIMIT ?`;
 			params.push(limit + 1);
 
-			const rows = (await exec.unsafe(sql, params)) as Record<
+			const rows = (await all(exec,sql, params)) as Record<
 				string,
 				unknown
 			>[];
@@ -492,11 +494,11 @@ export function Servable<TBase extends CapacityComposer>(
 
 	async function runById(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
-			const rows = (await exec.unsafe(
+			const rows = (await all(exec,
 				`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
 				[id],
 			)) as Record<string, unknown>[];
@@ -531,7 +533,7 @@ export function Servable<TBase extends CapacityComposer>(
 
 	async function runCreate(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 		opts: ServableOptions,
 	): Promise<Response> {
 		try {
@@ -589,14 +591,14 @@ export function Servable<TBase extends CapacityComposer>(
 			const cols = Object.keys(row);
 			if (cols.length === 0) return fail("no columns to insert");
 			const placeholders = cols.map(() => "?").join(", ");
-			await exec.unsafe(
+			await all(exec,
 				`INSERT INTO ${quote(tableName)} (${cols.map(quote).join(", ")}) ` +
 					`VALUES (${placeholders})`,
 				cols.map((k) => row[k]),
 			);
 
 			const created = (
-				(await exec.unsafe(
+				(await all(exec,
 					`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
 					[entity[idCol]],
 				)) as Record<string, unknown>[]
@@ -609,12 +611,12 @@ export function Servable<TBase extends CapacityComposer>(
 
 	async function runUpdate(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 		opts: ServableOptions,
 	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
-			const rows = (await exec.unsafe(
+			const rows = (await all(exec,
 				`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
 				[id],
 			)) as Record<string, unknown>[];
@@ -663,14 +665,14 @@ export function Servable<TBase extends CapacityComposer>(
 			const row = toRow ? toRow(merged) : merged;
 			const sets = Object.keys(row).filter((k) => k !== idCol);
 			if (sets.length === 0) return json(current);
-			await exec.unsafe(
+			await all(exec,
 				`UPDATE ${quote(tableName)} SET ${sets.map((k) => `${quote(k)} = ?`).join(", ")} ` +
 					`WHERE ${quote(idCol)} = ?`,
 				[...sets.map((k) => row[k]), id],
 			);
 
 			const updated = (
-				(await exec.unsafe(
+				(await all(exec,
 					`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
 					[id],
 				)) as Record<string, unknown>[]
@@ -686,11 +688,11 @@ export function Servable<TBase extends CapacityComposer>(
 
 	async function runDelete(
 		c: Context,
-		exec: SqlQueryExecutor,
+		exec: Db,
 	): Promise<Response> {
 		try {
 			const id = c.req.param("id");
-			const rows = (await exec.unsafe(
+			const rows = (await all(exec,
 				`SELECT * FROM ${quote(tableName)} WHERE ${quote(idCol)} = ? LIMIT 1`,
 				[id],
 			)) as Record<string, unknown>[];
@@ -698,12 +700,12 @@ export function Servable<TBase extends CapacityComposer>(
 
 			// Delete FK children first when SQLite/D1 won't cascade for us.
 			for (const child of cascades) {
-				await exec.unsafe(
+				await all(exec,
 					`DELETE FROM ${quote(child.table)} WHERE ${quote(child.column)} = ?`,
 					[id],
 				);
 			}
-			await exec.unsafe(
+			await all(exec,
 				`DELETE FROM ${quote(tableName)} WHERE ${quote(idCol)} = ?`,
 				[id],
 			);
@@ -719,7 +721,7 @@ export function Servable<TBase extends CapacityComposer>(
 	// ---- LIFT the serving surface onto the class (in place). --------------
 	(Base as any).serve = function serve(
 		app: Hono,
-		client?: SqlQueryExecutor,
+		client?: Db,
 		serveOptions?: Partial<ServableOptions>,
 	): void {
 		const eff = { ...options, ...serveOptions } as ServableOptions;

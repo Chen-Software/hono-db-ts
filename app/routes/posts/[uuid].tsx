@@ -3,6 +3,7 @@ import { createRoute } from 'honox/factory'
 import { hashContent } from '../../../src/capacities/hashable'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { apiFetch } from '../../lib/api'
 
 /**
  * Post detail page — `/posts/:uuid`.
@@ -12,18 +13,6 @@ import { SiteHeader } from '../../components/site-header'
  * recomputation (sha256 of `body`), so a tampered / stale hash is surfaced
  * right on the page — the content-addressing integrity guarantee made visible.
  */
-
-type PostRow = {
-	id: string
-	title: string
-	body: string
-	published: number
-	contentHash: string
-	created_at: string
-	updated_at: string
-	author_name: string | null
-	author_email: string | null
-}
 
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
 function timeAgo(iso: string): string {
@@ -43,25 +32,11 @@ function timeAgo(iso: string): string {
 export default createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
 
-	let post: PostRow | null = null
-
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const rows = (await sql.unsafe(
-				`SELECT p.id, p.title, p.body, p.published, p."contentHash", p."created_at", p."updated_at",
-				        u.name AS author_name, u.email AS author_email
-				 FROM "posts" p
-				 LEFT JOIN "users" u ON u.id = p."authorId"
-				 WHERE p.id = ?
-				 LIMIT 1`,
-				[uuid],
-			)) as PostRow[]
-			post = rows[0] ?? null
-		}
-	} catch {
-		post = null
-	}
+	// SSR: the post is fetched over HTTP from the JSON API (service layer).
+	// `hashContent` still runs in the route — it is a pure sha256 of the
+	// already-fetched body, used only to render the live content-address
+	// integrity check, not a SQL operation.
+	const post: any = await apiFetch(c, `/page/posts/${uuid}`)
 
 	if (!post) {
 		c.status(404)

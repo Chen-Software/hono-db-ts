@@ -16,8 +16,9 @@
  * the Cloudflare Worker (`src/worker.ts`); this script just binds it to a
  * `bun:sqlite` client and serves it with `Bun.serve`. Every endpoint queries
  * the SAME database the CLI `query` command and the `db:migrate`/`db:seed`
- * pipeline use, through the derived drizzle tables (`drizzle-orm/bun-sql` +
- * `databaseUrl()` macro + `new SQL` client, exactly like the app). Response
+ * pipeline use, through the derived drizzle tables (`drizzle-orm/libsql` via
+ * `src/db/client`, selected by the `databaseUrl()` macro) — the same derived
+ * tables the app and Worker use. Response
  * shape is `{ ok: true, data }` or `{ ok: false, data: { error } }`.
  *
  * ## Serving the UI
@@ -66,7 +67,8 @@ import {
 	databaseUrl,
 } from "../src/macros/envs" with { type: "macro" };
 import { buildQueryApp } from "../src/http/app";
-import { ensureSchema, resolveDatabaseTarget } from "../src/http/schema";
+import { resolveDatabaseTarget } from "../src/http/schema";
+import { createQueryDb } from "../src/db/client";
 
 const rawUrl = databaseUrl() ?? "";
 if (!rawUrl) {
@@ -75,7 +77,6 @@ if (!rawUrl) {
 }
 
 const target = resolveDatabaseTarget(rawUrl, databaseType());
-console.log(`serve: database target = ${target.kind} (${target.url})`);
 
 // D1 / Turso are Worker-side bindings, not locally openable via bun:sqlite.
 if (target.kind === "d1" || target.kind === "turso") {
@@ -88,23 +89,14 @@ if (target.kind === "d1" || target.kind === "turso") {
 	process.exit(1);
 }
 
-const client = new SQL(target.url);
-
 // Resolved auth instance (assigned below once Better Auth mounts). Declared up
 // here so `buildQueryApp` can reference it without hitting the TDZ — the
 // guarded query routes read it lazily at request time.
 let authInstance: unknown = null;
 
-// Zero-setup: create the schema when the DB is empty (fresh :memory: or a new
-// file DB). Existing databases are left untouched.
-const created = await ensureSchema(client);
-if (created) {
-	console.log(
-		`serve: database had no schema — applied ${"drizzle/*.sql"} from the generated migrations.`,
-	);
-}
-
-const queryApp = buildQueryApp(client, authInstance);
+// Build the request-path Drizzle db. `createQueryDb` seeds the schema on the
+// same libSQL client (via an `unsafe` adapter), so queries see the tables.
+const queryApp = buildQueryApp(await createQueryDb(target), authInstance);
 
 // The combined server: /api → JSON queries; / → Honox UI (per mode).
 // Typed with the augmented `Env` so `c.env` carries the sql/DB/auth bindings
@@ -124,7 +116,10 @@ if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
 	// The auth instance is wired to the same SQLite database via the drizzle
 	// adapter (the auth tables are in drizzle/*_auth_sqlite_create.sql).
-	const localAuth = await mountBetterAuth(client);
+	// Better Auth still seeds via `sql.unsafe` on a Bun `SQL` client (legacy
+	// path); off by default, so this block is dead code in the build.
+	const authSql = new SQL(target.url);
+	const localAuth = await mountBetterAuth(authSql);
 	mountAuth = (app) => localAuth.mount(app);
 	authInstance = localAuth.instance;
 }

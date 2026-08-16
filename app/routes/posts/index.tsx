@@ -1,7 +1,8 @@
 import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
-import { Anchor, Badge, Button, Heading, Stack, Text } from '../../components/ui'
+import { Anchor, Badge, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { apiFetch } from '../../lib/api'
 
 /**
  * Posts list page — `/posts`.
@@ -19,8 +20,6 @@ type PostRow = {
 	author_name: string | null
 }
 
-const PAGE_SIZE = 25
-
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
 function timeAgo(iso: string): string {
 	const t = new Date(iso).getTime()
@@ -37,49 +36,25 @@ function timeAgo(iso: string): string {
 }
 
 export default createRoute(async (c) => {
-	const sql = c.env.sql
 	const published = c.req.query('published') // '1' | '0' | undefined
 	const cursor = c.req.query('cursor') ?? ''
 
 	let posts: PostRow[] = []
 	let total = 0
+	let nextCursor: string | null = null
 
-	try {
-		if (sql) {
-			const where: string[] = []
-			const params: unknown[] = []
-			if (published === '1') where.push(`p."published" = 1`)
-			else if (published === '0') where.push(`p."published" = 0`)
-			else where.push(`p."published" = 1`) // default: published only
-			if (cursor) {
-				where.push(`p."updated_at" < ?`)
-				params.push(cursor)
-			}
-			const whereSql = `WHERE ${where.join(' AND ')}`
-
-			const count = (await sql.unsafe(
-				`SELECT COUNT(*) AS n FROM "posts" p ${whereSql}`,
-				params,
-			)) as Array<{ n: number }>
-			total = count[0]?.n ?? 0
-
-			posts = (await sql.unsafe(
-				`SELECT p.id, p.title, p.published, p."updated_at", u.name AS author_name
-				 FROM "posts" p
-				 LEFT JOIN "users" u ON u.id = p."authorId"
-				 ${whereSql}
-				 ORDER BY p."updated_at" DESC
-				 LIMIT ${PAGE_SIZE}`,
-				params,
-			)) as PostRow[]
-		}
-	} catch {
-		posts = []
-		total = 0
+	// SSR: the post index is fetched over HTTP from the JSON API (service
+	// layer). The UI never opens a SQL connection.
+	const q = new URLSearchParams()
+	if (published) q.set('published', published)
+	if (cursor) q.set('cursor', cursor)
+	const page: any = await apiFetch(c, `/page/posts${q.toString() ? `?${q}` : ''}`)
+	if (page) {
+		posts = page.posts ?? []
+		total = page.total ?? 0
+		nextCursor = page.nextCursor ?? null
 	}
 
-	const lastPost = posts[posts.length - 1]
-	const nextCursor = posts.length === PAGE_SIZE && lastPost ? lastPost.updated_at : null
 	const basePath = `/posts${published ? `?published=${published}` : ''}`
 
 	return c.render(

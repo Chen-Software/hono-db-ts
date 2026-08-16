@@ -2,6 +2,7 @@ import { css } from '../../../design-system/css'
 import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
+import { apiFetch } from '../../lib/api'
 
 /**
  * Threads list page — `/threads`.
@@ -26,8 +27,6 @@ type ThreadRow = {
 
 type Board = { id: string; name: string }
 
-const PAGE_SIZE = 25
-
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
 function timeAgo(iso: string): string {
 	const t = new Date(iso).getTime()
@@ -44,8 +43,6 @@ function timeAgo(iso: string): string {
 }
 
 export default createRoute(async (c) => {
-	const sql = c.env.sql
-
 	const boardFilter = c.req.query('board') ?? ''
 	const lockedFilter = c.req.query('locked') // '1' | '0' | undefined
 	const cursor = c.req.query('cursor') ?? ''
@@ -53,56 +50,22 @@ export default createRoute(async (c) => {
 	let threads: ThreadRow[] = []
 	let boards: Board[] = []
 	let total = 0
+	let nextCursor: string | null = null
 
-	try {
-		if (sql) {
-			// Build the filter clause once (params bound below).
-			const where: string[] = []
-			const params: unknown[] = []
-			if (boardFilter) {
-				where.push(`t."boardId" = ?`)
-				params.push(boardFilter)
-			}
-			if (lockedFilter === '1') where.push(`t."locked" = 1`)
-			else if (lockedFilter === '0') where.push(`t."locked" = 0`)
-			if (cursor) {
-				where.push(`t."updated_at" < ?`)
-				params.push(cursor)
-			}
-			const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-			const count = (await sql.unsafe(
-				`SELECT COUNT(*) AS n FROM "threads" t ${whereSql}`,
-				params,
-			)) as Array<{ n: number }>
-			total = count[0]?.n ?? 0
-
-			threads = (await sql.unsafe(
-				`SELECT t.id, t.title, t.pinned, t.locked, t."created_at", t."updated_at",
-				        u.name AS author_name,
-				        b.name AS board_name,
-				        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
-				 FROM "threads" t
-				 LEFT JOIN "users" u ON u.id = t."authorId"
-				 LEFT JOIN "boards" b ON b.id = t."boardId"
-				 ${whereSql}
-				 ORDER BY t.pinned DESC, t."updated_at" DESC
-				 LIMIT ${PAGE_SIZE}`,
-				params,
-			)) as ThreadRow[]
-
-			boards = (await sql.unsafe(
-				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
-			)) as Board[]
-		}
-	} catch {
-		threads = []
-		boards = []
-		total = 0
+	// SSR: the thread index is fetched over HTTP from the JSON API, which
+	// delegates to the service layer. The UI never opens a SQL connection.
+	const q = new URLSearchParams()
+	if (boardFilter) q.set('board', boardFilter)
+	if (lockedFilter) q.set('locked', lockedFilter)
+	if (cursor) q.set('cursor', cursor)
+	const page: any = await apiFetch(c, `/page/threads${q.toString() ? `?${q}` : ''}`)
+	if (page) {
+		threads = page.threads ?? []
+		boards = page.boards ?? []
+		total = page.total ?? 0
+		nextCursor = page.nextCursor ?? null
 	}
 
-	const lastThread = threads[threads.length - 1]
-	const nextCursor = threads.length === PAGE_SIZE && lastThread ? lastThread.updated_at : null
 	const basePath = `/threads?board=${encodeURIComponent(boardFilter)}` +
 		(lockedFilter ? `&locked=${lockedFilter}` : '')
 

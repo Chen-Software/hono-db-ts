@@ -1,8 +1,8 @@
 import { css } from '../../../../design-system/css'
 import { createRoute } from 'honox/factory'
-import { hashContent } from '../../../../src/capacities/hashable'
 import { Anchor, Button, Card, Heading, Stack, Text } from '../../../components/ui'
 import { SiteHeader } from '../../../components/site-header'
+import { apiFetch, apiPostForm } from '../../../lib/api'
 
 /**
  * Post edit page — `/posts/:uuid/edit`.
@@ -14,31 +14,12 @@ import { SiteHeader } from '../../../components/site-header'
  * immutable after creation.
  */
 
-type PostRow = {
-	id: string
-	title: string
-	body: string
-	published: number
-	contentHash: string
-}
-
 export default createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
 
-	let post: PostRow | null = null
-
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const rows = (await sql.unsafe(
-				`SELECT id, title, body, published, "contentHash" FROM "posts" WHERE "id" = ? LIMIT 1`,
-				[uuid],
-			)) as PostRow[]
-			post = rows[0] ?? null
-		}
-	} catch {
-		post = null
-	}
+	// SSR: the post edit form is fetched over HTTP from the JSON API (service
+	// layer). The UI never opens a SQL connection.
+	const post: any = await apiFetch(c, `/page/posts/${uuid}/edit`)
 
 	if (!post) {
 		c.status(404)
@@ -159,33 +140,11 @@ function Nav() {
 }
 
 /**
- * POST /posts/:uuid/edit — apply the edited fields. Recomputes the SHA-256
- * `contentHash` from the (possibly changed) body so the content address stays
- * canonical, bumps `updated_at`, and redirects back to the post.
+ * POST /posts/:uuid/edit — apply the edited fields. Delegated to the service
+ * layer via the JSON API, which recomputes the SHA-256 `contentHash` from the
+ * (possibly changed) body and returns a redirect we stream back to the browser.
  */
 export const POST = createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
-	const sql = c.env.sql
-	if (!sql) return c.redirect(`/posts/${uuid}`)
-
-	const body = await c.req.parseBody()
-	if (body['action'] === 'save') {
-		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
-		const postBody = typeof body['body'] === 'string' ? body['body'] : ''
-		const published = body['published'] === '1' ? 1 : 0
-
-		if (title && postBody) {
-			try {
-				const contentHash = hashContent(postBody)
-				await sql.unsafe(
-					`UPDATE "posts" SET "title" = ?, "body" = ?, "published" = ?, "contentHash" = ?, "updated_at" = ? WHERE "id" = ?`,
-					[title, postBody, published, contentHash, new Date().toISOString(), uuid],
-				)
-			} catch {
-				return c.redirect(`/posts/${uuid}/edit`)
-			}
-		}
-	}
-
-	return c.redirect(`/posts/${uuid}`)
+	return apiPostForm(c, `/page/posts/${uuid}/edit`)
 })

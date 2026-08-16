@@ -12,17 +12,16 @@ import {
 } from '../components/ui'
 import { SiteHeader } from '../components/site-header'
 import { ThreadDrawer } from '../components/thread-drawer'
-import { getSession } from '../../src/auth/context'
-import { ensureForumUser } from '../../src/auth/author'
+import { apiFetch, apiPostForm } from '../lib/api'
 
 /**
  * BBS home page — a forum-style landing UI rendered entirely on the server.
  *
- * Everything is read straight from the shared SQL client (`c.env.sql`, opened
- * in `app/server.ts`), so the page works with zero client JS: stats, board
- * cards, recent threads, latest posts and hot threads are all SSR queries.
- * When `DATABASE_URL` is unset (or a query fails) the sections degrade to an
- * empty state instead of crashing.
+ * Everything is read over HTTP from the JSON query app mounted under `/api`
+ * (the service layer runs every query through Drizzle), so the page works with
+ * zero client JS: stats, board cards, recent threads, latest posts and hot
+ * threads are all SSR queries. When `DATABASE_URL` is unset (or a query fails)
+ * the sections degrade to an empty state instead of crashing.
  *
  * The render layer composes the design-system components in
  * `app/components/ui/*` (Layout, Card, Badge, Heading, Text, Anchor, Button,
@@ -101,7 +100,8 @@ export default createRoute(async (c) => {
 							: { tone: 'error' as const, text: 'Could not post the thread. Please try again.' }
 				: null
 
-	// SSR: read the shared SQL client directly (set by app/server.ts init).
+	// SSR: data is fetched over HTTP from the JSON API (`/api/page/*`), which
+	// delegates to the service layer. The UI never opens a SQL connection.
 	let stats: Stats | null = null
 	let boards: Board[] = []
 	let threads: Thread[] = []
@@ -112,70 +112,14 @@ export default createRoute(async (c) => {
 	// When `?edit=<id>` is set, that thread renders its inline title editor.
 	const editId = c.req.query('edit') ?? null
 
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const statRow = (await sql.unsafe(
-				`SELECT (SELECT COUNT(*) FROM "users") AS users,
-				        (SELECT COUNT(*) FROM "boards") AS boards,
-				        (SELECT COUNT(*) FROM "threads") AS threads,
-				        (SELECT COUNT(*) FROM "replies") AS replies,
-				        (SELECT COUNT(*) FROM "posts") AS posts`,
-			)) as Array<Stats>
-			stats = statRow[0] ?? null
-
-			boards = (await sql.unsafe(
-				`SELECT b.id, b.name, b.slug, b.description,
-				        u.name AS moderator_name,
-				        (SELECT COUNT(*) FROM "threads" t WHERE t."boardId" = b.id) AS thread_count
-				 FROM "boards" b
-				 LEFT JOIN "users" u ON u.id = b."moderatorId"
-				 ORDER BY thread_count DESC
-				 LIMIT 8`,
-			)) as Board[]
-
-			threads = (await sql.unsafe(
-				`SELECT t.id, t.title, t.pinned, t.locked, t."updated_at",
-				        u.name AS author_name,
-				        b.name AS board_name,
-				        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
-				 FROM "threads" t
-				 LEFT JOIN "users" u ON u.id = t."authorId"
-				 LEFT JOIN "boards" b ON b.id = t."boardId"
-				 ORDER BY t.pinned DESC, t."updated_at" DESC
-				 LIMIT 10`,
-			)) as Thread[]
-
-			posts = (await sql.unsafe(
-				`SELECT p.id, p.title, p."updated_at", u.name AS author_name
-				 FROM "posts" p
-				 LEFT JOIN "users" u ON u.id = p."authorId"
-				 WHERE p.published = 1
-				 ORDER BY p."updated_at" DESC
-				 LIMIT 6`,
-			)) as Post[]
-
-			hot = (await sql.unsafe(
-				`SELECT t.id, t.title, t.pinned, t.locked, t."updated_at",
-				        COUNT(r.id) AS reply_count
-				 FROM "threads" t
-				 LEFT JOIN "replies" r ON r."threadId" = t.id
-				 GROUP BY t.id
-				 ORDER BY reply_count DESC, t."updated_at" DESC
-				 LIMIT 6`,
-			)) as (Thread & { reply_count: number })[]
-
-			allBoards = (await sql.unsafe(
-				`SELECT id, name FROM "boards" ORDER BY "created_at" DESC LIMIT 50`,
-			)) as { id: string; name: string }[]
-		}
-	} catch {
-		stats = null
-		boards = []
-		threads = []
-		posts = []
-		hot = []
-		allBoards = []
+	const home: any = await apiFetch(c, '/page/home')
+	if (home) {
+		stats = home.stats ?? null
+		boards = home.boards ?? []
+		threads = home.threads ?? []
+		posts = home.posts ?? []
+		hot = home.hot ?? []
+		allBoards = home.allBoards ?? []
 	}
 
 	const hasDb = stats !== null
@@ -646,76 +590,8 @@ export default createRoute(async (c) => {
  * submit, so no client JS is required. On success it redirects back to `/`.
  */
 export const POST = createRoute(async (c) => {
-	try {
-		const sql = c.env.sql
-		if (!sql) return c.redirect('/?status=error&reason=nodb')
-
-		// Parsing lives inside the try so a malformed body surfaces as feedback
-		// instead of an unhandled 500.
-		const body = await c.req.parseBody()
-		const action = typeof body['action'] === 'string' ? body['action'] : ''
-		const id = typeof body['id'] === 'string' ? body['id'] : ''
-
-		if (action === 'create') {
-			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
-			const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : ''
-			// Resolve an author that actually exists in the forum `users` table.
-			// Better Auth's session user lives in a separate table, so we fall
-			// back to a seeded default user rather than failing silently (which
-			// previously dropped the insert via the foreign-key constraint).
-			const session = await getSession(c).catch(() => null)
-			if (!session?.user) {
-				// Not signed in — tell the user explicitly instead of silently
-				// bouncing back with no explanation.
-				return c.redirect('/?status=error&reason=auth&compose=1')
-			}
-			const authorId = await ensureForumUser(sql, session).catch(() => null)
-			if (!title || !boardId || !authorId) {
-				return c.redirect('/?status=error&reason=missing&compose=1')
-			}
-
-			const newId = crypto.randomUUID()
-			const now = new Date().toISOString()
-			try {
-				await sql.unsafe(
-					`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
-						`VALUES (?,?,?,?,?,?,0,0)`,
-					[newId, now, now, boardId, authorId, title],
-				)
-			} catch (err) {
-				console.error('[POST /] create thread failed:', err)
-				return c.redirect('/?status=error&reason=exception&compose=1')
-			}
-			return c.redirect('/?status=created')
-		} else if (action === 'update-title' && id) {
-			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
-			if (title) {
-				await sql.unsafe(
-					`UPDATE "threads" SET "title" = ?, "updated_at" = ? WHERE "id" = ?`,
-					[title, new Date().toISOString(), id],
-				)
-			}
-		} else if (action === 'toggle-pin' && id) {
-			await sql.unsafe(
-				`UPDATE "threads" SET "pinned" = CASE "pinned" WHEN 1 THEN 0 ELSE 1 END, "updated_at" = ? WHERE "id" = ?`,
-				[new Date().toISOString(), id],
-			)
-		} else if (action === 'toggle-lock' && id) {
-			await sql.unsafe(
-				`UPDATE "threads" SET "locked" = CASE "locked" WHEN 1 THEN 0 ELSE 1 END, "updated_at" = ? WHERE "id" = ?`,
-				[new Date().toISOString(), id],
-			)
-		} else if (action === 'delete' && id) {
-			await sql.unsafe(`DELETE FROM "replies" WHERE "threadId" = ?`, [id])
-			await sql.unsafe(`DELETE FROM "threads" WHERE "id" = ?`, [id])
-		}
-	} catch (err) {
-		// Surface the failure as feedback instead of bouncing back to "/" with
-		// no explanation (the original silent redirect hid create failures).
-		console.error('[POST /] unexpected error:', err)
-		return c.redirect('/?status=error&reason=exception&compose=1')
-	}
-
-	// Non-create actions (pin/lock/delete/edit) succeeded — return to the list.
-	return c.redirect('/')
+	// All thread mutations (create / update-title / pin / lock / delete) are
+	// delegated to the service layer via the JSON API. The API returns a
+	// redirect, which we stream straight back to the browser.
+	return apiPostForm(c, '/page/threads')
 })

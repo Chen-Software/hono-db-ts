@@ -3,7 +3,7 @@ import { createRoute } from 'honox/factory'
 import { Anchor, Badge, Button, Card, Heading, Stack, Text } from '../../components/ui'
 import { SiteHeader } from '../../components/site-header'
 import { BoardDrawer } from '../../components/board-drawer'
-import { getSession } from '../../../src/auth/context'
+import { apiFetch, apiPostForm } from '../../lib/api'
 
 /**
  * Board detail page — `/boards/:uuid`.
@@ -43,8 +43,6 @@ type HotThread = {
 	reply_count: number
 }
 
-const PAGE_SIZE = 20
-
 /** Format an ISO timestamp as a short relative age ("3h ago"). */
 function timeAgo(iso: string): string {
 	const t = new Date(iso).getTime()
@@ -70,76 +68,18 @@ export default createRoute(async (c) => {
 	let authors: Author[] = []
 	let hot: HotThread[] = []
 	let users: { id: string; name: string; email: string }[] = []
+	let nextCursor: string | null = null
 
-	try {
-		const sql = c.env.sql
-		if (sql) {
-			const rows = (await sql.unsafe(
-				`SELECT b.id, b.name, b.slug, b.description, b."moderatorId", b."created_at",
-				        u.name AS moderator_name,
-				        (SELECT COUNT(*) FROM "threads" t WHERE t."boardId" = b.id) AS thread_count
-				 FROM "boards" b
-				 LEFT JOIN "users" u ON u.id = b."moderatorId"
-				 WHERE b.id = ?
-				 LIMIT 1`,
-				[uuid],
-			)) as BoardRow[]
-			board = rows[0] ?? null
-
-			if (board) {
-				const where = ['t."boardId" = ?']
-				const params: unknown[] = [uuid]
-				if (cursor) {
-					where.push(`t."updated_at" < ?`)
-					params.push(cursor)
-				}
-				const whereSql = `WHERE ${where.join(' AND ')}`
-
-				const count = (await sql.unsafe(
-					`SELECT COUNT(*) AS n FROM "threads" t ${whereSql}`,
-					params,
-				)) as Array<{ n: number }>
-				total = count[0]?.n ?? 0
-
-				threads = (await sql.unsafe(
-					`SELECT t.id, t.title, t.pinned, t.locked, t."created_at", t."updated_at",
-					        u.name AS author_name,
-					        (SELECT COUNT(*) FROM "replies" r WHERE r."threadId" = t.id) AS reply_count
-					 FROM "threads" t
-					 LEFT JOIN "users" u ON u.id = t."authorId"
-					 ${whereSql}
-					 ORDER BY t.pinned DESC, t."updated_at" DESC
-					 LIMIT ${PAGE_SIZE}`,
-					params,
-				)) as ThreadRow[]
-
-				authors = (await sql.unsafe(
-					`SELECT id, name FROM "users" ORDER BY "created_at" DESC LIMIT 20`,
-				)) as Author[]
-
-				hot = (await sql.unsafe(
-					`SELECT t.id, t.title, COUNT(r.id) AS reply_count
-					 FROM "threads" t
-					 LEFT JOIN "replies" r ON r."threadId" = t.id
-					 WHERE t."boardId" = ?
-					 GROUP BY t.id
-					 ORDER BY reply_count DESC, t."updated_at" DESC
-					 LIMIT 6`,
-					[uuid],
-				)) as HotThread[]
-
-				users = (await sql.unsafe(
-					`SELECT id, name, email FROM "users" ORDER BY "created_at" DESC LIMIT 50`,
-				)) as { id: string; name: string; email: string }[]
-			}
-		}
-	} catch {
-		board = null
-		threads = []
-		total = 0
-		authors = []
-		hot = []
-		users = []
+	const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+	const page: any = await apiFetch(c, `/page/boards/${uuid}${q}`)
+	if (page) {
+		board = page.board ?? null
+		threads = page.threads ?? []
+		total = page.total ?? 0
+		authors = page.authors ?? []
+		hot = page.hot ?? []
+		users = page.users ?? []
+		nextCursor = page.nextCursor ?? null
 	}
 
 	// 404 when the board doesn't exist.
@@ -161,9 +101,6 @@ export default createRoute(async (c) => {
 			</div>,
 		)
 	}
-
-	const lastThread = threads[threads.length - 1]
-	const nextCursor = threads.length === PAGE_SIZE && lastThread ? lastThread.updated_at : null
 
 	return c.render(
 		<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' })}>
@@ -395,51 +332,7 @@ function Nav() {
  */
 export const POST = createRoute(async (c) => {
 	const uuid = c.req.param('uuid')
-	const sql = c.env.sql
-	if (!sql) return c.redirect(`/boards/${uuid}`)
-
-	const body = await c.req.parseBody()
-	if (body['action'] === 'create-thread') {
-		const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
-		const boardId = typeof body['boardId'] === 'string' ? body['boardId'] : uuid
-		// Only an authenticated user may create a thread, and only under their
-		// own name. Bind the author to the session user and ignore the
-		// client-submitted authorId (the form's author dropdown).
-		const session = await getSession(c).catch(() => null)
-		if (!session?.user) return c.redirect(`/boards/${uuid}`)
-		const authorId = session.user.id
-
-		if (title && boardId && authorId) {
-			try {
-				const id = crypto.randomUUID()
-				const now = new Date().toISOString()
-				await sql.unsafe(
-					`INSERT INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") ` +
-						`VALUES (?,?,?,?,?,?,0,0)`,
-					[id, now, now, boardId, authorId, title],
-				)
-				return c.redirect(`/threads/${id}`)
-			} catch {
-				return c.redirect(`/boards/${uuid}`)
-			}
-		}
-	}
-
-	if (body['action'] === 'save') {
-		const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
-		const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
-		const moderatorId = typeof body['moderatorId'] === 'string' ? body['moderatorId'] : ''
-		if (name && moderatorId) {
-			try {
-				await sql.unsafe(
-					`UPDATE "boards" SET "name" = ?, "description" = ? WHERE "id" = ?`,
-					[name, description, uuid],
-				)
-			} catch {
-				// Ignore update failures; redirect keeps the UX consistent.
-			}
-		}
-	}
-
-	return c.redirect(`/boards/${uuid}`)
+	// Thread creation + board save are delegated to the service layer via the
+	// JSON API. The API returns a redirect, streamed back to the browser.
+	return apiPostForm(c, `/page/boards/${uuid}`)
 })
