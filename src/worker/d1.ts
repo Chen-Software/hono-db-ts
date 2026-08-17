@@ -12,10 +12,14 @@
  */
 
 import { Hono } from "hono";
+import { drizzle } from "drizzle-orm/d1";
 import { buildQueryApp } from "@/http/app";
 import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
 import { localGitBackend, r2GitBackend, type GitBackend } from "@/git/backend";
 import { mountGitRoutes } from "@/git/routes";
+import { handleQueueBatch, type QueueBatchLike } from "./queue";
+import { BusRegistry } from "@/services/event-bus";
+import type { Db } from "@/services/types";
 import type { R2Like } from "@/git/fs-r2";
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
 
@@ -41,20 +45,59 @@ export const backend: WorkerBackend = {
 		const gitRoot = process.env.GIT_ROOT || ".gitdata";
 		const gitBackend: GitBackend | null = env.REPOS ? r2GitBackend(env.REPOS as R2Like) : localGitBackend(gitRoot);
 
+		// The request-path database: D1 wrapped with drizzle-orm/d1, which gives
+		// the service layer the `all/run/get` surface it needs (a raw
+		// `D1Executor` only implements `unsafe`, so it must NOT be passed where
+		// the services expect a `Db`).
+		const db = drizzle(env.DB) as Db;
+
 		// Better Auth is OPTIONAL. `betterAuthEnabled()` inlines to a literal at
 		// build time, so `BETTER_AUTH_ENABLED=false` drops the auth bundle
 		// (better-auth + drizzle adapter) from the deployed worker.
 		if (betterAuthEnabled()) {
-			const { drizzle } = await import("drizzle-orm/d1");
 			const { mountBetterAuthFromBindings } = await import("@/auth/mount");
 			// Better Auth first — `/api/auth/*` must win over the query app's `/api`.
-			mountBetterAuthFromBindings(app, env, drizzle(env.DB));
+			mountBetterAuthFromBindings(app, env, db);
 		}
 
 		// The query app (read routes + generated CRUD) under /api.
-		app.route("/api", buildQueryApp(new D1Executor(env.DB), undefined, gitBackend));
+		app.route("/api", buildQueryApp(db, undefined, gitBackend));
 		// Git smart-HTTP transport at the root (/owner/repo.git/...).
-		if (gitBackend) mountGitRoutes(app, { db: new D1Executor(env.DB), gitBackend });
+		if (gitBackend) {
+			mountGitRoutes(app, {
+				db,
+				gitBackend,
+				// `repo.push` actions land in the durable queue (if bound).
+				queue: env.CODE_FORGE_QUEUE,
+			});
+		}
 		return app;
 	},
+
+	// Cloudflare Queues consumer — drain CodeForge actions (metadata + webhooks).
+	async queue(batch: QueueBatchLike, env: WorkerEnv) {
+		await handleQueueBatch(batch, {
+			db: drizzle(env.DB!) as Db,
+			// Sum of the git object bytes for `owner/repo.git` — one paginated
+			// R2 list per repo (metadata only, no object bodies read).
+			measureRepoSize: env.REPOS ? r2MeasureSize(env.REPOS as R2Like) : undefined,
+			bus: BusRegistry.default(),
+			log: (...args) => console.log("[queue]", ...args),
+		});
+	},
 };
+
+/** Sum `size` over every object under `owner/repo.git/` (paginated R2 list). */
+function r2MeasureSize(bucket: R2Like) {
+	return async (owner: string, repo: string): Promise<number> => {
+		const prefix = `${owner}/${repo}.git/`;
+		let total = 0;
+		let cursor: string | undefined;
+		do {
+			const page = await bucket.list({ prefix, ...(cursor ? { cursor } : {}) });
+			for (const o of page.objects) total += o.size ?? 0;
+			cursor = page.truncated ? page.cursor : undefined;
+		} while (cursor);
+		return total;
+	};
+}

@@ -24,7 +24,7 @@ export interface R2Like {
 		cursor?: string;
 		limit?: number;
 	}): Promise<{
-		objects: Array<{ key: string }>;
+		objects: Array<{ key: string; size?: number }>;
 		delimitedPrefixes: string[];
 		truncated: boolean;
 		cursor?: string;

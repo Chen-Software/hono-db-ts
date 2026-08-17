@@ -9,6 +9,7 @@ import * as repository from './repository'
 import * as home from './home'
 import * as search from './search'
 import * as users from './users'
+import * as webhooks from './webhooks'
 
 type AnyModule = Record<string, unknown>
 
@@ -28,6 +29,7 @@ export function createServices(db: Db) {
 		home: bind(home, db),
 		search: bind(search, db),
 		users: bind(users, db),
+		webhooks: bind(webhooks, db),
 	}
 }
 

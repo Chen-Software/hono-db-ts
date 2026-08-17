@@ -16,10 +16,19 @@ import { createServices } from "@/services";
 import type { GitBackend } from "./backend";
 import { receivePackAdvertise, receivePackService } from "./receive";
 import { uploadPackAdvertise, uploadPackService } from "./upload";
+import { ZERO_OID } from "./protocol";
+
+/** A Cloudflare Queue (or any fire-and-forget sink) the git transport can
+ *  publish domain actions to. Optional — dev/test simply omit it. */
+export interface GitQueue {
+	send(msg: unknown): Promise<void> | void;
+}
 
 export interface GitRouteOptions {
 	db: Db;
 	gitBackend: GitBackend;
+	/** Durable action sink — `repo.push` events are sent after a successful push. */
+	queue?: GitQueue;
 }
 
 function stripGit(name: string): string {
@@ -108,7 +117,27 @@ export function mountGitRoutes(app: Hono, opts: GitRouteOptions): void {
 		const fs = gitBackend.fsFor(owner, repo);
 		await gitBackend.ensureRepo(owner, repo);
 		const body = new Uint8Array(await c.req.arrayBuffer());
-		const { report } = await receivePackService(fs, gitdir, body);
+		const { report, commands } = await receivePackService(fs, gitdir, body);
+		// Publish a `repo.push` action for every ref update (never fail the push
+		// response because the queue is unavailable — log and continue).
+		if (opts.queue) {
+			for (const cmd of commands) {
+				if (cmd.newoid === ZERO_OID) continue; // deletion — not an action yet
+				try {
+					await opts.queue.send({
+						type: "repo.push",
+						owner,
+						repo,
+						ref: cmd.ref,
+						oid: cmd.newoid,
+						pusherId: session.user.id,
+						ts: new Date().toISOString(),
+					});
+				} catch (e) {
+					console.error(`[git] queue.send(repo.push) failed for ${owner}/${repo}:`, e);
+				}
+			}
+		}
 		return new Response(Buffer.from(report), {
 			status: 200,
 			headers: {

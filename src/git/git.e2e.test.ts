@@ -105,7 +105,11 @@ test("git smart-HTTP: push then clone round-trips a commit", async () => {
 
 		const gitBackend = localGitBackend(gitRoot);
 		const clientFs = nodeFs();
-		const http = makeHttp(await buildApp(db, gitBackend));
+		// Capturing fake queue — proves the transport publishes `repo.push`
+		// actions after a successful push (the Cloudflare Queues producer path).
+		const sent: any[] = [];
+		const queue = { send: async (m: unknown) => { sent.push(m); } };
+		const http = makeHttp(await buildApp(db, gitBackend, queue));
 
 		// 1) Create a local commit.
 		await git.init({ fs: clientFs, dir: clientRepo, defaultBranch: "main" });
@@ -127,6 +131,16 @@ test("git smart-HTTP: push then clone round-trips a commit", async () => {
 			url: `http://localhost/${OWNER}/${REPO}.git`,
 			ref: "main",
 		});
+
+		// The push published exactly one `repo.push` action with the accepted ref.
+		expect(sent.length).toBe(1);
+		expect(sent[0].type).toBe("repo.push");
+		expect(sent[0].owner).toBe(OWNER);
+		expect(sent[0].repo).toBe(REPO);
+		expect(sent[0].ref).toBe("refs/heads/main");
+		expect(sent[0].pusherId).toBe(OWNER_ID);
+		expect(typeof sent[0].oid).toBe("string");
+		expect(typeof sent[0].ts).toBe("string");
 
 		// 3) Clone back (upload-pack).
 		await git.clone({ fs: clientFs, http, dir: cloneDir, url: `http://localhost/${OWNER}/${REPO}.git` });
@@ -216,7 +230,7 @@ test("git smart-HTTP: a freshly created (empty) repo advertises empty refs — c
 	}
 });
 
-async function buildApp(db: any, gitBackend: ReturnType<typeof localGitBackend>): Promise<Hono> {
+async function buildApp(db: any, gitBackend: ReturnType<typeof localGitBackend>, queue?: { send(msg: unknown): Promise<void> | void }): Promise<Hono> {
 	const app = new Hono();
 	// Inject a fake session so the (owner-only) push gate passes in the test.
 	app.use("*", async (c, next) => {
@@ -226,6 +240,6 @@ async function buildApp(db: any, gitBackend: ReturnType<typeof localGitBackend>)
 		await next();
 	});
 	app.route("/api", buildQueryApp(db, undefined, gitBackend));
-	mountGitRoutes(app, { db, gitBackend });
+	mountGitRoutes(app, { db, gitBackend, queue });
 	return app;
 }

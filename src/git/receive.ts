@@ -41,6 +41,8 @@ interface PushCommand {
 export interface ReceiveResult {
 	/** The raw report-status pkt-line body. */
 	report: Uint8Array;
+	/** The accepted (non-deletion) ref updates — what a `repo.push` event needs. */
+	commands: PushCommand[];
 }
 
 /**
@@ -106,5 +108,5 @@ export async function receivePackService(fs: FsClient, gitdir: string, body: Uin
 		...results.map((r) => band1PktLine(pktLineStr(`${r}\n`))),
 		FLUSH,
 	]);
-	return { report };
+	return { report, commands };
 }

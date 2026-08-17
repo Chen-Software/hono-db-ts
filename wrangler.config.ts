@@ -69,6 +69,19 @@ export interface WranglerConfig {
 		binding: string;
 		bucket_name: string;
 	}>;
+	// Cloudflare Queues — CodeForge actions: the git transport produces
+	// `repo.push`, this worker consumes them (metadata + webhooks). The passive
+	// R2-event path is configured ON THE BUCKET, not here (`wrangler r2 bucket
+	// notification create <bucket> --queue codeforge-actions`).
+	queues?: {
+		producers?: Array<{ name: string; binding: string }>;
+		consumers?: Array<{
+			queue: string;
+			max_batch_size?: number;
+			max_retries?: number;
+			dead_letter_queue?: string;
+		}>;
+	};
 	vars?: Record<string, string | undefined>;
 }
 
@@ -81,7 +94,7 @@ export function buildWranglerConfig(): WranglerConfig {
 
 	const config: WranglerConfig = {
 		$schema: "./node_modules/wrangler/config-schema.json",
-		name: "bbs-query",
+		name: "codeforge",
 		// CF_ACCOUNT_ID pins the target account (see the interface comment).
 		account_id: process.env.CF_ACCOUNT_ID || undefined,
 		// The Honox UI worker (`app/server.cf.ts` via `vite.ui.cf.config.ts`)
@@ -141,6 +154,18 @@ export function buildWranglerConfig(): WranglerConfig {
 	// taken by Workers Static Assets (config.assets.binding above).
 	if (r2Bucket()) {
 		config.r2_buckets = [{ binding: "REPOS", bucket_name: r2Bucket()! }];
+		// CodeForge actions queue (same condition — git is enabled).
+		config.queues = {
+			producers: [{ name: "codeforge-actions", binding: "CODE_FORGE_QUEUE" }],
+			consumers: [
+				{
+					queue: "codeforge-actions",
+					max_batch_size: 10,
+					max_retries: 3,
+					dead_letter_queue: "codeforge-actions-dlq",
+				},
+			],
+		};
 	}
 
 	// Useful references, not credentials (secrets go to secret bindings).
