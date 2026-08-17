@@ -1,7 +1,15 @@
 # CodeForge
 
-CodeForge is made with [Hono](https://hono.dev) + [HonoX](https://github.com/honojs/honox) + [Drizzle ORM](https://orm.drizzle.team/) + [Typia](https://typia.io) (TypeScript-first validation and data modelling) starter: models are composed
-from reusable [**capacities**](docs/capacity-introduction.md).
+CodeForge is a **Forgejo-style Git forge** (a `packages/forgejo` port) built with
+[Hono](https://hono.dev) + [HonoX](https://github.com/honojs/honox) + [Drizzle ORM](https://orm.drizzle.team/)
++ [Typia](https://typia.io), deployable **serverlessly on Cloudflare** (Workers +
+D1 + R2). It ships a real **git server** — `git clone` / `git push` / `git pull`
+over smart-HTTP — alongside the capacity-composed data models.
+
+> The repo began as the Hono + Drizzle + Typia **starter**, whose example domain is
+> a BBS (`boards`/`threads`/`posts`). Those capacities and the generic query API are
+> still present; the headline capability is now the **git forge** (`repositories` +
+> `users` models + the smart-HTTP transport in `src/git/`).
 
 ## Quick start
 
@@ -39,6 +47,32 @@ NODE_ENV=production DATABASE_TYPE=d1 bun run src/main.ts wrangler-config
 wrangler deploy                           # worker + static assets
 ```
 
+### Using the git server
+
+With `serve` running (or the Worker deployed), every repository is a git remote at
+`https://host/owner/repo(.git)`. The transport is standard smart-HTTP, so any git
+client works — including the real `git` CLI and `isomorphic-git`.
+
+```bash
+# Clone
+git clone https://localhost:8787/owner/repo.git
+cd repo
+echo "# Hello from CodeForge" > README.md
+git add README.md
+git commit -m "initial commit"
+git push origin main
+```
+
+> **Default object format is SHA-1.** SHA-256 (`git --object-format=sha256
+> --compat-object-format=sha1`) is **not** supported by the pure-Worker backend
+> (isomorphic-git is SHA-1 only) — it is a planned additive path via a serverless
+> Cloudflare **Container** (see *Git server backend* below).
+
+```bash
+# End-to-end test (push then clone round-trip, run with the suite):
+bun test src/git
+```
+
 Set `DATABASE_URL` (e.g. `file:./dev.db`) in the environment or `.env`.
 
 > **Routes when `serve` runs with a built UI**: the Honox UI is at `/` and the
@@ -73,9 +107,83 @@ Opt out entirely with `BETTER_AUTH_ENABLED=false` at build time: the
 `betterAuthEnabled()` macro inlines to `false`, so the `better-auth` +
 `drizzle-adapter` bundle is dead-code-eliminated from the worker/UI builds.
 
+## Git server backend (smart-HTTP)
+
+CodeForge runs a **real git server inside a Cloudflare Worker** — no VM, no
+container. The transport is implemented with
+[isomorphic-git](https://github.com/isomorphic-git/isomorphic-git) (v1.41.4,
+pure-JS, **SHA-1 only**) over **smart-HTTP v1** with side-band-64k framing, so any
+standard client (`git`, `isomorphic-git`, CI runners) can `clone` / `push` /
+`pull`. This follows the Forgejo model: the `Repository` DB row is a **metadata
+catalog**, and the actual git objects (loose + packs) live in object storage.
+
+### Architecture
+
+- **Repository = catalog.** The `repositories` row stores `ownerId`,
+  `defaultBranch`, `objectFormatName` (`'sha1'`), `topics`, counters, etc. There
+  are **no** `Blob`/`Tree`/`Commit` SQL tables — objects are resolved from storage
+  on demand.
+- **Objects in storage.** Two swappable backends sit behind one `GitBackend`
+  interface (`src/git/backend.ts`):
+  - `localGitBackend(root)` → `node:fs`, `gitdir = ${root}/${owner}/${repo}.git`
+    (dev `serve` + tests).
+  - `r2GitBackend(bucket)` → R2, `gitdir = ${owner}/${repo}.git` (production Worker).
+- **Hand-rolled smart-HTTP v1.** isomorphic-git exposes `packObjects` /
+  `indexPack` / `writeRef` / `resolveRef` but **not** `uploadPack` / `receivePack`,
+  so `src/git/upload.ts` + `src/git/receive.ts` build the advertisements and
+  packfiles directly. Both advertisements **and** the receive-pack report-status
+  are framed on side-band-64k **band 1** (`0x01`) so the isomorphic-git client's
+  `GitSideBand.demux` parses them correctly (`src/git/protocol.ts`).
+
+### Transport endpoints (root-level, not under `/api`)
+
+| Method & path | Notes |
+| --- | --- |
+| `GET /owner/repo(.git)/info/refs?service=git-upload-pack` | clone / fetch advertisement |
+| `GET /owner/repo(.git)/info/refs?service=git-receive-pack` | push advertisement — lazily `ensureRepo`s the bare repo on first push |
+| `POST /owner/repo(.git)/git-upload-pack` | pack negotiation + packfile (clone / fetch) |
+| `POST /owner/repo(.git)/git-receive-pack` | `401` if unauthenticated, `403` if not the owner; `indexPack` writes objects then updates `main` |
+
+The remote URL is `https://host/owner/repo(.git)` (the `.git` suffix is stripped
+server-side). Public repos are world-readable; private repos and all pushes
+require a session (push additionally requires ownership).
+
+### Read API (for the forge UI — under `/api/page/repositories/:id`)
+
+All three read objects from storage via isomorphic-git; the `Repository` row stays
+metadata-only (`src/git/read.ts`):
+
+| Method & path | Returns |
+| --- | --- |
+| `GET /api/page/repositories/:id/tree?ref=&path=` | `{ entries:[{name,type,oid,mode}], readme, ref, path, branches }` — root tree + rendered README (case-insensitive, common extensions) |
+| `GET /api/page/repositories/:id/read?ref=&path=` | single file `{ path, ref, encoding, content }` (`utf8` or `base64`) |
+| `GET /api/page/repositories/:id/commits?ref=&page=` | `{ commits:[{oid,message,author,committer,timestamp,parent}], ref, page }` (30/page) |
+
+### Object format: SHA-1 now, SHA-256 later
+
+- **SHA-1 (default, shipped).** isomorphic-git is SHA-1 only; the `repositories`
+  row records `objectFormatName = 'sha1'`. Runs entirely in a Worker.
+- **SHA-256 / `--compat-object-format=sha1`.** *Not* supported by the pure-Worker
+  path (isomorphic-git has zero SHA-256 support). The planned approach is an
+  **additive serverless Cloudflare Container** running the real `git-http-backend`
+  (objects in R2), proxied by the same `mountGitRoutes` while the Worker keeps
+  serving the read API. Containers are GA (2026-04-13), scale to zero, and bill on
+  active CPU — no persistent VM.
+
+### Testing
+
+`src/git/git.e2e.test.ts` boots the real Hono app (`buildQueryApp` +
+`mountGitRoutes`) with the local-fs backend, seeds a user + repository, then uses
+isomorphic-git as a **client** to push a commit and clone it back — asserting
+object parity, commit history, and the `/tree` / `/commits` read APIs.
+
+```bash
+bun test src/git        # git smart-HTTP e2e + protocol/read unit tests
+```
+
 ## REST API services
 
-The BBS ships a JSON/HTTP API built on a **Drizzle-ORM-backed service layer**.
+The forge ships a JSON/HTTP API built on a **Drizzle-ORM-backed service layer**.
 The same Hono app (`buildQueryApp` in `src/http/app.ts`) is mounted by both the
 local dev server (`scripts/serve.ts`) and the Cloudflare Worker, so the API is
 identical everywhere. The UI routes (`app/routes`) never touch SQL themselves —
@@ -94,11 +202,12 @@ request ─▶ src/http/app.ts  (buildQueryApp(db, auth?))
 ```
 
 - **`src/services/`** — the data-access service layer. `createServices(db)`
-  returns a bound object `{ db, boards, threads, posts, home, search, users }`;
-  every function is partially-applied with `db`, so handlers call
-  `svc.threads.getPage(id)` without threading `db` through. None of these
-  functions use `sql.unsafe` — all dynamic values reach SQL through `?` bind
-  params (see `toSql` in `src/services/types.ts`).
+  returns a bound object (today: `{ db, repository, users, … }`; the BBS example
+  also registers `boards`/`threads`/`posts`/`home`/`search`); every function is
+  partially-applied with `db`, so handlers call `svc.repository.getPage(id)`
+  without threading `db` through. None of these functions use `sql.unsafe` — all
+  dynamic values reach SQL through `?` bind params (see `toSql` in
+  `src/services/types.ts`).
 - **`src/http/app.ts`** — `buildQueryApp(db, authInstance?)` wires the service
   layer to the routes. Hand-written read models are registered first; the
   generated aggregate + CRUD routes are registered last so the rich read models
@@ -211,8 +320,9 @@ bun run src/main.ts ui:build && bun run src/main.ts serve
 A model is `defineModel` (see `src/models/base.ts`) applied to a reflected typia
 schema plus a fixed bundle of typia functions (the *schema module*), then folded
 with a list of **capacities** — tiny mixins that each own one cross-cutting
-concern. The starter ships `User`, `Post` and the BBS models `Board`, `Thread`,
-`Reply`, all composed from the same reusable capacity set (`Identifiable`,
+concern. The forge's primary models are `User` and `Repository` (the catalogue row
+for a git repo); the starter also ships `Post` and the BBS example models `Board`,
+`Thread`, `Reply`, all composed from the same reusable capacity set (`Identifiable`,
 `Timestamped`, `SqlSerialisable`, `Referencible`, `Versionable`, `Hashable`,
 `Validatable`, `Queriable`, `Siftable`, `Servable`, `Randomisable`, `Meterable`,
 …).
@@ -226,13 +336,16 @@ query reference.
 ```
 src/
   cli/            CLI entry (main.ts via index.ts barrel) + query command (query.ts)
-  models/         defineModel-based models (User, Post, Board, Thread, Reply)
+  models/         defineModel-based models (User, Repository, Post, Board, Thread, Reply)
   capacities/     the reusable capacity mixins (compose.ts folds them)
   storage/        identity map + store
   tags/           custom typia tags (Reference, Sha256, …)
   macros/         build-time macros (env, databaseUrl, databaseType, …)
-  services/       data-access service layer (boards, threads, posts, home, search, users) bound via createServices(db) — no sql.unsafe
-  http/           buildQueryApp(db, auth?) — the reusable Hono query/REST app (mounted by serve.ts + the Worker)
+  services/       data-access service layer (repository, users, …) bound via createServices(db) — no sql.unsafe
+  git/            the git server backend: protocol.ts (pkt-line), upload.ts/receive.ts (smart-HTTP
+                  v1), read.ts (tree/blob/README/commits), backend.ts (local + R2), routes.ts, refs.ts
+  http/           buildQueryApp(db, auth?, gitBackend?) — the reusable Hono query/REST app
+                  (mounted by serve.ts + the Worker); git read API + mountGitRoutes wiring
 scripts/
   build.ts        programmatic Bun.build (typia transform plugin)
   model-build.ts  models:build  — models → src/generated/models.json
