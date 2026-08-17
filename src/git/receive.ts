@@ -89,8 +89,13 @@ export async function receivePackService(fs: FsClient, gitdir: string, body: Uin
 	const results: string[] = [];
 	for (const c of commands) {
 		if (c.newoid === ZERO_OID) {
-			// ref deletion — not supported in this MVP; report ok without action
-			results.push(`ok ${c.ref}`);
+			// Ref deletion (B2): actually delete the ref, then report ok/ng.
+			try {
+				await git.deleteRef({ fs, gitdir, ref: c.ref });
+				results.push(`ok ${c.ref}`);
+			} catch (e) {
+				results.push(`ng ${c.ref} ${e instanceof Error ? e.message : "delete failed"}`);
+			}
 			continue;
 		}
 		await git.writeRef({ fs, gitdir, ref: c.ref, value: c.newoid, force: true });

@@ -83,6 +83,38 @@ export async function getProfile(db: Db, id: string) {
 }
 
 /**
+ * One user by login name, or null. The forge URLs (`/{owner}/{repo}`, and the
+ * git transport) address users by their lower-cased name — mirror that here so
+ * `/{owner}` resolves the same account the git CLI does.
+ */
+export async function getByName(db: Db, name: string): Promise<UserRow | null> {
+	const rows = await db
+		.select({
+			id: users.id,
+			name: users.name,
+			email: users.email,
+			role: users.role,
+			age: users.age,
+			created_at: users.created_at,
+		})
+		.from(users)
+		.where(eq(users.name, name.toLowerCase()))
+		.limit(1)
+	return (rows[0] ?? null) as UserRow | null
+}
+
+/**
+ * Full profile page payload addressed by the owner's login name — the public
+ * `/{owner}` profile (unlike `getProfile`, which is keyed by the user UUID and
+ * is used for the owner-only `/users/:id` page).
+ */
+export async function getProfileByName(db: Db, name: string) {
+	const user = await getByName(db, name)
+	const repositories = user ? await listByOwner(db, user.id) : []
+	return { user, repositories }
+}
+
+/**
  * Ensure a `users` row exists for the authenticated Better Auth user and return
  * its id. Uses the Better Auth `user.id` as the `users.id` so the profile page
  * (`/users/:id`) and the repo queries (`WHERE "ownerId" = ?`) line up with

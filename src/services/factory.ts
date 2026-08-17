@@ -5,11 +5,13 @@
  * routes depend on.
  */
 import type { Db } from './types'
+import * as accessTokens from './access-tokens'
 import * as repository from './repository'
 import * as home from './home'
 import * as search from './search'
 import * as users from './users'
 import * as webhooks from './webhooks'
+import * as runs from './workflow-runs'
 
 type AnyModule = Record<string, unknown>
 
@@ -25,11 +27,13 @@ function bind<T extends AnyModule>(mod: T, db: Db): { [K in keyof T]: T[K] exten
 export function createServices(db: Db) {
 	return {
 		db,
+		accessTokens: bind(accessTokens, db),
 		repository: bind(repository, db),
 		home: bind(home, db),
 		search: bind(search, db),
 		users: bind(users, db),
 		webhooks: bind(webhooks, db),
+		runs: bind(runs, db),
 	}
 }
 

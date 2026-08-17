@@ -139,7 +139,7 @@ export default createRoute(async (c) => {
 								{repositories.map((r) => (
 									<Anchor
 										key={r.id}
-										href={`/repositories/${r.id}`}
+										href={`/${r.owner_name ?? 'unknown'}/${r.lowerName || r.name}`}
 										variant="plain"
 										class={css({ px: 3, py: 3, rounded: 'lg', _hover: { bg: '#fafafa' }, color: 'ink' })}
 									>

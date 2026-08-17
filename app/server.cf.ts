@@ -3,6 +3,10 @@ import { createApp } from 'honox/server'
 import { createAuth } from '../src/auth'
 import { authEnvFromBindings } from '../src/auth/hono'
 import { buildQueryApp } from '../src/http/app'
+import { r2GitBackend } from '../src/git/backend'
+import { mountGitRoutes } from '../src/git/routes'
+import type { R2Like } from '../src/git/fs-r2'
+import type { Db } from '../src/services/types'
 
 /**
  * Honox UI server entry — CLOUDFLARE WORKERS variant.
@@ -24,6 +28,15 @@ import { buildQueryApp } from '../src/http/app'
  * `BETTER_AUTH_ENABLED=false` at build time it inlines to `false` and the
  * `if` block below (plus the module-scope auth imports it references) is
  * dead-code-eliminated.
+ *
+ * Git: the R2 bucket (`env.REPOS`) and the queue (`env.CODE_FORGE_QUEUE`) are
+ * also per-request bindings, so this entry uses the same lazy-facade trick as
+ * `LazyD1Database`: the git backend (`r2GitBackend`) and the `repo.push` queue
+ * sink are constructed ONCE at module scope against facades that forward to
+ * whatever `env.REPOS` / `env.CODE_FORGE_QUEUE` the current request bound.
+ * The git smart-HTTP transport is mounted at the ROOT (`/:owner/:repo.git/…`),
+ * matching `src/worker/d1.ts` — so `git push`/`git clone` against the deployed
+ * worker reach real git objects in R2.
  *
  * Build with `vite build -c vite.ui.cf.config.ts` → `dist/ui-cf/index.js`,
  * which `wrangler.jsonc` points its `main` at.
@@ -63,16 +76,85 @@ class LazyD1Database {
 	}
 }
 
+/**
+ * R2 bucket bound lazily per-request — the same idea as `LazyD1Database`. The
+ * git object backend (`r2GitBackend`) is built once at module scope against
+ * this facade; each request binds its own `env.REPOS` before the git routes
+ * (or the git read endpoints under `/api`) run.
+ */
+class LazyR2Bucket {
+	private bucket: R2Like | null = null
+
+	setBucket(bucket: R2Like) {
+		this.bucket = bucket
+	}
+
+	private get current(): R2Like {
+		if (!this.bucket) {
+			throw new Error('LazyR2Bucket: no REPOS binding on this request')
+		}
+		return this.bucket
+	}
+
+	head(key: string) {
+		return this.current.head(key)
+	}
+	get(key: string) {
+		return this.current.get(key)
+	}
+	put(key: string, value: Uint8Array | string | ArrayBuffer) {
+		return this.current.put(key, value)
+	}
+	delete(key: string) {
+		return this.current.delete(key)
+	}
+	list(opts: {
+		prefix?: string
+		delimiter?: string
+		cursor?: string
+		limit?: number
+	}) {
+		return this.current.list(opts)
+	}
+}
+
+/**
+ * Queue sink bound lazily per-request. `mountGitRoutes` sends `repo.push`
+ * actions to it after a successful push; if the current request has no
+ * `CODE_FORGE_QUEUE` binding the send is a no-op (push never fails on queue
+ * unavailability — the route already tolerates a missing queue).
+ */
+class LazyGitQueue {
+	private queue: { send(msg: unknown): Promise<void> } | null = null
+
+	setQueue(queue: { send(msg: unknown): Promise<void> }) {
+		this.queue = queue
+	}
+
+	send(msg: unknown): Promise<void> | void {
+		return this.queue?.send(msg)
+	}
+}
+
 const lazyD1 = new LazyD1Database()
+const lazyR2 = new LazyR2Bucket()
+const lazyQueue = new LazyGitQueue()
+
+// The git object backend + `repo.push` sink, built ONCE against the lazy
+// facades (the real bindings are per-request).
+const gitBackend = r2GitBackend(lazyR2)
 
 const app = createApp({
 	init(server) {
-		// Bind the per-request D1 database to the shared facade used by the
-		// service-layer query app (mounted under /api). SSR routes no longer
-		// receive a `c.env.sql`; they reach the service layer only over HTTP.
+		// Bind the per-request D1 database / R2 bucket / queue to the shared
+		// facades used by the service-layer query app (under /api) and the git
+		// transport (at the root). SSR routes no longer receive a `c.env.sql`;
+		// they reach the service layer only over HTTP.
 		server.use('*', async (c, next) => {
-			const db = (c.env as { DB?: D1Database }).DB
-			if (db) lazyD1.setDb(db)
+			const env = c.env as { DB?: D1Database; REPOS?: R2Like; CODE_FORGE_QUEUE?: { send(msg: unknown): Promise<void> } }
+			if (env.DB) lazyD1.setDb(env.DB)
+			if (env.REPOS) lazyR2.setBucket(env.REPOS)
+			if (env.CODE_FORGE_QUEUE) lazyQueue.setQueue(env.CODE_FORGE_QUEUE)
 			await next()
 		})
 
@@ -110,8 +192,19 @@ const app = createApp({
 
 		// Mount the JSON query app under /api (same as local serve.ts). Wrap the
 		// per-request D1 database in Drizzle so the service layer + generated
-		// CRUD run through Drizzle's parameterised path (no `unsafe`).
-		server.route('/api', buildQueryApp(drizzle(lazyD1)))
+		// CRUD run through Drizzle's parameterised path (no `unsafe`). Pass the
+		// git backend so the git READ endpoints (/tree, /read, /commits) work.
+		const db = drizzle(lazyD1) as Db
+		server.route('/api', buildQueryApp(db, undefined, gitBackend))
+
+		// Git smart-HTTP transport at the ROOT (/owner/repo.git/...), exactly
+		// like `src/worker/d1.ts` — this is what makes push/pull work against
+		// the deployed worker.
+		mountGitRoutes(server, {
+			db,
+			gitBackend,
+			queue: lazyQueue,
+		})
 	},
 })
 

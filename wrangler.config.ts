@@ -156,7 +156,7 @@ export function buildWranglerConfig(): WranglerConfig {
 		config.r2_buckets = [{ binding: "REPOS", bucket_name: r2Bucket()! }];
 		// CodeForge actions queue (same condition — git is enabled).
 		config.queues = {
-			producers: [{ name: "codeforge-actions", binding: "CODE_FORGE_QUEUE" }],
+			producers: [{ queue: "codeforge-actions", binding: "CODE_FORGE_QUEUE" }],
 			consumers: [
 				{
 					queue: "codeforge-actions",

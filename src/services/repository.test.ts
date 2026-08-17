@@ -2,7 +2,14 @@ import { test, expect } from "bun:test";
 import { createClient, type Client } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { ensureSchema } from "../http/schema";
+// Import the models BEFORE the services: `defineModel` → `SqlSerialisable`
+// derives + registers the `UserSchema` / `RepositorySchema` drizzle tables in
+// `tableRegistry`, and the services resolve them via a thunk at module load.
+// If a service import runs first, `resolveTableThunk` throws ("never derived").
+import "../models/user";
+import "../models/repository";
 import * as repo from "./repository";
+import * as users from "./users";
 import type { Db } from "./types";
 
 /**
@@ -128,4 +135,34 @@ test("repository service: create enforces name grammar + (owner, name) uniquenes
 	// listByOwner is owner-scoped (u9 sees only its own repo).
 	const mine = await repo.listByOwner(db, "u9");
 	expect(mine.map((r) => r.name)).toEqual(["hello-world"]);
+});
+
+test("repository service: a brand-new Better Auth session user can create a repo (ensureUser materialises the owner row first)", async () => {
+	const { db, adapter } = makeDb();
+	await ensureSchema(adapter as any);
+
+	// The session user has NO `users` row yet — exactly the path that used to
+	// fail the repositories.ownerId FK when the UI stamped ownerId straight from
+	// the session without materialising the user. `ensureUser` upserts it.
+	const session = { user: { id: "ba-new-user", name: "Alice", email: "alice@example.com" } };
+	const ownerId = await users.ensureUser(db, session as never);
+	expect(ownerId).toBe("ba-new-user");
+
+	// The materialised owner row exists, so the FK is satisfied.
+	const id = await repo.create(db, {
+		ownerId,
+		name: "first-repo",
+		lowerName: "first-repo",
+		description: "created right after sign-up",
+		isPrivate: false,
+	});
+	expect(id).toBeTruthy();
+
+	// The repo resolves to the new owner by login.
+	const found = await repo.getByOwnerAndName(db, "Alice", "first-repo");
+	expect(found?.id).toBe(id);
+	expect(found?.ownerId).toBe("ba-new-user");
+
+	// ensureUser is idempotent — a second call reuses the same id without error.
+	expect(await users.ensureUser(db, session as never)).toBe("ba-new-user");
 });

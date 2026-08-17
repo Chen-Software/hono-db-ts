@@ -33,6 +33,9 @@ import { createServices } from '@/services'
 import { DuplicateRepositoryError, InvalidRepositoryNameError } from '@/services/repository'
 import type { GitBackend } from '@/git/backend'
 import { findReadme, listTree, logCommits, readBlob } from '@/git/read'
+import { diffCommit, diffCommits } from '@/git/diff'
+import { branchesContaining, createBranch, deleteBranch, listBranches, renameBranch } from '@/git/branches'
+import { createTag, deleteTag, listTags } from '@/git/tags'
 
 /** UUID path segment — matches the id shape every table uses. */
 const UUID = '[0-9a-f-]{36}'
@@ -147,11 +150,29 @@ export function buildQueryApp(
 	// GET /page/repositories?cursor=
 	app.get('/page/repositories', async (c) => json(await svc.repository.listIndex(c.req.query('cursor') ?? undefined)))
 
+	// GET /page/repositories/by-owner/:owner/:name — resolve a repository by its
+	// canonical `{owner}/{name}` path (the forge URL), same as the git transport.
+	// Registered before the `:id` route; the owner + name path has 3 segments so
+	// it can never collide with the single-segment `:id`.
+	app.get(`/page/repositories/by-owner/:owner/:name`, async (c) => {
+		const repo = await svc.repository.getByOwnerAndName(c.req.param('owner'), c.req.param('name'))
+		if (!repo) return fail('repository not found', 404)
+		const owner = repo.owner_id
+			? { id: repo.owner_id, name: repo.owner_name }
+			: null
+		return json({ repository: repo, owner })
+	})
+
 	// GET /page/repositories/:id
 	app.get(`/page/repositories/:id`, async (c) => json(await svc.repository.getPage(c.req.param('id'))))
 
 	// GET /page/repositories/:id/edit
 	app.get(`/page/repositories/:id/edit`, async (c) => json(await svc.repository.getEdit(c.req.param('id'))))
+
+	// GET /page/users/by-name/:name — public profile addressed by the owner's
+	// login name (the `/{owner}` forge URL). Registered before the `:id` route;
+	// it has 2 segments after `/page/users` so it can never collide with `:id`.
+	app.get(`/page/users/by-name/:name`, async (c) => json(await svc.users.getProfileByName(c.req.param('name'))))
 
 	// GET /page/users/:id
 	app.get(`/page/users/:id`, async (c) => json(await svc.users.getProfile(c.req.param('id'))))
@@ -235,6 +256,169 @@ export function buildQueryApp(
 				return fail(String((e as Error)?.message ?? e), 404)
 			}
 		})
+
+		// GET /api/page/repositories/:id/runs  (CI run history, newest first)
+		app.get(`/page/repositories/:id/runs`, async (c) => {
+			const repo = await svc.repository.getWithOwner(c.req.param('id'))
+			if (!repo) return fail('repository not found', 404)
+			const runsList = await svc.runs.listRunsByRepo(repo.id)
+			return json({ runs: runsList })
+		})
+
+		// GET /api/page/repositories/:id/runs/:runId  (run detail + steps + logs)
+		app.get(`/page/repositories/:id/runs/:runId`, async (c) => {
+			const run = await svc.runs.getRun(c.req.param('runId'))
+			if (!run) return fail('run not found', 404)
+			const steps = await svc.runs.listSteps(run.id)
+			return json({ run, steps })
+		})
+
+		// GET /api/page/repositories/:id/commit/:oid/diff — a single commit's diff
+		// against its parent (root commits diff against the empty tree).
+		app.get(`/page/repositories/:id/commit/:oid/diff`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				const diff = await diffCommit(ctx.fs, ctx.gitdir, c.req.param('oid'))
+				return json({ diff })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/compare?from=&to= — two-ref compare
+		// (branches/tags/oids); from defaults to the default branch.
+		app.get(`/page/repositories/:id/compare`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const from = c.req.query('from') ?? ctx.defaultBranch
+			const to = c.req.query('to')
+			if (!to) return fail('compare requires ?to=', 400)
+			try {
+				const diff = await diffCommits(ctx.fs, ctx.gitdir, from, to)
+				return json({ diff })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/branches — branch list with tips.
+		app.get(`/page/repositories/:id/branches`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				const branches = await listBranches(ctx.fs, ctx.gitdir)
+				return json({ branches })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/branches/containing/:oid — branches whose
+		// history contains a commit (PR target picker).
+		app.get(`/page/repositories/:id/branches/containing/:oid`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				const names = await branchesContaining(ctx.fs, ctx.gitdir, c.req.param('oid'))
+				return json({ branches: names })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// POST /page/repositories/:id/branches — create a branch.
+		// Body: { name, from } (from defaults to the default branch).
+		app.post(`/page/repositories/:id/branches`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const body = await c.req.parseBody()
+			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+			const from = typeof body['from'] === 'string' && body['from'] ? body['from'] : ctx.defaultBranch
+			if (!name) return fail('branch name required', 400)
+			try {
+				const oid = await createBranch(ctx.fs, ctx.gitdir, name, from)
+				return json({ ok: true, name, oid })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
+
+		// POST /page/repositories/:id/branches/:branch/delete — delete a branch.
+		app.post(`/page/repositories/:id/branches/:branch/delete`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				await deleteBranch(ctx.fs, ctx.gitdir, c.req.param('branch'))
+				return json({ ok: true })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
+
+		// POST /page/repositories/:id/branches/:branch/rename — rename a branch.
+		// Body: { to }.
+		app.post(`/page/repositories/:id/branches/:branch/rename`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const body = await c.req.parseBody()
+			const to = typeof body['to'] === 'string' ? body['to'].trim() : ''
+			if (!to) return fail('new branch name required', 400)
+			try {
+				await renameBranch(ctx.fs, ctx.gitdir, c.req.param('branch'), to)
+				return json({ ok: true, name: to })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
+
+		// GET /api/page/repositories/:id/tags — tag list (peeled).
+		app.get(`/page/repositories/:id/tags`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				const tags = await listTags(ctx.fs, ctx.gitdir)
+				return json({ tags })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// POST /page/repositories/:id/tags — create a tag.
+		// Body: { name, target, message?, taggerName?, taggerEmail? }.
+		// With `message` + tagger the tag is annotated; otherwise lightweight.
+		app.post(`/page/repositories/:id/tags`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const body = await c.req.parseBody()
+			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+			const target = typeof body['target'] === 'string' && body['target'] ? body['target'] : ctx.defaultBranch
+			const message = typeof body['message'] === 'string' ? body['message'].trim() : ''
+			const taggerName = typeof body['taggerName'] === 'string' ? body['taggerName'].trim() : ''
+			const taggerEmail = typeof body['taggerEmail'] === 'string' ? body['taggerEmail'].trim() : ''
+			if (!name) return fail('tag name required', 400)
+			try {
+				const commit = await createTag(ctx.fs, ctx.gitdir, name, target, {
+					message: message || undefined,
+					tagger: taggerName && taggerEmail ? { name: taggerName, email: taggerEmail } : undefined,
+				})
+				return json({ ok: true, name, commit })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
+
+		// POST /page/repositories/:id/tags/:tag/delete — delete a tag.
+		app.post(`/page/repositories/:id/tags/:tag/delete`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				await deleteTag(ctx.fs, ctx.gitdir, c.req.param('tag'))
+				return json({ ok: true })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
 	}
 
 	// ------------------------------------------------------------------
@@ -251,7 +435,13 @@ export function buildQueryApp(
 		const isPrivate = body['isPrivate'] === '1' || body['isPrivate'] === 'on'
 		const session = await getSession(c).catch(() => null)
 		if (!session?.user) return c.redirect('/repositories?status=error&reason=auth&new=1')
-		const ownerId = session.user.id
+		// Materialise the Better Auth user into the domain `users` table BEFORE
+		// stamping ownerId, or the repositories.ownerId FK (→ users.id) will fail
+		// for a freshly signed-up user who has never been resolved by the user
+		// service. ensureUser uses the session user id as users.id and is idempotent.
+		// (db is already bound by the service factory — pass only the session.)
+		const ownerId = await svc.users.ensureUser(session)
+		if (!ownerId) return c.redirect('/repositories?status=error&reason=auth&new=1')
 		if (!name) return c.redirect('/repositories?status=error&reason=missing&new=1')
 		const lowerName = name.toLowerCase().replace(/\s+/g, '-')
 		try {
@@ -313,7 +503,16 @@ export function buildQueryApp(
 			)
 		}
 		// Forgejo semantics: a repository is always owned by the creating user.
-		entity['ownerId'] = session.user.id
+		// Materialise the Better Auth user first so the repositories.ownerId FK
+		// (→ users.id) holds for a brand-new account. Idempotent.
+		const ownerId = await svc.users.ensureUser(session)
+		if (!ownerId) {
+			return new Response(
+				JSON.stringify({ ok: false, data: { error: 'could not resolve authenticated user' } }),
+				{ status: 401, headers: { 'content-type': 'application/json; charset=utf-8' } },
+			)
+		}
+		entity['ownerId'] = ownerId
 		return undefined
 	}
 

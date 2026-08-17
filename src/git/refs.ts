@@ -16,13 +16,30 @@ export interface AdvertisedRef {
 	symref?: string;
 }
 
-/** List advertised refs: HEAD (with symref) followed by each branch. */
+/** List advertised refs: HEAD (with symref), each branch, then each tag. */
 export async function listRefs(fs: FsClient, gitdir: string): Promise<AdvertisedRef[]> {
 	const branches = await git.listBranches({ fs, gitdir });
 	const refs: AdvertisedRef[] = [];
 	for (const b of branches) {
 		const oid = await git.resolveRef({ fs, gitdir, ref: `refs/heads/${b}` });
 		refs.push({ ref: `refs/heads/${b}`, oid });
+	}
+
+	// Tags (B3): advertise each tag, and peel annotated tags to their target
+	// commit with a `refs/tags/<name>^{}` line (mirrors Forgejo/GitHub).
+	for (const t of await git.listTags({ fs, gitdir })) {
+		const ref = `refs/tags/${t}`;
+		const oid = await git.resolveRef({ fs, gitdir, ref });
+		refs.push({ ref, oid });
+		try {
+			const { type, object } = await git.readObject({ fs, gitdir, oid, format: "parsed" });
+			if (type === "tag") {
+				const target = (object as { object: string }).object;
+				refs.push({ ref: `${ref}^{}`, oid: target });
+			}
+		} catch {
+			// Lightweight tag — nothing to peel.
+		}
 	}
 
 	let headOid: string | null = null;

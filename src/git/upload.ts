@@ -13,8 +13,21 @@ import type { FsClient } from "isomorphic-git";
 import { band1PktLine, concatBytes, FLUSH, parsePktLines, pktLineStr } from "./protocol";
 import { listRefs } from "./refs";
 
-/** Collect every object reachable from `starts` (commits, trees, blobs). */
-async function collectReachable(fs: FsClient, gitdir: string, starts: string[]): Promise<string[]> {
+/**
+ * Collect every object reachable from `starts` (commits, trees, blobs).
+ *
+ * `known` is the set of oids the client already has (the `have`s from a fetch).
+ * When an oid is in `known` we stop the walk there — the client already has it
+ * and its ancestors — so the pack contains only the delta (B7 / P0-6). The
+ * conservative first step stops only on exact `have` oids; full transitive
+ * ancestry pruning is a later refinement.
+ */
+async function collectReachable(
+	fs: FsClient,
+	gitdir: string,
+	starts: string[],
+	known?: Set<string>,
+): Promise<string[]> {
 	const seen = new Set<string>();
 	const out: string[] = [];
 	const queue = [...starts];
@@ -22,6 +35,7 @@ async function collectReachable(fs: FsClient, gitdir: string, starts: string[]):
 		const oid = queue.pop() as string;
 		if (seen.has(oid)) continue;
 		seen.add(oid);
+		if (known?.has(oid)) continue; // client has this + its ancestors
 		out.push(oid);
 		const { type, object } = await git.readObject({ fs, gitdir, oid, format: "parsed" });
 		if (type === "commit") {
@@ -35,6 +49,31 @@ async function collectReachable(fs: FsClient, gitdir: string, starts: string[]):
 		// blobs terminate the walk
 	}
 	return out;
+}
+
+/**
+ * Add reachable tag objects to `oids` when the client negotiated `include-tag`
+ * (B3 / P0-3). For each tag whose peeled target is reachable from the wanted
+ * tips, include the tag object itself in the pack.
+ */
+async function collectIncludedTags(
+	fs: FsClient,
+	gitdir: string,
+	reachable: Set<string>,
+	oids: string[],
+): Promise<void> {
+	for (const t of await git.listTags({ fs, gitdir })) {
+		const ref = `refs/tags/${t}`;
+		const oid = await git.resolveRef({ fs, gitdir, ref });
+		let target = oid;
+		try {
+			const { type, object } = await git.readObject({ fs, gitdir, oid, format: "parsed" });
+			if (type === "tag") target = (object as { object: string }).object;
+		} catch {
+			// lightweight tag — target is the oid itself
+		}
+		if (reachable.has(target) || reachable.has(oid)) oids.push(oid);
+	}
 }
 
 /** Build the `info/refs?service=git-upload-pack` advertisement body. */
@@ -71,6 +110,8 @@ export async function uploadPackAdvertise(fs: FsClient, gitdir: string): Promise
 export async function uploadPackService(fs: FsClient, gitdir: string, body: Uint8Array): Promise<Uint8Array> {
 	const decoder = new TextDecoder();
 	const wants: string[] = [];
+	const haves: string[] = [];
+	let includeTag = false;
 	let done = false;
 	for (const item of parsePktLines(body)) {
 		if (item === null) {
@@ -81,13 +122,22 @@ export async function uploadPackService(fs: FsClient, gitdir: string, body: Uint
 		if (line.startsWith("want ")) {
 			const parts = line.trim().split(/\s+/);
 			if (parts[1]) wants.push(parts[1]);
+			// Capabilities (incl. include-tag) ride the first want line.
+			if (parts.includes("include-tag")) includeTag = true;
+		} else if (line.startsWith("have ")) {
+			const oid = line.trim().split(/\s+/)[1];
+			if (oid) haves.push(oid);
 		} else if (line.startsWith("done")) {
 			done = true;
 			break;
 		}
 	}
 	if (wants.length === 0) throw new Error("upload-pack: no want lines in request");
-	const allOids = await collectReachable(fs, gitdir, wants);
+	const known = new Set(haves);
+	const allOids = await collectReachable(fs, gitdir, wants, known);
+	if (includeTag) {
+		await collectIncludedTags(fs, gitdir, new Set(allOids), allOids);
+	}
 	const { packfile } = await git.packObjects({ fs, gitdir, oids: allOids });
 	if (!packfile) throw new Error("upload-pack: packObjects returned no packfile");
 	// The client always demuxes the result via `GitSideBand.demux`, so the

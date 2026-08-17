@@ -19,6 +19,7 @@ import { localGitBackend, r2GitBackend, type GitBackend } from "@/git/backend";
 import { mountGitRoutes } from "@/git/routes";
 import { handleQueueBatch, type QueueBatchLike } from "./queue";
 import { BusRegistry } from "@/services/event-bus";
+import { readBlob } from "@/git/read";
 import type { Db } from "@/services/types";
 import type { R2Like } from "@/git/fs-r2";
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
@@ -74,8 +75,12 @@ export const backend: WorkerBackend = {
 		return app;
 	},
 
-	// Cloudflare Queues consumer — drain CodeForge actions (metadata + webhooks).
+	// Cloudflare Queues consumer — drain CodeForge actions (metadata + webhooks
+	// + CI scheduling + `ci.run` hand-off).
 	async queue(batch: QueueBatchLike, env: WorkerEnv) {
+		const gitBackend: GitBackend | null = env.REPOS
+			? r2GitBackend(env.REPOS as R2Like)
+			: localGitBackend(process.env.GIT_ROOT || ".gitdata");
 		await handleQueueBatch(batch, {
 			db: drizzle(env.DB!) as Db,
 			// Sum of the git object bytes for `owner/repo.git` — one paginated
@@ -83,6 +88,28 @@ export const backend: WorkerBackend = {
 			measureRepoSize: env.REPOS ? r2MeasureSize(env.REPOS as R2Like) : undefined,
 			bus: BusRegistry.default(),
 			log: (...args) => console.log("[queue]", ...args),
+			// CI: discover `.codeforge-ci.yml` at the pushed ref, schedule a run,
+			// and enqueue `ci.run` back onto the queue for the runner to claim.
+			workflow: env.CODE_FORGE_QUEUE && gitBackend
+				? {
+						readWorkflowFile: async (event) => {
+							const fs = gitBackend.fsFor(event.owner, event.repo);
+							const gitdir = gitBackend.gitdirFor(event.owner, event.repo);
+							try {
+								const bytes = await readBlob(fs, gitdir, event.ref, ".codeforge-ci.yml");
+								return new TextDecoder().decode(bytes);
+							} catch {
+								return null; // no workflow file at that ref
+							}
+						},
+						enqueueRun: async (run) => {
+							await env.CODE_FORGE_QUEUE!.send(run);
+						},
+					}
+				: undefined,
+			// The execution backend is a Cloudflare Container running a runner
+			// (act_runner-compatible); until it exists, runs stay queued.
+			executeRun: undefined,
 		});
 	},
 };

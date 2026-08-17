@@ -118,7 +118,7 @@ export default createRoute(async (c) => {
 				{repositories.length > 0 ? (
 					<div class={css({ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 })}>
 						{repositories.map((r) => (
-							<Anchor key={r.id} href={`/repositories/${r.id}`} variant="plain">
+							<Anchor key={r.id} href={`/${r.owner_name ?? 'unknown'}/${r.lowerName || r.name}`} variant="plain">
 								<Card
 									class={css({
 										p: 5,

@@ -22,6 +22,8 @@ import { run } from "@/services/types";
 import { getByOwnerAndName } from "@/services/repository";
 import { listByRepo, type WebhookRow } from "@/services/webhooks";
 import { BusRegistry, type EventBus } from "@/services/event-bus";
+import { scheduleWorkflowRun } from "@/ci/schedule";
+import { WORKFLOW_FILE } from "@/ci/workflow";
 
 /** The `repo.push` action published by the git transport after a successful push. */
 export interface RepoPushEvent {
@@ -43,7 +45,16 @@ export interface R2ObjectEvent {
 	etag?: string;
 }
 
-export type CodeForgeAction = RepoPushEvent | R2ObjectEvent;
+/** A scheduled CI run, waiting for a runner to claim it. */
+export interface CiRunEvent {
+	type: "ci.run";
+	runId: string;
+	repoId: string;
+	ref: string;
+	oid: string;
+}
+
+export type CodeForgeAction = RepoPushEvent | R2ObjectEvent | CiRunEvent;
 
 /** Dependency-injected surroundings — everything the consumer touches is
  *  swappable, so the whole handler is unit-testable off the platform. */
@@ -55,6 +66,15 @@ export interface QueueDeps {
 	bus?: EventBus;
 	/** Overridable webhook sender (defaults to `defaultDispatchWebhook`). */
 	dispatchWebhook?: (hook: WebhookRow, event: RepoPushEvent) => Promise<void>;
+	/** CI wiring — workflow discovery + run scheduling on push (optional). */
+	workflow?: {
+		/** Read the workflow file at the pushed ref (null when absent). */
+		readWorkflowFile(event: RepoPushEvent): Promise<string | null>;
+		/** Hand the recorded run to the runner (queue `ci.run` message). */
+		enqueueRun(msg: CiRunEvent): Promise<void>;
+	};
+	/** Runner backend for `ci.run` — the Cloudflare Container runner, once wired. */
+	executeRun?: (event: CiRunEvent) => Promise<void>;
 	log?: (...args: unknown[]) => void;
 }
 
@@ -81,6 +101,8 @@ export async function handleAction(event: CodeForgeAction, deps: QueueDeps): Pro
 	switch (event?.type) {
 		case "repo.push":
 			return handleRepoPush(event, deps);
+		case "ci.run":
+			return handleCiRun(event, deps);
 		case "r2.object":
 			// Low-level object-store signal — the MVP consumer treats it as a
 			// size/cache sync trigger; coalesce by `owner/repo` before acting.
@@ -118,9 +140,51 @@ export async function handleRepoPush(event: RepoPushEvent, deps: QueueDeps): Pro
 		await dispatch(hook, event);
 	}
 
-	// 3) Bridge into the in-process bus for model reactivity.
+	// 3) CI — if the pushed ref has a trigger-matching `.codeforge-ci.yml`,
+	//    record a queued run and hand it to the runner. Best effort: a CI
+	//    failure must NOT retry the whole push message.
+	if (deps.workflow?.readWorkflowFile) {
+		try {
+			const yaml = await deps.workflow.readWorkflowFile(event);
+			if (yaml) {
+				const runId = await scheduleWorkflowRun(db, {
+					repoId: rec.id,
+					ref: event.ref,
+					commitSha: event.oid,
+					workflowYaml: yaml,
+				});
+				if (runId && deps.workflow.enqueueRun) {
+					await deps.workflow.enqueueRun({
+						type: "ci.run",
+						runId,
+						repoId: rec.id,
+						ref: event.ref,
+						oid: event.oid,
+					});
+				}
+			}
+		} catch (e) {
+			deps.log?.("repo.push: workflow scheduling failed (non-fatal):", e);
+		}
+	}
+
+	// 4) Bridge into the in-process bus for model reactivity.
 	(deps.bus ?? BusRegistry.default()).publish("cf.repo.push", event);
 }
+
+/** The `ci.run` action: hand a recorded run to the execution backend. */
+export async function handleCiRun(event: CiRunEvent, deps: QueueDeps): Promise<void> {
+	deps.log?.(`ci.run ${event.runId} (${event.ref} @ ${event.oid.slice(0, 7)}) on ${event.repoId}`);
+	if (deps.executeRun) {
+		await deps.executeRun(event);
+		return;
+	}
+	// MVP: no runner wired in this deployment — the run stays `queued`.
+	deps.log?.(`ci.run: no runner backend wired — run ${event.runId} stays queued`);
+}
+
+/** Convenience export for the run row a `ci.run` refers to. */
+export { WORKFLOW_FILE };
 
 /** POST the forge event to a hook URL, HMAC-SHA256 signing when a secret is set. */
 export async function defaultDispatchWebhook(hook: WebhookRow, event: RepoPushEvent): Promise<void> {
