@@ -1,3 +1,6 @@
 [submodule "packages/forgejo"]
 	path = packages/forgejo
 	url = https://codeberg.org/yumchen/forgejo.git
+[submodule "packages/isomorphic-git"]
+	path = packages/isomorphic-git
+	url = https://github.com/yumin-chen/isomorphic-git.git
