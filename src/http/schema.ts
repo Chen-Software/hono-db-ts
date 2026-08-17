@@ -109,7 +109,7 @@ export function resolveDatabaseTarget(
 
 	// D1 — explicit type, or the d1: scheme / a bare database name under type=d1.
 	if (type === "d1" || /^d1:/.test(trimmed)) {
-		const name = trimmed.replace(/^d1:(?:\/\/)?/, "") || "bbs-db";
+		const name = trimmed.replace(/^d1:(?:\/\/)?/, "") || "codeforge";
 		return { kind: "d1", url: name };
 	}
 

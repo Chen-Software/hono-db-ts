@@ -8,9 +8,9 @@
  * (`Queriable` / `Siftable` / `Servable`) cannot — those only say WHICH rows
  * match; `Aggregable` says what the matching rows ADD UP to:
  *
- *   - "which users posted the most?"  → GET /posts/aggregate?groupBy=authorId&count=*&orderBy=count:desc
+ *   - "which users own the most repositories?"  → GET /repositories/aggregate?groupBy=ownerId&count=*&orderBy=count:desc
  *   - "average age per role?"         → GET /users/aggregate?groupBy=role&avg=age
- *   - "how many threads per board?"   → GET /threads/aggregate?groupBy=boardId&count=*
+ *   - "average stars per repository?" → GET /repositories/aggregate?groupBy=ownerId&avg=numStars
  *
  * Two surfaces, ONE query shape (so in-memory and SQL agree by construction):
  *
@@ -53,11 +53,11 @@
  *
  * @example
  * const app = new Hono();
- * Post.serveAggregate(app, client);   // GET /posts/aggregate
+ * Repository.serveAggregate(app, client);   // GET /repositories/aggregate
  *
- * const rows = Post.aggregate(allPosts, {
- *   groupBy: "authorId", count: "*", published: "true", orderBy: "count:desc",
- * });                                 // [{ authorId, count }, …] most-posters first
+ * const rows = Repository.aggregate(allRepos, {
+ *   groupBy: "ownerId", count: "*", orderBy: "count:desc",
+ * });                                       // [{ ownerId, count }, …] most-repos first
  */
 
 import { getTableName } from "drizzle-orm";

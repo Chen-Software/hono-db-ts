@@ -60,7 +60,7 @@ function timeAgo(iso: string): string {
 
 /**
  * SearchBox — a client-side island that queries the JSON API (`/api/search?q=`)
- * and renders the matching threads + posts in a live autocomplete dropdown.
+ * and renders the matching repositories in a live autocomplete dropdown.
  * The API is served by the same app (`app/server.ts` mounts `buildQueryApp`
  * under `/api`), so this works whether the page is served by
  * `bun run src/main.ts serve` or the UI dev server.

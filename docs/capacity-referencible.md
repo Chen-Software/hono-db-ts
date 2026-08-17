@@ -156,9 +156,9 @@ Consequences:
 - The accessors are generated at runtime with **relation-specific names**
   (`getUser`, `getPosts`, `getThreads`, …) that TypeScript cannot know.
   `Referencible` is **not** in the `CapacityInstance` type-fold (only capacities
-  with a fixed API surface are), and the BBS models do **not** `declare` the
-  accessors. So `user.getPosts()` is **runtime-valid but invisible to `tsc`**
-  unless you add `declare getPosts(): Post[]` yourself.
+  with a fixed API surface are), and the current models do **not** `declare` the
+  accessors. So `user.getRepositories()` is **runtime-valid but invisible to
+  `tsc`** unless you add `declare getRepositories(): Repository[]` yourself.
 - The typed surface you provide at compose time is `ReferencibleOptions` /
   `RelationSpec`.
 

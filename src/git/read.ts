@@ -43,7 +43,15 @@ async function oidAtPath(fs: FsClient, gitdir: string, startOid: string, path: s
 
 /** List the entries of a directory at `ref:path` (default: repo root). */
 export async function listTree(fs: FsClient, gitdir: string, ref: string, path = "/"): Promise<TreeEntry[]> {
-	const commitOid = await git.resolveRef({ fs, gitdir, ref });
+	// A freshly created repo has no commits/refs yet — `resolveRef` throws.
+	// That is not an error: the tree of an empty repo is empty. Path lookup
+	// failures below still throw (404) so `read`/`tree?path=` stay correct.
+	let commitOid: string;
+	try {
+		commitOid = await git.resolveRef({ fs, gitdir, ref });
+	} catch {
+		return [];
+	}
 	const { oid, type } = await oidAtPath(fs, gitdir, commitOid, path);
 	if (type !== "tree") throw new Error(`not a directory: ${path}`);
 	const { tree } = await git.readTree({ fs, gitdir, oid });
@@ -75,7 +83,13 @@ export async function logCommits(
 ): Promise<CommitInfo[]> {
 	const skip = opts.skip ?? 0;
 	const max = opts.max ?? 30;
-	const commits = await git.log({ fs, gitdir, ref, depth: skip + max });
+	// Empty repo (no refs yet) → no history, not an error.
+	let commits: Awaited<ReturnType<typeof git.log>>;
+	try {
+		commits = await git.log({ fs, gitdir, ref, depth: skip + max });
+	} catch {
+		return [];
+	}
 	return commits.slice(skip, skip + max).map((c) => ({
 		oid: c.oid,
 		message: c.commit.message,

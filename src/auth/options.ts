@@ -17,7 +17,7 @@ import type { BetterAuthOptions } from "better-auth";
  * Docs: https://www.better-auth.com/docs/reference/options
  */
 export const betterAuthOptions: BetterAuthOptions = {
-	appName: "BBS Forum",
+	appName: "CodeForge",
 	/** Base path for the auth endpoints — the UI and clients call `/api/auth/...`. */
 	basePath: "/api/auth",
 	/** Email + password auth (sign-up / sign-in / sign-out / get-session). */
@@ -31,18 +31,18 @@ export const betterAuthOptions: BetterAuthOptions = {
 	},
 	/**
 	 * Generate UUID v4 ids for every Better Auth entity (users, sessions,
-	 * accounts, …). The forum's domain schema types all id columns as
+	 * accounts, …). The forge's domain schema types all id columns as
 	 * `crypto.UUID` (and validates them as such), so the authenticated user's
-	 * id — which the guarded `POST /threads` stamps onto `authorId` — must be a
-	 * UUID too. Without this, sign-ups would produce nanoid-style ids that fail
-	 * the `threads.authorId` UUID assertion.
+	 * id — which the guarded `POST /repositories` stamps onto `ownerId` — must
+	 * be a UUID too. Without this, sign-ups would produce nanoid-style ids that
+	 * fail the `repositories.ownerId` UUID assertion.
 	 */
 	advanced: {
 		// Emit UUID v4 ids for every Better Auth entity (users, sessions,
 		// accounts, …) so the authenticated user's id — which the guarded
-		// `POST /threads` stamps onto `authorId` — matches the forum schema's
-		// `crypto.UUID` type. Without this, sign-ups produce nanoid-style ids
-		// that fail the `threads.authorId` UUID assertion.
+		// `POST /repositories` stamps onto `ownerId` — matches the forge
+		// schema's `crypto.UUID` type. Without this, sign-ups produce
+		// nanoid-style ids that fail the `repositories.ownerId` UUID assertion.
 		database: { generateId: "uuid" },
 	},
 };

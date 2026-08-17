@@ -13,7 +13,7 @@
  *   - Cloudflare D1 (`env.DB`) — wrapped with `drizzle-orm/d1`,
  *   - in-memory bun:sqlite (the CF sqlite worker backend).
  *
- * The auth DB lives in the SAME database file/binding as the BBS data (see
+ * The auth DB lives in the SAME database file/binding as the domain data (see
  * `src/auth/schema.ts` + `drizzle/*_auth_sqlite_create.sql`), so no separate
  * datastore is needed.
  *
@@ -30,7 +30,7 @@ import { authSchema } from "./schema";
 
 /** Runtime pieces Better Auth needs that differ per deployment. */
 export interface AuthEnv {
-	/** Public base URL of the auth endpoints (e.g. `https://bbs.example.workers.dev`). */
+	/** Public base URL of the auth endpoints (e.g. `https://codeforge.example.workers.dev`). */
 	baseURL: string;
 	/** Signing secret (>= 32 chars). Use a Cloudflare secret binding in prod. */
 	secret: string;

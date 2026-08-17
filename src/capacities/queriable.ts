@@ -25,10 +25,10 @@ export type QueryableMode = "eq" | "substring" | "range" | "list" | "none";
 /**
  * Queriable — a reusable capacity that turns ANY model into a queryable entity
  * with automatic, SCHEMA-INFERRED query-param semantics. It replaces the
- * hand-written `filterPosts` boilerplate: instead of a per-model predicate
- * function, `Queriable` reads the model's reflected schema (via the same
+ * hand-written `filterRepositories` boilerplate: instead of a per-model
+ * predicate function, `Queriable` reads the model's reflected schema (via the same
  * `deriveSqlPlan` bridge `SqlSerialisable` uses) and derives, per field, the
- * correct matcher. `Post` and `User` share the exact same code path.
+ * correct matcher. `Repository` and `User` share the exact same code path.
  *
  * How the matcher for each field is decided (in priority order):
  *   1. A field-level override in the capacity options (`{ fields: { created_at:
@@ -48,11 +48,11 @@ export type QueryableMode = "eq" | "substring" | "range" | "list" | "none";
  * the predicate simply passes (so extra/optional query params can't 400).
  *
  * The capacity never touches SQL or the transport layer; it filters an in-memory
- * array of model instances (the same contract `filterPosts` had), so it slots
+ * array of model instances (the same contract `filterRepositories` had), so it slots
  * straight into a controller:
  *
  * @example
- * const filtered = Post.filter(items, c.req.query());
+ * const filtered = Repository.filter(items, c.req.query());
  * const filtered = User.filter(items, c.req.query());
  */
 export interface QueriableOptions {

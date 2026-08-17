@@ -79,3 +79,53 @@ test("repository service: create/read/listByOwner/update + keyset cursor + ON DE
 	const afterDelete = await repo.getPage(db, id1);
 	expect(afterDelete.repository.ownerId).toBe(null);
 });
+
+test("repository service: create enforces name grammar + (owner, name) uniqueness; git route resolves owner login", async () => {
+	const { client, db, adapter } = makeDb();
+	await ensureSchema(adapter as any);
+
+	const insertUser = (id: string, name: string) =>
+		client.execute({
+			sql: `INSERT INTO "users" ("id","created_at","name","email","role","age") VALUES (?,?,?,?,?,?)`,
+			args: [id, new Date().toISOString(), name, `${id}@example.com`, "member", 30],
+		});
+	await insertUser("u9", "octocat");
+	await insertUser("u10", "other-user");
+
+	const id = await repo.create(db, {
+		ownerId: "u9",
+		name: "hello-world",
+		lowerName: "hello-world",
+		description: "hi",
+	});
+	expect(id).toBeTruthy();
+
+	// Duplicate (ownerId, lowerName) is rejected.
+	await expect(
+		repo.create(db, { ownerId: "u9", name: "Hello World", lowerName: "hello-world", description: "" }),
+	).rejects.toBeInstanceOf(repo.DuplicateRepositoryError);
+
+	// The SAME name under a DIFFERENT owner is fine (the uniqueness is per owner).
+	const otherId = await repo.create(db, {
+		ownerId: "u10",
+		name: "hello-world",
+		lowerName: "hello-world",
+		description: "",
+	});
+	expect(otherId).toBeTruthy();
+
+	// Name grammar is enforced (must match ^[a-z0-9]+(?:-[a-z0-9]+)*$).
+	await expect(
+		repo.create(db, { ownerId: "u9", name: "bad name", lowerName: "bad_name", description: "" }),
+	).rejects.toBeInstanceOf(repo.InvalidRepositoryNameError);
+
+	// The git route key `{owner}/{repo}` resolves by owner LOGIN (case-insensitive
+	// on the repo side via lowerName).
+	const found = await repo.getByOwnerAndName(db, "octocat", "HELLO-WORLD");
+	expect(found?.id).toBe(id);
+	expect(found?.isPrivate).toBe(false);
+
+	// listByOwner is owner-scoped (u9 sees only its own repo).
+	const mine = await repo.listByOwner(db, "u9");
+	expect(mine.map((r) => r.name)).toEqual(["hello-world"]);
+});

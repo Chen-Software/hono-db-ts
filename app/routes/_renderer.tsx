@@ -34,7 +34,7 @@ export default jsxRenderer(({ children }) => {
           (app/islands/theme-switcher.tsx) then just mutates data-palette /
           data-theme.
 
-          Theme storage (`bbs.theme`) holds the *preference*: `light` | `dark`
+          Theme storage (`cf.theme`) holds the *preference*: `light` | `dark`
           | `system`. The CSS only knows the *resolved* scheme via
           `data-theme=light|dark` (see app/theme/conditions.ts), so:
             - light/dark → set data-theme directly;
@@ -48,4 +48,4 @@ export default jsxRenderer(({ children }) => {
   )
 })
 
-const SCRIPT = `(function(){try{var p=localStorage.getItem("bbs.palette");if(p){document.documentElement.dataset.palette=p;}var m=window.matchMedia("(prefers-color-scheme: dark)");var apply=function(){try{var t=localStorage.getItem("bbs.theme");document.documentElement.dataset.theme=t==="light"||t==="dark"?t:(m.matches?"dark":"light");}catch(e){}};apply();if(m.addEventListener){m.addEventListener("change",apply);}}catch(e){}})();`
+const SCRIPT = `(function(){try{var p=localStorage.getItem("cf.palette");if(p){document.documentElement.dataset.palette=p;}var m=window.matchMedia("(prefers-color-scheme: dark)");var apply=function(){try{var t=localStorage.getItem("cf.theme");document.documentElement.dataset.theme=t==="light"||t==="dark"?t:(m.matches?"dark":"light");}catch(e){}};apply();if(m.addEventListener){m.addEventListener("change",apply);}}catch(e){}})();`

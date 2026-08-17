@@ -77,7 +77,7 @@ export function buildWranglerConfig(): WranglerConfig {
 	const type = databaseType();
 	const prod = env() === "production";
 	const d1 = isD1();
-	const dbName = d1Database() ?? "bbs-db";
+	const dbName = d1Database() ?? "codeforge";
 
 	const config: WranglerConfig = {
 		$schema: "./node_modules/wrangler/config-schema.json",

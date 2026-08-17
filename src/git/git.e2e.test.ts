@@ -164,6 +164,58 @@ test("git smart-HTTP: push then clone round-trips a commit", async () => {
 	}
 });
 
+test("git smart-HTTP: a freshly created (empty) repo advertises empty refs — clone-before-push + empty read API", async () => {
+	const base = mkdtempSync(join(tmpdir(), "codeforge-git-"));
+	const gitRoot = join(base, "gitdata");
+	let db: any = null;
+
+	try {
+		const dbFile = join(base, "test.db");
+		const target = resolveDatabaseTarget(`file:${dbFile}`, "sqlite");
+		db = await createQueryDb(target);
+		await seed(db);
+
+		const gitBackend = localGitBackend(gitRoot);
+		const app = await buildApp(db, gitBackend);
+
+		// `git clone` of a repo that has a DB row but NO git data yet: the
+		// upload-pack advertisement must be a valid empty repo (ensureRepo
+		// initialises the bare repo on info/refs for BOTH services).
+		const adv = await app.request(
+			new Request(`http://localhost/${OWNER}/${REPO}.git/info/refs?service=git-upload-pack`),
+		);
+		expect(adv.status).toBe(200);
+		expect(adv.headers.get("content-type") ?? "").toContain("application/x-git-upload-pack-advertisement");
+		const advBody = await adv.text();
+		expect(advBody).toContain("# service=git-upload-pack");
+		expect(advBody).not.toContain("refs/heads/"); // zero refs → empty repo
+
+		// First-push path (receive-pack advertisement) also works.
+		const adv2 = await app.request(
+			new Request(`http://localhost/${OWNER}/${REPO}.git/info/refs?service=git-receive-pack`),
+		);
+		expect(adv2.status).toBe(200);
+
+		// The read API on the empty repo returns an EMPTY tree / no commits —
+		// not a 404/500 (the repo page shows an empty state, not an error).
+		const treeRes = await app.request(new Request(`http://localhost/api/page/repositories/${REPO_ID}/tree`));
+		expect(treeRes.status).toBe(200);
+		const treeJson = await treeRes.json();
+		expect(treeJson.data.entries).toEqual([]);
+		expect(treeJson.data.readme).toBeNull();
+
+		const commitsRes = await app.request(new Request(`http://localhost/api/page/repositories/${REPO_ID}/commits`));
+		expect(commitsRes.status).toBe(200);
+		const commitsJson = await commitsRes.json();
+		expect(commitsJson.data.commits).toEqual([]);
+	} finally {
+		try {
+			await db?.$client?.close?.();
+		} catch {}
+		rmSync(base, { recursive: true, force: true });
+	}
+});
+
 async function buildApp(db: any, gitBackend: ReturnType<typeof localGitBackend>): Promise<Hono> {
 	const app = new Hono();
 	// Inject a fake session so the (owner-only) push gate passes in the test.

@@ -272,7 +272,7 @@ other SQL-aware capacity is a consumer of the plan it derives.
 - [`capacity-validatable.md`](./capacity-validatable.md) — `Validatable`'s assert
   enforces the column `CHECK`/format invariants (e.g. `id` `uuid`) at the data layer.
 - [`data-models-storage.md`](../docs/data-models-storage.md) — the whole
-  capacity model, the BBS models, storage layers, and the "query post history"
+  capacity model, the current models, storage layers, and the "query history"
   recipe.
 - `src/capacities/sql-serialisable.ts` — the bridge (`toDrizzleTable`,
   `deriveSqlPlan`) + the capacity.

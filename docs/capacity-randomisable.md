@@ -110,10 +110,10 @@ offers no seed plumbing (and `RandomisableOptions.seedField` is unread).
 - **Not** auto-prepended — only `Triggerable` is. Wherever you place it in the
   capacity array, it folds left-to-right.
 - New-subclass style; registration-gated via the prototype `capacities` Set.
-- Worn pervasively across the BBS models: `User` (`user.ts:183`), `Board`
-  (`board.ts:163`), `Thread` (`thread.ts:158`), `Reply` (`reply.ts:158`),
-  `Post` (`post.ts:236`). Primary consumer call sites: `Post.random()` /
-  `User.random()` in `queriable.test.ts`, and `db:seed` in `cli/main.ts`.
+- Worn pervasively across the current models: `User` (`src/models/user.ts`),
+  `Repository` (`src/models/repository.ts`). Primary consumer call sites:
+  `Repository.random()` / `User.random()` in `queriable.test.ts`, and `db:seed`
+  in `cli/main.ts`.
 
 ## 7. Sibling capacities
 

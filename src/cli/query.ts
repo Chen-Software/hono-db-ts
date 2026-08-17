@@ -3,7 +3,7 @@ import { SQL } from "bun";
 import { databaseUrl } from "@/macros/envs" with { type: "macro" };
 
 /**
- * `query <table> [jsonFilter] [flags]` — query a BBS model table via
+ * `query <table> [jsonFilter] [flags]` — query a model table via
  * `drizzle-orm/bun-sql` + the `databaseUrl()` macro (the Bun + Drizzle client
  * pattern: `new SQL(url)` → `drizzle({ client })`, exactly as the app does).
  *

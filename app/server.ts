@@ -17,7 +17,7 @@ import { databaseType, databaseUrl } from '../src/macros/envs' with { type: 'mac
  *      `drizzle/*.sql` when the target is empty),
  *   2. exposes it to route handlers as `c.env.sql` so SSR pages can query,
  *   3. mounts the JSON query app (`buildQueryApp`) under `/api` so pages (and
- *      the browser) can call the "good BBS queries" at `/api/...`.
+ *      the browser) can call the query API at `/api/...`.
  *   4. (optional) mounts Better Auth under `/api/auth` when `BETTER_AUTH_ENABLED`
  *      isn't `false` — see the DCE note below.
  *

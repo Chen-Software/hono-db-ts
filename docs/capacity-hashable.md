@@ -8,11 +8,12 @@
 > `createContentAddressing` enabler (with an optional version bump for
 > versioned entities).
 
-`Hashable` is what makes `Post` content-addressed: equal `body` ⇒ equal
-`contentHash`, and `post.verify()` proves the body hasn't been tampered with.
+`Hashable` is what makes a content entity addressable: equal `body` ⇒ equal
+`contentHash`, and `entity.verify()` proves the body hasn't been tampered with.
 It is built on the `Immutable` marker — content addressing *requires*
 immutability — and composes with `Versionable` for versioned + addressed
-entities.
+entities. No model in this repo currently wears it; it is available for the
+blob/issue-body use cases.
 
 ---
 

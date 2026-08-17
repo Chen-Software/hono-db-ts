@@ -28,20 +28,19 @@ import { defineModel } from "./base";
  * `Repository`). This is the top-level unit of a forge, owned by a `User`
  * (or, later, an `Organization`).
  *
- * Follows the exact capacity pattern established by `Board`: `Identifiable`
- * (uuid `id`), `Timestamped` (`created_at`), SQL projection (table
- * `repositories`), a `Referencible` owner relation `repo.getOwner()` derived
- * from the `ownerId` `Reference` FK, and the schema-driven query/pagination
- * capacities. Domain fields are a *draft* subset of Forgejo's `Repository`
- * struct: `ownerId`, `name`/`lowerName` (the `{owner}/{repo}` routing key),
- * `description`, `defaultBranch`, `website`, the `is*` flags, `topics`, the
- * `num*` counters, `size`, and `status`.
+ * Follows the same capacity pattern as `User`: `Identifiable` (uuid `id`),
+ * `Timestamped` (`created_at`), SQL projection (table `repositories`), a
+ * `Referencible` owner relation `repo.getOwner()` derived from the `ownerId`
+ * `Reference` FK, and the schema-driven query/pagination capacities. Domain
+ * fields are a *draft* subset of Forgejo's `Repository` struct: `ownerId`,
+ * `name`/`lowerName` (the `{owner}/{repo}` routing key), `description`,
+ * `defaultBranch`, `website`, the `is*` flags, `topics`, the `num*` counters,
+ * `size`, and `status`.
  *
  * NOTE: Forgejo uses `onDelete: cascade` for the owner FK (deleting a user
- * deletes their repos). This draft mirrors the proven `Board` pattern and uses
- * `setNull` + an optional/nullable `ownerId` so the in-memory referential
- * action stays coherent; tighten to `cascade` once the deletion semantics are
- * pinned down.
+ * deletes their repos). This draft uses `setNull` + an optional/nullable
+ * `ownerId` so the in-memory referential action stays coherent; tighten to
+ * `cascade` once the deletion semantics are pinned down.
  */
 interface RepositorySchema extends IdentifiableSchema<UUID>, TimestampedSchema {
 	/** Owning user — FK to `User`. Owner side (derived accessor `getOwner()`). */
@@ -158,12 +157,12 @@ const RepositorySchemaModule: SqlSchemaModule<RepositorySchema> = {
 
 /**
  * RepositoryModel — the classified constructor base PLUS its composed
- * capacities. Mirrors `Board`'s stack: `SqlSerialisable` derives the drizzle
- * `repositories` table + the `ownerId` FK (via the `Reference` tag);
- * `Referencible` derives `getOwner()` from the tag; `Validatable` asserts on
- * new + update; `Queriable` + `Siftable` give schema-driven filtering + cursor
- * pagination; `Servable` generates `GET /repositories` + `GET /repositories/:id`
- * via `Repository.serve(app, client)`; `Aggregable` adds
+ * capacities. `SqlSerialisable` derives the drizzle `repositories` table + the
+ * `ownerId` FK (via the `Reference` tag); `Referencible` derives `getOwner()`
+ * from the tag; `Validatable` asserts on new + update; `Queriable` +
+ * `Siftable` give schema-driven filtering + cursor pagination; `Servable`
+ * generates `GET /repositories` + `GET /repositories/:id` via
+ * `Repository.serve(app, client)`; `Aggregable` adds
  * `GET /repositories/aggregate`.
  */
 const RepositoryModel = defineModel<RepositorySchema>({

@@ -105,25 +105,20 @@ const tables = (await exec.unsafe(
 	`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`,
 )) as { name: string }[];
 const names = tables.map((t) => t.name).sort();
-for (const t of ["users", "boards", "threads", "replies", "posts"]) {
+for (const t of ["users", "repositories"]) {
 	ok(`migration creates "${t}" table`, names.includes(t));
 }
 
 // 2. SEEDING — via the D1 adapter (INSERT OR REPLACE, FK wiring)
 const uid = randomUUID();
-const bid = randomUUID();
-const tid = randomUUID();
+const rid = randomUUID();
 await exec.unsafe(
 	`INSERT OR REPLACE INTO "users" ("id","created_at","name","email","role","age") VALUES (?,?,?,?,?,?)`,
 	[uid, "2000-01-01T00:00:00.000Z", "Ada", "ada@d1.test", "admin", 30],
 );
 await exec.unsafe(
-	`INSERT OR REPLACE INTO "boards" ("id","created_at","name","slug","description","moderatorId") VALUES (?,?,?,?,?,?)`,
-	[bid, "2001-01-01T00:00:00.000Z", "Tech", "tech", "fast", uid],
-);
-await exec.unsafe(
-	`INSERT OR REPLACE INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") VALUES (?,?,?,?,?,?,?,?)`,
-	[tid, "2002-01-01T00:00:00.000Z", "2002-01-02T00:00:00.000Z", bid, uid, "Hello D1", 1, 0],
+	`INSERT OR REPLACE INTO "repositories" ("id","created_at","ownerId","name","lowerName","description","defaultBranch","website","isPrivate","isArchived","isMirror","isTemplate","objectFormatName","topics","numStars","numForks","numOpenIssues","numClosedIssues","size","avatar","status") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	[rid, "2001-01-01T00:00:00.000Z", uid, "Hello D1", "hello-d1", "a repo", "main", "", 0, 0, 0, 0, "sha1", "[]", 0, 0, 0, 0, 0, "", 0],
 );
 const seedCount = (
 	(await exec.unsafe(`SELECT COUNT(*) AS n FROM "users"`)) as { n: number }[]
@@ -136,38 +131,38 @@ const stats = await statsRes.json();
 ok("query /stats via D1 adapter", statsRes.status === 200 && stats.ok === true);
 ok(
 	"query /stats counts",
-	stats.data.users === 1 && stats.data.boards === 1 && stats.data.threads === 1,
-	`users=${stats.data.users} boards=${stats.data.boards} threads=${stats.data.threads}`,
+	stats.data.users === 1 && stats.data.repositories === 1,
+	`users=${stats.data.users} repositories=${stats.data.repositories}`,
 );
 
-const boardsRes = await app.fetch(new Request("http://local/boards?limit=5"));
-const boards = await boardsRes.json();
-ok("query /boards via D1 adapter", boardsRes.status === 200 && boards.data.rows.length === 1);
+const reposRes = await app.fetch(new Request("http://local/repositories?limit=5"));
+const repos = await reposRes.json();
+ok("query /repositories via D1 adapter", reposRes.status === 200 && repos.data.rows.length === 1);
 
 // 4. CRUD — INSERT / SELECT / UPDATE / DELETE through the D1 adapter
-const tid2 = randomUUID();
+const rid2 = randomUUID();
 await exec.unsafe(
-	`INSERT OR REPLACE INTO "threads" ("id","created_at","updated_at","boardId","authorId","title","pinned","locked") VALUES (?,?,?,?,?,?,?,?)`,
-	[tid2, "2003-01-01T00:00:00.000Z", "2003-01-01T00:00:00.000Z", bid, uid, "CRUD", 0, 0],
+	`INSERT OR REPLACE INTO "repositories" ("id","created_at","ownerId","name","lowerName","description","defaultBranch","website","isPrivate","isArchived","isMirror","isTemplate","objectFormatName","topics","numStars","numForks","numOpenIssues","numClosedIssues","size","avatar","status") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	[rid2, "2002-01-01T00:00:00.000Z", uid, "CRUD", "crud", "", "main", "", 0, 0, 0, 0, "sha1", "[]", 0, 0, 0, 0, 0, "", 0],
 );
 const afterInsert = (
-	(await exec.unsafe(`SELECT COUNT(*) AS n FROM "threads"`)) as { n: number }[]
+	(await exec.unsafe(`SELECT COUNT(*) AS n FROM "repositories"`)) as { n: number }[]
 )[0]!.n;
-ok("CRUD INSERT", afterInsert === 2, `threads=${afterInsert}`);
+ok("CRUD INSERT", afterInsert === 2, `repositories=${afterInsert}`);
 
-await exec.unsafe(`UPDATE "boards" SET "name" = ? WHERE "id" = ?`, ["Tech v2", bid]);
-const updatedBoard = (
-	(await exec.unsafe(`SELECT "name" FROM "boards" WHERE "id" = ?`, [bid])) as {
+await exec.unsafe(`UPDATE "repositories" SET "name" = ? WHERE "id" = ?`, ["Tech v2", rid]);
+const updatedRepo = (
+	(await exec.unsafe(`SELECT "name" FROM "repositories" WHERE "id" = ?`, [rid])) as {
 		name: string;
 	}[]
 )[0]!;
-ok("CRUD UPDATE", updatedBoard.name === "Tech v2", `name=${updatedBoard.name}`);
+ok("CRUD UPDATE", updatedRepo.name === "Tech v2", `name=${updatedRepo.name}`);
 
-await exec.unsafe(`DELETE FROM "threads" WHERE "id" = ?`, [tid2]);
+await exec.unsafe(`DELETE FROM "repositories" WHERE "id" = ?`, [rid2]);
 const afterDelete = (
-	(await exec.unsafe(`SELECT COUNT(*) AS n FROM "threads"`)) as { n: number }[]
+	(await exec.unsafe(`SELECT COUNT(*) AS n FROM "repositories"`)) as { n: number }[]
 )[0]!.n;
-ok("CRUD DELETE", afterDelete === 1, `threads=${afterDelete}`);
+ok("CRUD DELETE", afterDelete === 1, `repositories=${afterDelete}`);
 
 console.log("\n=== D1 VERIFICATION (mock binding over SQLite) ===\n" + results.join("\n"));
 client.close();

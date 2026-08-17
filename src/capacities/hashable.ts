@@ -36,8 +36,8 @@ type ContentField<K extends string> = { readonly [P in K]: string };
  * helpers live in exactly one place.
  *
  * As a `CapacityComposer` (`function Hashable(Base, mod, options)`) it ALSO
- * gives the MODEL the hash instance API directly — `post.hash()`,
- * `post.verify()`, `post.address()` — and registers the capacity, so the
+ * gives the MODEL the hash instance API directly — `repo.hash()`,
+ * `repo.verify()`, `repo.address()` — and registers the capacity, so the
  * hashing behaviour is available ergonomically with zero per-model boilerplate.
  * Crucially, the mixin is SELF-SUFFICIENT for construction: its constructor
  * STAMPS `contentHash` from the content field (named by `key`) on every
@@ -105,9 +105,9 @@ export function hashContent(content: string): string {
  * guarantee of content-hashing.
  *
  * @param entity - a Hashable instance or plain data object.
- * @param contentKey - the content field name ("content" by default; "body" for
- *   a Post). MUST be passed explicitly for non-default keys, because the key
- *   name is erased at runtime and the function needs to know which field to hash.
+ * @param contentKey - the content field name ("content" by default). MUST be
+ *   passed explicitly for non-default keys, because the key name is erased at
+ *   runtime and the function needs to know which field to hash.
  */
 export function verifyContentAddress<K extends string>(
 	entity: Hashable<K>,
@@ -125,11 +125,11 @@ export function verifyContentAddress<K extends string>(
  * (construction) and `updateHash` (update).
  *
  * Generic over `D` (the full entity data shape) so the result still carries
- * every other field — it is assignable back to `D` (e.g. `PostData`), which is
- * what lets the caller feed it straight into a model's `from`.
+ * every other field — it is assignable back to `D` (e.g. `RepositoryData`),
+ * which is what lets the caller feed it straight into a model's `from`.
  *
  * @example
- * const post = Post.from(withContentHash({ ...data, body }, "body"));
+ * const repo = Repository.from(withContentHash({ ...data, body }, "body"));
  */
 export function withContentHash<K extends string, D extends Record<K, string>>(
 	payload: D & { contentHash?: string },
@@ -151,8 +151,8 @@ export function withContentHash<K extends string, D extends Record<K, string>>(
  *
  * @example
  * const assertBodyHash = createAssertHash("body");
- * // inside Post.from:
- * return new Post(assertBodyHash(data));
+ * // inside Blob.from:
+ * return new Blob(assertBodyHash(data));
  */
 export function createAssertHash<K extends string>(key: K) {
 	return <D extends Record<K, string>>(
@@ -183,8 +183,8 @@ export const validateHashable = typia.createValidate<Hashable>();
  * model's `update` method:
  *
  * @example
- * const updatePost = updateHash("body", Post);
- * // inside Post.update:  return updatePost(this, patch);
+ * const updateBlob = updateHash("body", Blob);
+ * // inside Blob.update:  return updateBlob(this, patch);
  */
 export function updateHash<
 	K extends string,
@@ -218,7 +218,7 @@ export function updateHash<
  *                         versioned (the two capacities are independent).
  * - `updateForVersionable`— RE-DERIVE the hash AND bump the version, for entities
  *                         that wear BOTH `Hashable` and `Versionable`
- *                         (e.g. `Post`). Delegates to `updateHash`.
+ *                         (e.g. `Blob`). Delegates to `updateHash`.
  *
  * @example (content-addressable but NOT versioned)
  * const CA = createContentAddressing("content");
@@ -226,10 +226,10 @@ export function updateHash<
  * update(p) { return blobUpdate(this, p); }
  * const blobUpdate = CA.updateFor(Blob);
  *
- * @example (both — e.g. Post)
+ * @example (both — e.g. Blob)
  * const CA = createContentAddressing("body");
  * const assertBodyHash = CA.assertHash;
- * const updatePost = CA.updateForVersionable(Post);
+ * const updateBlob = CA.updateForVersionable(Blob);
  */
 export function createContentAddressing<K extends string>(key: K) {
 	return {
@@ -275,10 +275,10 @@ export function createContentAddressing<K extends string>(key: K) {
 
 /**
  * Options for the {@link Hashable} mixin — the content field name.
- * Pass `"body"` for `Post`.
+ * Pass `"body"` for `Blob`.
  */
 export interface HashableOptions<K extends string = "content"> {
-	/** content field name; defaults to `"content"`. For `Post`, pass `"body"`. */
+	/** content field name; defaults to `"content"`. For `Blob`, pass `"body"`. */
 	key?: K;
 }
 

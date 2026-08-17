@@ -29,12 +29,12 @@ export async function getHome(db: Db): Promise<HomePage> {
 		 FROM "repositories" r
 		 LEFT JOIN "users" u ON u.id = r."ownerId"
 		 ORDER BY r."numStars" DESC, r."created_at" DESC
-		 LIMIT ${PAGE.homeBoards}`,
+		 LIMIT ${PAGE.homeRepositories}`,
 	)
 
 	const allRepositories = await all(
 		db,
-		`SELECT id, name FROM "repositories" ORDER BY "created_at" DESC LIMIT ${PAGE.allBoards}`,
+		`SELECT id, name FROM "repositories" ORDER BY "created_at" DESC LIMIT ${PAGE.allRepositories}`,
 	)
 
 	return { stats, repositories, allRepositories }

@@ -93,7 +93,7 @@ datastore. The tables are:
 | Server session | `src/auth/context.ts` | `getSession(c)` for SSR routes |
 | Client | `src/auth/client.ts` | `getAuthClient()` for islands / browser |
 | Env macros | `src/macros/envs.ts` | `betterAuthEnabled/Url/Secret` (DCE gate) |
-| Profile route | `app/routes/users/[id].tsx` | Owner-only profile; derives identity from session, enriches with BBS `users` row when present |
+| Profile route | `app/routes/users/[id].tsx` | Owner-only profile; derives identity from session, enriches with a `users` row + owned repositories when present |
 | Self-referential route | `app/routes/users/me.tsx` | Resolves session → 302 to `/users/<id>` (the memorable entry point) |
 | Nav avatar island | `app/islands/user-avatar-card.tsx` | Avatar trigger + hover card with "View profile" link |
 
@@ -278,8 +278,8 @@ and owner-only** (SSR). The handler:
 1. resolves the Better Auth session via `getSession(c)`,
 2. redirects anonymous visitors to `/sign-in?next=/users/<id>`,
 3. returns `403` for any `id` that is not the signed-in user's own id,
-4. renders the profile (name, email, joined) plus recent activity — threads
-   started, posts published, replies left — each linking back to its resource.
+4. renders the profile (name, email, joined) plus the repositories the user
+   owns — each linking back to its resource.
 
 ```tsx
 // app/routes/users/[id].tsx (shipped, guard excerpt)
@@ -295,16 +295,16 @@ The owner check is enforced above. Drop the `if (session.user.id !== id)` line
 if you'd rather let any authenticated user view any profile.
 
 **Two id spaces (and why the page used to 404).** Better Auth issues its own user
-id (e.g. `TX31U6zP0togyuH5G3UeWTqXBbkYOvlu`), while the BBS `users` table uses a
+id (e.g. `TX31U6zP0togyuH5G3UeWTqXBbkYOvlu`), while the forge `users` table uses a
 separate demo UUID (e.g. `e6c0c337-…`). They are **not linked yet**, so a freshly
-signed-up account has no BBS `users` row — which used to make this owner-only
-page fall through to a bare 404. The fix: because the page is owner-only, it
+signed-up account has no `users` row — which used to make this owner-only page
+fall through to a bare 404. The fix: because the page is owner-only, it
 **always derives the profile's core identity** (name / email / createdAt) straight
-from the authenticated session, and only enriches it with a BBS `users` row (and
-that user's activity) **when one exists**. A plain Better Auth account therefore
-sees a correct profile with empty activity sections. The activity queries run
-against `c.env.sql` and are wrapped in `try/catch`, so a missing `users` row never
-breaks the page.
+from the authenticated session, and only enriches it with a `users` row (and that
+user's repositories) **when one exists**. A plain Better Auth account therefore
+sees a correct profile with an empty repository list. The queries run against
+`c.env.sql` and are wrapped in `try/catch`, so a missing `users` row never breaks
+the page.
 
 ### Discoverable profile entry — `users/me`
 

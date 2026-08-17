@@ -7,8 +7,8 @@
 > event-sourced, safe for audit / time-travel, and trivially shareable without
 > defensive copies.
 
-`Immutable` is the capacity the BBS models — `User`, `Board`, `Thread`, `Reply` —
-wear to guarantee that identity is stable but state can only move forward by
+`Immutable` is the capacity the current models — `User` and `Repository` — wear
+to guarantee that identity is stable but state can only move forward by
 reconstruction. It is a **type-level marker** (`ImmutableSchema`) that
 `Versionable` and `Hashable` extend for their own contracts, *and* a runtime
 mixin that actually `Object.freeze`s instances and rewrites every property
@@ -220,10 +220,7 @@ const UserBase = defineModel<UserData>({
 });
 ```
 
-`User`, `Board`, `Thread`, and `Reply` all follow this pattern. `Post` does
-**not** include `Immutable` in its `capacities` array — it gets the
-reconstruction-on-`update` behaviour from `Versionable`, but its instances are
-not `Object.freeze`d at runtime (see §1 / §9).
+`User` and `Repository` both follow this pattern.
 
 ---
 
@@ -242,11 +239,11 @@ not `Object.freeze`d at runtime (see §1 / §9).
 
 ## 9. Gotchas
 
-- **`Post` is NOT frozen at runtime.** `Post` wears `Versionable` + `Hashable`
-  (which extend the type-only `ImmutableSchema`) but omits the `Immutable`
-  *mixin*, so its instances are reconstructed on `update` but not
-  `Object.freeze`d, and a direct `post.body = x` assignment would attempt an
-  in-place write. Put `Immutable` in `Post`'s `capacities` if you need the
+- **A model can be reconstruction-only without the freeze.** A model that wears
+  `Versionable` + `Hashable` (which extend the type-only `ImmutableSchema`) but
+  omits the `Immutable` *mixin* reconstructs on `update` without being
+  `Object.freeze`d at runtime, and a direct field assignment would attempt an
+  in-place write. Put `Immutable` in the model's `capacities` if you need the
   runtime guarantee.
 - **`Immutable.update` fires `onUpdate`; `Versionable.update` fires
   `onConstruct`.** `Immutable.update` passes the `UPDATE_PHASE` marker, which the
@@ -301,5 +298,5 @@ not `Object.freeze`d at runtime (see §1 / §9).
   cooperation (valid update → new frozen object; invalid update → no object).
 - `src/models/base.ts` — the `UPDATE_PHASE` handling in the base constructor
   (reconstruction vs. fresh construct → `onUpdate` vs `onConstruct`).
-- `src/models/user.ts` / `board.ts` / `thread.ts` / `reply.ts` — the BBS models
+- `src/models/user.ts` / `src/models/repository.ts` — the current models
   that apply `Immutable` as the outermost mixin.

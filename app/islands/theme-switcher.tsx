@@ -17,7 +17,7 @@ import { SegmentGroup } from '../components/ui/segment-group'
  *     document.documentElement.dataset.theme = "dark"
  *
  * The *preference* (`light` | `dark` | `system`) is persisted to localStorage
- * (`bbs.theme`) and resolved to an attribute before first paint by the boot
+ * (`cf.theme`) and resolved to an attribute before first paint by the boot
  * script in `_renderer.tsx` — `system` is resolved against
  * `prefers-color-scheme` there and kept live via a `matchMedia` listener.
  *
@@ -30,7 +30,7 @@ import { SegmentGroup } from '../components/ui/segment-group'
  *
  *     document.documentElement.dataset.palette = "blue"
  *
- * The choice is persisted to localStorage (`bbs.palette`) and restored by the
+ * The choice is persisted to localStorage (`cf.palette`) and restored by the
  * same boot script before first paint, avoiding a flash.
  *
  * The swatch colors below mirror each palette's `9`-scale (accent solid) token
@@ -66,8 +66,8 @@ const THEME_MODES: Array<{ name: ThemeMode; label: string }> = [
 	{ name: 'system', label: 'System' },
 ]
 
-const PALETTE_KEY = 'bbs.palette'
-const THEME_KEY = 'bbs.theme'
+const PALETTE_KEY = 'cf.palette'
+const THEME_KEY = 'cf.theme'
 
 /** Current palette from the DOM (already set by the boot script). */
 function currentPalette(): ThemePalette {

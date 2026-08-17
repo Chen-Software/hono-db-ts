@@ -255,7 +255,7 @@ describe("toDrizzleTable reads the Reference tag (sql-serialisable)", () => {
 		expect(rel.target).toBe("UserSchema");
 		expect(rel.targetColumn).toBe("id");
 		expect(rel.cardinality).toBe("many-to-one");
-		// Repository follows the Board pattern: nullable owner, setNull on delete.
+		// Repository follows the User pattern: nullable owner, setNull on delete.
 		expect(rel.onDelete).toBe("setNull");
 	});
 

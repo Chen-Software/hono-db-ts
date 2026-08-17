@@ -117,8 +117,8 @@ down (invalid `n: "x"` operands make `equals` / `less` / `more` all `false`).
 - It pulls its slice from `Base.prototype.schemaModule`, which `Triggerable`
   (always prepended) paves — so `Comparable` always has its `equals` / `less` /
   `more` available even though it's declared after `Triggerable`.
-- Worn by `User`, `Board`, `Thread`, `Reply`, and `Post`
-  (`user.ts:162`, `board.ts:120`, `thread.ts:112`, `reply.ts:110`, `post.ts:202`).
+- Worn by `User` (`src/models/user.ts`) and `Repository`
+  (`src/models/repository.ts`).
 
 ## 7. Sibling capacities
 

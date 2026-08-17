@@ -27,7 +27,7 @@
  * Run directly (`bun run scripts/cf-build.ts`) or via the CLI
  * (`bun run src/main.ts cf-build` / `generate`). The env used at build time
  * controls the macros (`DATABASE_TYPE`, `NODE_ENV`); production is
- * `NODE_ENV=production` with `DATABASE_TYPE=d1` + `DATABASE_URL=d1:bbs-db`.
+ * `NODE_ENV=production` with `DATABASE_TYPE=d1` + `DATABASE_URL=d1:codeforge`.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

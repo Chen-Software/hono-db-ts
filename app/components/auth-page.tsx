@@ -24,7 +24,7 @@ export function AuthPage(props: {
 	const isSignUp = props.mode === "sign-up";
 	return (
 		<div class={css({ minHeight: "100vh", bg: "#f7f7f8", color: "ink", fontFamily: FONT })}>
-			<title>{isSignUp ? "Sign up · BBS" : "Sign in · BBS"}</title>
+			<title>{isSignUp ? "Sign up · CodeForge" : "Sign in · CodeForge"}</title>
 
 			<SiteHeader variant="app" />
 			<main class={css({ maxWidth: "md", mx: "auto", px: 6, py: 16 })}>

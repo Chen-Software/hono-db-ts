@@ -2,10 +2,10 @@
  * repository service — repository index, repository detail page, and the
  * repository create/update mutations. All SQL is `?`-parameterized.
  *
- * Mirrors the old `boards` service but targets the `repositories` table (the
- * Forgejo-style Git repo model in `src/models/repository.ts`). The owner is
- * joined from `users`. This is the MVP data-access layer for the forge's
- * top-level unit; issues/PRs/branches are later milestones.
+ * Targets the `repositories` table (the Forgejo-style Git repo model in
+ * `src/models/repository.ts`). The owner is joined from `users`. This is the
+ * MVP data-access layer for the forge's top-level unit; issues/PRs/branches
+ * are later milestones.
  */
 import type { Db } from './types'
 import { all, run } from './types'
@@ -108,7 +108,39 @@ export interface CreateRepositoryInput {
 	isPrivate?: boolean
 }
 
+/**
+ * The routable name grammar — mirrors the model's `lowerName` tag
+ * (`^[a-z0-9]+(?:-[a-z0-9]+)*$`). Anything else can't be addressed as
+ * `{owner}/{repo}.git`, so it is rejected at create time.
+ */
+export const REPO_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+export class InvalidRepositoryNameError extends Error {
+	readonly kind = 'invalid-name' as const
+	constructor(name: string) {
+		super(`invalid repository name: "${name}" (use lowercase letters, digits, and single hyphens)`)
+	}
+}
+
+export class DuplicateRepositoryError extends Error {
+	readonly kind = 'duplicate' as const
+	constructor(ownerId: string, lowerName: string) {
+		super(`a repository named "${lowerName}" already exists for this user`)
+	}
+}
+
 export async function create(db: Db, input: CreateRepositoryInput): Promise<string> {
+	if (!REPO_NAME_PATTERN.test(input.lowerName)) {
+		throw new InvalidRepositoryNameError(input.lowerName)
+	}
+	// One `{owner}/{repo}` per owner — the git route `getByOwnerAndName` must
+	// never be ambiguous. Mirrors Forgejo's unique (OwnerID, LowerName) index.
+	const existing = await all<{ id: string }>(
+		db,
+		`SELECT "id" FROM "repositories" WHERE "ownerId" = ? AND "lowerName" = ? LIMIT 1`,
+		[input.ownerId, input.lowerName],
+	)
+	if (existing.length > 0) throw new DuplicateRepositoryError(input.ownerId, input.lowerName)
 	const id = crypto.randomUUID()
 	const description = input.description ?? ''
 	const defaultBranch = input.defaultBranch ?? 'main'

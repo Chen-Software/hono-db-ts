@@ -1,5 +1,5 @@
 /**
- * serve — a local Hono HTTP server exposing the good BBS queries AND the
+ * serve — a local Hono HTTP server exposing the query API AND the
  * Honox UI.
  *
  *     bun run scripts/serve.ts [port] [mode]     (default :8787, mode=ui+api)
@@ -28,7 +28,7 @@
  * `/api`. So the same port serves:
  *
  *   - `GET /`            — the Honox UI (SSR HTML, islands, /static/* assets)
- *   - `GET /api/stats` … — the "good BBS queries" JSON API
+ *   - `GET /api/stats` … — the query JSON API
  *
  * If `dist/index.js` is missing, `serve` prints a hint and serves the JSON API
  * only (mounted at both `/` and `/api` for compatibility with existing clients).
@@ -49,10 +49,7 @@
  * the Worker's `env.DB` / libSQL binding) — `serve` prints a clear message and
  * exits; run the Worker instead (`bun run cf:build` + `wrangler dev`).
  *
- * Endpoints (the "good queries" for a BBS): /stats, /boards, /boards/:id,
- * /boards/:id/threads, /boards/:id/hot, /threads/:id, /threads/:id/replies,
- * /users/:id, /users/:id/threads, /users/:id/posts, /users/:id/replies,
- * /search, /latest-posts.
+ * Endpoints: /stats, /repositories, /repositories/:id, /users/:id, /search.
  */
 
 import { existsSync } from "node:fs";
@@ -118,7 +115,7 @@ const app = new Hono<Env>();
 import { mountBetterAuth } from "../src/auth/mount";
 let mountAuth: ((app: Hono<Env>) => void) | null = null;
 // The resolved auth instance, exposed on the request context so the JSON
-// query app's guarded routes (e.g. `POST /threads`) can read sessions via
+// query app's guarded routes (e.g. `POST /repositories`) can read sessions via
 // `getSession` — mirrors `app/server.ts`'s `c.env.auth` middleware.
 if (betterAuthEnabled()) {
 	// Auth tables: idempotent — covers existing DBs that predate Better Auth.
@@ -138,7 +135,7 @@ mountGitRoutes(app, { db, gitBackend });
 
 // The JSON query app (`buildQueryApp`) carries its own middleware that exposes
 // the SQL client + Better Auth instance on its request context (so guarded
-// routes like `POST /threads` resolve sessions via `getSession`). The UI app
+// routes like `POST /repositories` resolve sessions via `getSession`). The UI app
 // (dist) does the same internally. No parent-level middleware is needed.
 
 // --- CLI args: [port] [mode]  OR  --port=  --mode=  /  --port / --mode
@@ -216,10 +213,10 @@ const server = Bun.serve({
 });
 
 const serveApi = mode === "api" || mode === "auto" || mode === "ui+api" || mode === "both";
-console.log(`BBS query server running on http://localhost:${server.port}  (mode=${mode})`);
+console.log(`Query server running on http://localhost:${server.port}  (mode=${mode})`);
 if (mode !== "api") {
 	console.log(`  UI : http://localhost:${server.port}/  (Honox UI)`);
 }
 if (serveApi) {
-	console.log("  API: /api/stats, /api/boards, /api/boards/:id/threads, /api/threads/:id/replies, /api/users/:id/posts, /api/search?q=, /api/latest-posts");
+	console.log("  API: /api/stats, /api/repositories, /api/repositories/:id, /api/users/:id, /api/search?q=");
 }

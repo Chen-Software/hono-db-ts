@@ -46,9 +46,9 @@
  * This is what gives "every Servable model gets CRUD" its safety net.
  *
  * Design constraints (prototype):
- *   - The join-heavy "good BBS queries" (`/boards/:id/hot`, `/threads/:id` with
- *     author+count, `/search`) are multi-model read models — they stay as
- *     explicit handlers; `Servable` covers the per-model CRUD surface.
+ *   - The join-heavy read models (`/repositories/:id` with owner, `/search`)
+ *     are multi-model read models — they stay as explicit handlers; `Servable`
+ *     covers the per-model CRUD surface.
  *   - Composition order matters: `SqlSerialisable` MUST be declared BEFORE
  *     `Servable` (it lifts `table` / `fromRow` the capacity reads).
  *   - The SQL is built with `?` bind params (safe), quoting every identifier.
@@ -56,9 +56,9 @@
  * @example
  * // model capacities: [..., SqlSerialisable, Queriable, Servable, ...]
  * const app = new Hono();
- * Board.serve(app, client);   // GET /boards, GET /boards/:id
- * Thread.serve(app, client);  // GET /threads, GET /threads/:id
- * Board.routeSpec();          // introspect what /boards accepts
+ * User.serve(app, client);        // GET /users, GET /users/:id
+ * Repository.serve(app, client);  // GET /repositories, GET /repositories/:id
+ * Repository.routeSpec();         // introspect what /repositories accepts
  */
 
 import { getTableName } from "drizzle-orm";
@@ -94,7 +94,7 @@ type Query = Record<string, string | string[] | undefined>;
 export interface ServableOptions {
 	/**
 	 * Route base path. Defaults to `/<tableName>` (the drizzle table name),
-	 * e.g. table `"boards"` → `GET /boards` + `GET /boards/:id`.
+	 * e.g. table `"repositories"` → `GET /repositories` + `GET /repositories/:id`.
 	 */
 	path?: string;
 	/**
@@ -123,7 +123,7 @@ export interface ServableOptions {
 	/**
 	 * Foreign-key child tables to delete BEFORE the row itself, so a delete
 	 * succeeds when SQLite/D1 do not enforce `ON DELETE CASCADE` by default.
-	 * e.g. `Thread` → `{ table: "replies", column: "threadId" }`.
+	 * e.g. `Repository` → `{ table: "issues", column: "repoId" }`.
 	 */
 	cascadeDelete?: Array<{ table: string; column: string }>;
 	/**
@@ -560,7 +560,7 @@ export function Servable<TBase extends CapacityComposer>(
 			}
 
 			// Fill DEFAULTS for omitted columns so a create with only the
-			// meaningful fields (e.g. UI forms posting {title,board,author})
+			// meaningful fields (e.g. UI forms posting {name,description})
 			// still validates: booleans → false. Optional/nullable columns are
 			// left UNSET — typia accepts `undefined` for `field?` (but rejects
 			// `null`), and `toRow` skips unset fields, so the storage side

@@ -93,15 +93,12 @@ defineModel(UserSchema, (t) => [
 ]);
 ```
 
-In this repo `Meterable` is enabled on all five BBS models:
+In this repo `Meterable` is enabled on the current models:
 
-| Model    | `name`  | Source                                   |
-| -------- | ------- | ---------------------------------------- |
-| `User`   | `"User"`    | `src/models/user.ts:218`                 |
-| `Post`   | `"Post"`    | `src/models/post.ts:258`                 |
-| `Board`  | `"Board"`   | `src/models/board.ts:164`                |
-| `Thread` | `"Thread"`  | `src/models/thread.ts:159`               |
-| `Reply`  | `"Reply"`   | `src/models/reply.ts:159`                |
+| Model        | `name`         | Source                          |
+| ------------ | -------------- | ------------------------------- |
+| `User`       | `"User"`       | `src/models/user.ts`            |
+| `Repository` | `"Repository"` | `src/models/repository.ts`      |
 
 Each passes `name` explicitly, so the metric prefix matches the model name rather than
 the schema name.
@@ -116,7 +113,7 @@ static meterName = options.name ?? (Base as any).schemaName ?? Base.name;
 
 Resolution order (left to right):
 
-1. `options.name` — explicit, as in all five BBS models.
+1. `options.name` — explicit, as in the current models.
 2. `Base.schemaName` — e.g. `"UserSchema"`, `"PostData"` — if you omit `name`.
 3. `Base.name` — the JS class name, the final fallback.
 
@@ -220,7 +217,7 @@ repository boundary that, today, does not exist.
    appear until a repository boundary is built (see §6).
 2. **`meterName` fallback mismatch.** Omit `name` and the prefix becomes
    `schemaName` (e.g. `PostData`), which may not match your table/route/model name.
-   Always pass `name` explicitly, as the five BBS models do.
+   Always pass `name` explicitly, as the current models do.
 3. **No per-op API.** There is no `inst.meter()` / `Model.meter()`. It is a binary
    opt-in flag only. Any granularity (which ops, what dimensions) would live in the
    still-missing repository layer.

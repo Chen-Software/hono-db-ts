@@ -5,7 +5,7 @@
  * Why this exists, and why it is a SERVICE and not a capacity:
  *
  * The `Connectable` capacity declares that a MODEL participates in a remote
- * source ("this model can be fetched/called from `/posts`"). But the actual
+ * source ("this model can be fetched/called from `/repositories`"). But the actual
  * bytes-on-the-wire are infrastructure — HTTP, a TCP socket, or, in a
  * local-first app, an in-process dispatch to a localhost service (or even a
  * CLI/WebUI talking to that same service). That I/O belongs in a *transport
@@ -35,7 +35,7 @@
 export interface TransportRequest {
 	/** HTTP method / operation kind. */
 	method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-	/** Route path or template, e.g. `/posts` or `/posts/:id`. */
+	/** Route path or template, e.g. `/repositories` or `/repositories/:id`. */
 	path: string;
 	/** Path-template substitutions (`":id" → "42"`). */
 	params?: Record<string, string | number>;
@@ -146,10 +146,11 @@ export class HttpTransport implements Transport {
 // Bun's Hono app exposes `app.request(Request)` which runs the matching
 // handler in-process and returns a `Response` — identical to a real HTTP
 // request but with zero socket round-trip. This is the local-first seam: the
-// SAME `UserService` / `PostService` Hono app serves both the network and the
-// in-process model, so `Post.fetch({ id })` and `GET /posts/:id` are the same
-// code path. Also accepts any `(Request) => Response | Promise<Response>`
-// handler, so it works without Hono too.
+// SAME `UserService` / `RepositoryService` Hono app serves both the network
+// and the in-process model, so `Repository.fetch({ id })` and
+// `GET /repositories/:id` are the same code path. Also accepts any
+// `(Request) => Response | Promise<Response>` handler, so it works without
+// Hono too.
 // ---------------------------------------------------------------------------
 export type LocalHandler = {
 	request(req: Request): Promise<Response> | Response;

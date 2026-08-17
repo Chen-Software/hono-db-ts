@@ -13,7 +13,7 @@
  *     so foreign-key navigation and identity lookup are SCOPED to that
  *     repository / session — not process-wide. Share ONE `IdentityMap` across
  *     several repositories to build a "unit of work" in which cross-model FK
- *     getters (`post.getUser()`) resolve within the session.
+ *     getters (`repository.getOwner()`) resolve within the session.
  *
  * The instance → map binding is a non-enumerable own property (see
  * {@link IDENTITY_MAP}); repositories stamp it on each instance they rehydrate

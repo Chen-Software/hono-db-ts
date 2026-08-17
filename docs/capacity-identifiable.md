@@ -150,7 +150,7 @@ class Post extends PostModel {}   // the model class does NOT re-apply the mixin
 > `Identifiable` mixin here") refers to the **`User` subclass** (`class User
 > extends UserModel {}`) — the mixin is already applied once inside
 > `defineModel`'s `capacities` array. It is *not* saying the model skips
-> `Identifiable`; `User`, `Post`, `Board`, `Thread`, and `Reply` all compose it.
+> `Identifiable`; `User` and `Repository` both compose it.
 
 ### Use-or-ignore split (the capacity idiom)
 

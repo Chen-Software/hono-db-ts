@@ -799,8 +799,8 @@ export function toDrizzleTable<T = any>(
  * Options for the {@link SqlSerialisable} capacity.
  *
  * `name` is required: the reflected schema has no reliable table name, so the
- * model must name its table (`"users"`, `"posts"`, …). `dialect` picks the
- * *primary* projection; the opposite dialect is derived alongside it.
+ * model must name its table (`"users"`, `"repositories"`, …). `dialect` picks
+ * the *primary* projection; the opposite dialect is derived alongside it.
  */
 export interface SqlSerialisableOptions extends SqlTablisableOptions {
 	/** Also derive the opposite dialect's table (`sqlPg` for sqlite primary). Default `true`. */

@@ -51,7 +51,7 @@ export const backend: WorkerBackend = {
 			mountBetterAuthFromBindings(app, env, drizzle(env.DB));
 		}
 
-		// The query app (BBS read routes + generated CRUD) under /api.
+		// The query app (read routes + generated CRUD) under /api.
 		app.route("/api", buildQueryApp(new D1Executor(env.DB), undefined, gitBackend));
 		// Git smart-HTTP transport at the root (/owner/repo.git/...).
 		if (gitBackend) mountGitRoutes(app, { db: new D1Executor(env.DB), gitBackend });

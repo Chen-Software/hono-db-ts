@@ -24,9 +24,10 @@ What it is **not**:
   bus-driven); `SqlSerialisable` knows nothing about it. If you want the derived value
   persisted, you must write it back yourself (the eager path does this into the live
   instance; the lazy path leaves it to a later re-materialisation).
-- It **is** worn by `User` in this repo: `user.all_activities` is derived from the
-  `post_count` / `thread_count` / `reply_count` counters (see §4). The other four BBS
-  models (`Board` / `Thread` / `Reply` / `Post`) don't declare it.
+- No model in this repo currently declares it (the old BBS `User.all_activities`
+  example was removed with the forum counters). The capacity remains fully
+  available — `src/models/user-derivable.test.ts` exercises it with a neutral
+  inline `Quote` model (`total = rate × days`, see §4).
 
 ---
 
@@ -114,42 +115,39 @@ defineModel(UserSchema, (t) => [
 | `topic?`    | Bus topic published to on a dep change **and** subscribed from for re-materialisation. Omit for purely in-process derived state. |
 | `reactive?` | When `false`, the topic is published but **no immediate `Reactive` reaction is wired here** — only a scheduled `bus.drain` / external subscriber picks it up. Defaults to `true`. |
 
-### `all_activities` — derivation reads *local* fields, not `Referencible` navigation
+### Example — derivation reads *local* fields, not `Referencible` navigation
 
-`User` declares `Derivable` with exactly one spec: `all_activities` is computed from
-the **stored counters** `post_count` / `thread_count` / `reply_count`
-(`from: ["post_count", "thread_count", "reply_count"]`). It does **not** read
-`Referencible`'s inverse accessors (e.g. `user.getPosts().length`). This is a
-deliberate boundary, for three reasons:
+The capacity's reference spec (in `src/models/user-derivable.test.ts`) derives
+`total` from two stored fields, `rate` and `days`
+(`from: ["rate", "days"]`). It does **not** read `Referencible`'s inverse accessors
+(e.g. `user.getRepositories().length`). This is a deliberate boundary, for three
+reasons:
 
 1. **Derivable's model is local.** `compute(self, deps)` reads `inst[dep]` — instance
-   fields on *this* entity. `getPosts()` is an *identity-map scan across other
+   fields on *this* entity. `getRepositories()` is an *identity-map scan across other
    instances*, not a field on `self`. Feeding a navigation method into a derivation
    would require `Derivable` to understand cross-instance methods, which it
    deliberately does not.
-2. **`.size()` is a bug, and `.length` is non-authoritative.** `getPosts()` returns a
-   plain **array** → `getPosts().size()` throws `TypeError`, and `getPosts().length`
-   only counts instances *currently registered in the identity map this session*.
-   Across processes, after a restart, or on a partially-loaded server it returns `[]`
-   or an under-count. `all_activities` exists to be a **persisted, sortable** column
-   (`GET /users?sort=all_activities:desc`) — a session-local count would defeat that.
-3. **The counters are the source of truth.** `post_count` / `thread_count` /
-   `reply_count` are maintained by the **write path** (incremented when a
-   Post/Thread/Reply is created for the user, decremented on delete) and persisted as
-   columns. `all_activities` is a cheap sum over them — never an expensive relation
-   walk.
+2. **`.length` is non-authoritative.** `getRepositories()` returns a plain **array**
+   whose `.length` only counts instances *currently registered in the identity map
+   this session*. Across processes, after a restart, or on a partially-loaded server
+   it returns `[]` or an under-count. A derived attr exists to be a **persisted,
+   sortable** column — a session-local count would defeat that.
+3. **The stored fields are the source of truth.** `rate` / `days` are maintained by
+   the write path and persisted as columns. `total` is a cheap product over them —
+   never an expensive relation walk.
 
-If you ever want a *session-local* "how many posts are loaded for this user right
-now" number, that is a **navigation convenience**, not a derived property — add a
-separate runtime method (`User.prototype.activePostCount = function () { return
-this.getPosts().length; }`) and keep it out of `all_activities`. Authoritative totals
-come from SQL (an `Aggregable` `count` by `authorId`, or
-`/users/aggregate?groupBy=authorId`).
+If you ever want a *session-local* "how many repositories are loaded for this user
+right now" number, that is a **navigation convenience**, not a derived property — add
+a separate runtime method (`User.prototype.activeRepoCount = function () { return
+this.getRepositories().length; }`). Authoritative totals come from SQL (an
+`Aggregable` `count` by `ownerId`, or `/repositories/aggregate?groupBy=ownerId`).
 
-**Current usage:** `Derivable` is declared by `User` (the `all_activities` spec above).
-The other four BBS models (`Board` / `Thread` / `Reply` / `Post`) don't opt in. The
-`Hashable` `contentHash` recompute is a conceptual cousin but uses its own machinery,
-not `Derivable`.
+**Current usage:** no model in this repo declares `Derivable` (the old
+`User.all_activities` spec was removed with the BBS counters); the `Quote` model in
+`src/models/user-derivable.test.ts` is the reference example. The `Hashable`
+`contentHash` recompute is a conceptual cousin but uses its own machinery, not
+`Derivable`.
 
 ---
 
@@ -267,12 +265,12 @@ uses the **new** deps, not the not-yet-committed live ones.
 4. **`__dirty` is only meaningful for the `lazy` + `reactive:false` (scheduled) path.**
    For eager (`lazy:false`) and `lazy`+`reactive` specs, `compute` clears the flag right
    after setting it, so `__dirty` is effectively always `false` for those.
-5. **Now has a focused test file.** `src/models/user-derivable.test.ts` exercises
-   `all_activities` (construct-time compute; missing-counter default; `Immutable`
-   reconstruction; sortability). The `Derivable`-folds-`Reactive` mechanics are still
-   only covered indirectly. Additional focused tests — dep-change → recompute via
-   `onUpdate`; `bus` topic → `recomputeFor`; frozen-instance throw; unloaded
-   `recomputeFor` → `undefined` — would further harden it.
+5. **Has a focused test file.** `src/models/user-derivable.test.ts` exercises
+   the `Derivable` capacity with an inline `Quote` model (construct-time compute;
+   dep-change → recompute via `update`). The `Derivable`-folds-`Reactive` mechanics
+   are still only covered indirectly. Additional focused tests — `bus` topic →
+   `recomputeFor`; frozen-instance throw; unloaded `recomputeFor` → `undefined` —
+   would further harden it.
 6. **Hybrid return value.** Returning `Base` (in-place) without a `bus` but a new
    `Reactive` subclass with one means callers can't assume a stable class identity the
    way they can for purely in-place or purely new-subclass capacities.

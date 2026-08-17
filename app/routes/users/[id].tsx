@@ -9,9 +9,8 @@ import { apiFetch } from '../../lib/api'
  * User profile page — `/users/:id`.
  *
  * Authenticated-only (SSR). Shows the signed-in member's public profile (name,
- * email, role, age, joined) plus their repositories — the forge equivalent of
- * the forum's threads/posts/replies activity. Every repository row links to the
- * repository page.
+ * email, role, age, joined) plus their repositories — the forge's equivalent of
+ * a user activity feed. Every repository row links to the repository page.
  *
  * The route checks the Better Auth session cookie first (`getSession`); if no
  * valid session is found it redirects to `/sign-in` so unauthenticated

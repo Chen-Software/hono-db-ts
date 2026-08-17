@@ -69,7 +69,7 @@ describe("defineModel (shared base model)", () => {
 		expect(() => new (PointModel as any)({ x: "no", y: 2 })).toThrow();
 	});
 
-	it("schemaName is inherited by subclasses (mirrors User/Post)", () => {
+	it("schemaName is inherited by subclasses (mirrors User/Repository)", () => {
 		class Pt extends PointModel {}
 		expect((Pt as any).schemaName).toBe("Point");
 		expect((Pt as any).schema).toBeDefined();

@@ -5,8 +5,8 @@ import type { JsonSchema } from "./sql-serialisable";
  * Siftable — keyset (cursor) pagination for a `Queriable` model.
  *
  * `Queriable` already gives you schema-inferred in-memory FILTERING
- * (`Post.filter(items, query)`), but filtering alone returns the WHOLE
- * matching set. A BBS list endpoint (board threads, thread replies) needs
+ * (`Repository.filter(items, query)`), but filtering alone returns the WHOLE
+ * matching set. A forge list endpoint (repository index, issue list) needs
  * stable, efficient pagination over a large set — that is exactly what this
  * capacity adds: **filter, order, then walk by cursor**.
  *
@@ -18,7 +18,7 @@ import type { JsonSchema } from "./sql-serialisable";
  *     BY sortKey LIMIT $n`.
  *
  * The sort key defaults to `updated_at` descending — the natural "newest
- * first" ordering for boards/threads — and is configurable via the options.
+ * first" ordering for repositories — and is configurable via the options.
  * The cursor is the sort-key VALUE of the last item seen, so it is opaque to
  * the caller yet sufficient to resume.
  *

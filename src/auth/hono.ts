@@ -11,7 +11,7 @@
  *
  * The mount path must match `betterAuthOptions.basePath` (`/api/auth`), and it
  * must be registered BEFORE the query app's `/api` route so Hono routes
- * `/api/auth/*` to the auth handler rather than the BBS query app.
+ * `/api/auth/*` to the auth handler rather than the query app.
  */
 
 import type { Context, Hono } from "hono";

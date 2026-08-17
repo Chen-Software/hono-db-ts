@@ -34,24 +34,24 @@ export type JoinMode = "inner" | "left" | "right" | "full";
  * is enough to:
  *   - build the SQL FK constraint (drizzle `.references()`) — read by
  *     `sql-serialisable` from the reflected JSON schema, and
- *   - derive the OWNER-side in-memory accessor (`post.getUser()`) — read by
+ *   - derive the OWNER-side in-memory accessor (`repo.getOwner()`) — read by
  *     `Referencible` from the same reflected schema,
  * entirely from the model's type — no hand-written drizzle column code AND no
  * duplicated manual relation declaration.
  *
- * The inverse (collection) side of a relation (`user.getPosts()`) has no FK
+ * The inverse (collection) side of a relation (`user.getRepositories()`) has no FK
  * column of its own to tag, so `Referencible`'s own mixin does not derive it.
  * Instead `wireInverseRelations()` (run from `defineModel`) scans every model's
- * tags and installs the matching collection getter on the target (`user.getPosts()`
- * from `Post.authorId -> UserSchema`, `user.getThreads()` from `Thread.authorId`,
+ * tags and installs the matching collection getter on the target (`user.getRepositories()`
+ * from `Repository.ownerId -> UserSchema`,
  * etc.), mirroring each tag's `onDelete`. A manual inverse in `Referencible`'s
  * `relations` is still allowed and guarded against this tag, so the two cannot
  * silently drift.
  *
  * @example
  * ```ts
- * interface PostSchema {
- *   authorId: UUID & Reference<"UserSchema", "id", "many-to-one", "cascade", "inner">;
+ * interface RepositorySchema {
+ *   ownerId: UUID & Reference<"UserSchema", "id", "many-to-one", "setNull", "inner">;
  * }
  * ```
  *
@@ -171,10 +171,10 @@ export function referencesOf(
  * `"User"` → `"user"`.
  */
 export function deriveRelationName(target: string): string {
-	// Strip the model's schema-name suffix. Most models use `…Schema`
-	// (`UserSchema` → `user`); `Post` uses `…Data` (`PostData` → `post`), so
-	// both suffixes are recognised. The result is the lower-cased model base
-	// name, used to build default accessor names.
+	// Strip the model's schema-name suffix. The forge models use `…Schema`
+	// (`UserSchema` → `user`, `RepositorySchema` → `repository`); the `…Data`
+	// fallback is retained for legacy models. The result is the lower-cased
+	// model base name, used to build default accessor names.
 	const base = target.endsWith("Schema")
 		? target.slice(0, -"Schema".length)
 		: target.endsWith("Data")

@@ -35,10 +35,10 @@ export type JoinModeLocal = JoinMode;
 
 export interface RelationSpec {
 	/**
-	 * Getter name WITHOUT the `get` prefix. `"posts"` -> `getPosts()`,
-	 * `"user"` -> `getUser()`. When the spec is DERIVED from a `Reference` tag,
-	 * this defaults to the tag's `target` model name (e.g. `"UserSchema"` →
-	 * `"user"`, or the tag's explicit `name`).
+	 * Getter name WITHOUT the `get` prefix. `"repositories"` ->
+	 * `getRepositories()`, `"user"` -> `getUser()`. When the spec is DERIVED
+	 * from a `Reference` tag, this defaults to the tag's `target` model name
+	 * (e.g. `"UserSchema"` → `"user"`, or the tag's explicit `name`).
 	 */
 	name: string;
 
@@ -100,9 +100,9 @@ export interface ReferencibleOptions {
 
 /**
  * Naive English pluraliser for inverse accessor names — the SOURCE model name
- * becomes the collection on the target (`Post` → `getPosts`, `Reply` →
- * `getReplies`, `Board` → `getBoards`). Covers the regular cases this codebase
- * hits; it is intentionally not a general linguistic pluraliser.
+ * becomes the collection on the target (`Repository` → `getRepositories`).
+ * Covers the regular cases this codebase hits; it is intentionally not a
+ * general linguistic pluraliser.
  */
 function pluralize(word: string): string {
 	if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + "ies";
@@ -114,9 +114,7 @@ function pluralize(word: string): string {
  * Wire every registered model's `Reference`-tagged FKs into the INVERSE
  * collection accessors on their target models — the mirror image of the owner
  * accessors that `Referencible` already derives from a model's own tags.
- * `post.authorId -> User` yields `user.getPosts()`, `thread.authorId -> User`
- * yields `user.getThreads()`, `board.moderatorId -> User` yields
- * `user.getBoards()`, and so on.
+ * `repository.ownerId -> User` yields `user.getRepositories()`, and so on.
  *
  * Called (idempotently) from `defineModel` after each model registers, so it
  * converges as models load regardless of import order: an inverse is only
@@ -274,9 +272,9 @@ function Referencible<TBase extends CapacityComposer>(
 		// Match the SPECIFIC inverse model: the one whose Reference tag on the
 		// SAME FK column (`rel.by`) targets this model. A model may be referenced
 		// by MANY other models with different onDelete rules (e.g. `User` is
-		// referenced by `Post.authorId` cascade AND `Board.moderatorId` setNull);
-		// we must validate against the correct complement, not the first model
-		// that happens to reference us.
+		// referenced by `Repository.ownerId` setNull); we must validate against
+		// the correct complement, not the first model that happens to reference
+		// us.
 		for (const [name, ctor] of listModels()) {
 			if (name === modelName) continue;
 			const cols = referencesOf((ctor as any)?.schema);

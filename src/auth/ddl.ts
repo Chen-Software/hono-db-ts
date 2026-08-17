@@ -4,7 +4,7 @@
  *
  * `db:generate` (scripts/db-generate.ts) writes this into
  * `drizzle/<ts>_auth_sqlite_create.sql`, so the auth tables are created by the
- * SAME pipeline as the BBS tables — `db:migrate`, `serve`'s `ensureSchema`,
+ * SAME pipeline as the domain tables — `db:migrate`, `serve`'s `ensureSchema`,
  * the CF sqlite worker's inline migrations, and `wrangler d1 migrations
  * apply`. Keep `schema.ts` and the rendered DDL in sync automatically: column
  * names / types / nullability / uniqueness are introspected from the drizzle

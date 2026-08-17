@@ -1,5 +1,5 @@
 /**
- * worker — Cloudflare Workers entry for the BBS query service.
+ * worker — Cloudflare Workers entry for the query service.
  *
  * Deploys the SAME Hono app as the local server (`scripts/serve.ts`) but as a
  * Worker: `export default { fetch }` is the platform handler Wrangler bundles.
@@ -22,6 +22,7 @@
  */
 
 import type { WorkerBackend, WorkerEnv } from "@/worker/types";
+import type { QueueBatchLike } from "@/worker/queue";
 
 /**
  * Resolved at build time by `scripts/cf-build.ts` to the selected backend
@@ -39,5 +40,10 @@ export default {
 	async fetch(request: Request, env: WorkerEnv): Promise<Response> {
 		const app = await backend.backend.init(env);
 		return app.fetch(request);
+	},
+	// Cloudflare Queues consumer — the backend decides whether it handles
+	// queue messages at all (d1 = yes, dev sqlite/turso = no-op).
+	async queue(batch: QueueBatchLike, env: WorkerEnv): Promise<void> {
+		await backend.backend.queue?.(batch, env);
 	},
 };

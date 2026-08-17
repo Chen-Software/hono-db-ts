@@ -42,15 +42,15 @@ export interface RandomisableOptions {
  *
  *   Because it classifies, the payload must satisfy the schema's **format**
  *   constraints (`uuid`, `email`, `Format<"sha256">`, …). For models whose
- *   `createRandom` does not emit format-valid fields (e.g. `Post`'s `contentHash`),
- *   bind a corrected generator in the schema module (`random: () => …`) or supply
- *   the overrides after drawing — the seam (`mod.random`) is the correct place to
- *   fix format-bound values.
+ *   `createRandom` does not emit format-valid fields (e.g. `Repository`'s
+ *   `defaultBranch`), bind a corrected generator in the schema module
+ *   (`random: () => …`) or supply the overrides after drawing — the seam
+ *   (`mod.random`) is the correct place to fix format-bound values.
  *
  * Typical usage:
- *   const post = Post.random();              // validated instance (frozen if Immutable)
- *   const data = post.toValueObject();       // unwrap to a plain mutable record
- *   const next = Post.from({ ...data, title: "x" });
+ *   const repo = Repository.random();        // validated instance (frozen if Immutable)
+ *   const data = repo.toValueObject();       // unwrap to a plain mutable record
+ *   const next = Repository.from({ ...data, name: "x" });
  *
  * **Determinism caveat.** `SchemaModule.random` is typia's `createRandom`, which
  * is *not* seedable — so `random()`'s payload is never reproducible. If you need

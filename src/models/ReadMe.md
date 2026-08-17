@@ -18,7 +18,7 @@ schema, the bindings, and the capacity list.
 Every model follows the same three-part shape (see `user.ts` for the canonical
 example):
 
-1. **Schema interface** (`UserSchema`, `PostData`, `BoardSchema`, …) — a plain
+1. **Schema interface** (`UserSchema`, `RepositorySchema`, …) — a plain
    `interface` extending the type-level markers (`IdentifiableSchema`,
    `TimestampedSchema`, `Versionable`, `Hashable<"body">`) plus field constraints.
    typia reflects this interface directly (it is not a class).
@@ -28,8 +28,7 @@ example):
    where the schema type is real. Handed to every capacity; each pulls its slice.
 3. **`defineModel` call + `class`** — declares `schemaName` (the string a
    `Reference` tag targets), the `schemaModule`, and the `capacities` array. The
-   model class adds only model-specific statics / domain methods
-   (e.g. `Post.publish()`, `Thread.pin()`).
+   model class adds only model-specific statics / domain methods.
 
 `defineModel` (`base.ts`) folds the capacities (with `Triggerable` auto-first),
 paves the model statics (`is`, `assert`, `validate`, `from`, `schemaName`),
@@ -42,12 +41,9 @@ registers the model under `schemaName` (so `Reference` tags resolve it), and run
 
 | File | `schemaName` | Table | Notable capacities / fields | Relations declared here |
 |---|---|---|---|---|
-| `user.ts` | `UserSchema` | `users` | `Derivable` → `all_activities` (from `post_count`/`thread_count`/`reply_count`); `Aggregable`. | **None** — `getPosts`/`getThreads`/`getReplies`/`getBoards` are **auto-derived** from the source models' `Reference` tags. |
-| `post.ts` | `PostData` | `posts` | `Versionable` (`updated_at` = version), `Hashable<"body">` (`contentHash`), nested `author: UserSchema`. `InvalidStateError` + `publish()`. | `authorId → User` (`cascade`); inverse `user.getPosts()` auto-derived. |
-| `board.ts` | `BoardSchema` | `boards` | `moderatorId` is **optional + nullable** so `setNull` is coherent. | `moderatorId → User` (`setNull`, `left`); `getThreads()` inverse (`boardId` on `Thread`). |
-| `thread.ts` | `ThreadSchema` | `threads` | `updated_at` = "last activity" (bumped by `touch()`); `pin`/`unpin`/`lock`/`unlock` domain methods. | `boardId → Board` (`cascade`), `authorId → User` (`cascade`); `getReplies()` inverse (`threadId` on `Reply`). |
-| `reply.ts` | `ReplySchema` | `replies` | Self-referencing `parentId` for nested replies. | `threadId → Thread` (`cascade`), `authorId → User` (`cascade`), `parentId → Reply(self)` (`cascade`, `left`); `getChildren()` inverse. |
-| `index.ts` | — | — | Re-exports `Board, Reply, Post, Thread, User` as namespaces. | — |
+| `user.ts` | `UserSchema` | `users` | `Aggregable`, `Queriable` (`?mail=` alias), `Servable`, `Meterable`. | **None** — `getRepositories()` is auto-derived from `Repository.ownerId`'s `Reference` tag. |
+| `repository.ts` | `RepositorySchema` | `repositories` | Git forge metadata catalog: owner, `defaultBranch`, `objectFormatName` (`'sha1'`/`'sha256'`), counters, `status`. | `ownerId → User` (`setNull`); inverse `user.getRepositories()` auto-derived. |
+| `index.ts` | — | — | Re-exports `Repository, User` as namespaces. | — |
 | `base.ts` | — | — | `defineModel` engine + `ModelBase` (constructor, `update`, `toValueObject`, `delete`). | — |
 
 ---
@@ -60,23 +56,11 @@ All foreign keys are declared by the `Reference<>` tag (`../tags/reference.ts`);
 
 ```
 User  (UserSchema)
- ├─ Post.authorId        → cascade  →  user.getPosts()
- ├─ Thread.authorId      → cascade  →  user.getThreads()
- ├─ Reply.authorId       → cascade  →  user.getReplies()
- └─ Board.moderatorId    → setNull (left)  →  user.getBoards()
-
-Board (BoardSchema)
- └─ Thread.boardId       → cascade  →  board.getThreads()
-
-Thread (ThreadSchema)
- └─ Reply.threadId       → cascade  →  thread.getReplies()
-
-Reply (ReplySchema)
- └─ Reply.parentId       → cascade (self, left)  →  reply.getParent() / reply.getChildren()
+ └─ Repository.ownerId    → setNull (left)  →  user.getRepositories()
 ```
 
 **`onDelete` is executed in memory** by `ModelBase.delete()` (see §4). `setNull`
-(`Board.moderatorId`) is why that FK is nullable — nulling a required FK would be
+(`Repository.ownerId`) is why that FK is nullable — nulling a required FK would be
 rejected by `assertClassify`. The SQL FK constraint is emitted by
 `SqlSerialisable` from the *same* tag, so the two cannot drift (the DDL action
 clause is a known gap — see `docs/capacity-referencible.md` §9).
@@ -118,11 +102,9 @@ machinery (see `docs/capacity-referencible.md` §9).
 | Test file | Covers |
 |---|---|
 | `base.test.ts` | `defineModel` constructor / `update` / `toValueObject`. |
-| `post.test.ts` | `Post` (Hashable stamping, `publish()`, content addressing). |
-| `bbs.test.ts` | Cross-model relations + **`delete()`** (cascade, setNull, idempotency). |
-| `user-derivable.test.ts` | `User.all_activities` derivation (`Derivable`). |
 
-Per-capacity behaviour is covered by the sibling `*.test.ts` files in
+Model persistence is covered by the service tests (`../services/repository.test.ts`);
+per-capacity behaviour is covered by the sibling `*.test.ts` files in
 `../capacities/`.
 
 ---

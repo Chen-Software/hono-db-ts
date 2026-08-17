@@ -1,7 +1,7 @@
 /**
  * auth/migrate — idempotent bootstrap of the Better Auth tables (local only).
  *
- * The auth tables live in the SAME database as the BBS data. On a fresh DB,
+ * The auth tables live in the SAME database as the domain data. On a fresh DB,
  * `ensureSchema` (src/http/schema.ts) applies every `drizzle/*.sql` file —
  * including the `*_auth_sqlite_create.sql` one — so auth tables appear for
  * free. But on an EXISTING database (created before this starter gained auth),

@@ -5,7 +5,7 @@
  * Runs the auth app IN-PROCESS and uses Hono's `app.request()` (the same code
  * path the deployed server uses — no second process, no TCP, no proxy), so it
  * works inside the memory-constrained sandbox where booting the full
- * `scripts/serve.ts` (which pulls the entire BBS graph) is OOM-killed.
+ * `scripts/serve.ts` (which pulls the entire app graph) is OOM-killed.
  *
  * This proves, against the production mount path:
  *   1. `/api/auth/*` and a sibling `/api/stats` route COEXIST (mount order is

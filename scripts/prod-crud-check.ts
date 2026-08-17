@@ -15,8 +15,7 @@ import { databaseUrl } from "../src/macros/envs" with { type: "macro" };
 
 // Import models for side effects — derives `.table` via SqlSerialisable.
 import "@/models";
-import { Board, Thread, Post, User } from "../src/models";
-import { hashContent } from "../src/capacities/hashable";
+import { Repository, User } from "../src/models";
 
 const url = databaseUrl();
 if (!url) throw new Error("no DATABASE_URL");
@@ -30,7 +29,7 @@ function ok(name: string, cond: boolean, extra = "") {
 	if (!cond) process.exitCode = 1;
 }
 
-// ---- CREATE (User + Board) -------------------------------------------------
+// ---- CREATE (User + Repository) ---------------------------------------------
 const userId = crypto.randomUUID();
 const created = await db
 	.insert(User.User.table)
@@ -45,13 +44,28 @@ const created = await db
 	.returning();
 ok("INSERT user returns row", created.length === 1 && created[0]!.id === userId);
 
-const boardId = crypto.randomUUID();
-await db.insert(Board.Board.table).values({
-	id: boardId,
-	name: "CRUD Board",
-	slug: "crud-board",
+const repoId = crypto.randomUUID();
+await db.insert(Repository.Repository.table).values({
+	id: repoId,
+	ownerId: userId,
+	name: "CRUD Repo",
+	lowerName: "crud-repo",
 	description: "prod crud",
-	moderatorId: userId,
+	defaultBranch: "main",
+	website: "",
+	isPrivate: false,
+	isArchived: false,
+	isMirror: false,
+	isTemplate: false,
+	objectFormatName: "sha1",
+	topics: [],
+	numStars: 0,
+	numForks: 0,
+	numOpenIssues: 0,
+	numClosedIssues: 0,
+	size: 0,
+	avatar: "",
+	status: 0,
 	created_at: new Date().toISOString(),
 });
 
@@ -65,69 +79,30 @@ ok("SELECT user by id", fetched.length === 1 && fetched[0]!.name === "CRUD Test"
 // ---- UPDATE (rename + bump) -------------------------------------------------
 const before = await db
 	.select()
-	.from(Board.Board.table)
-	.where(eq(Board.Board.table.id, boardId));
+	.from(Repository.Repository.table)
+	.where(eq(Repository.Repository.table.id, repoId));
 const updated = await db
-	.update(Board.Board.table)
-	.set({ name: "CRUD Board v2", description: "updated" })
-	.where(eq(Board.Board.table.id, boardId))
+	.update(Repository.Repository.table)
+	.set({ name: "CRUD Repo v2", description: "updated" })
+	.where(eq(Repository.Repository.table.id, repoId))
 	.returning();
 ok(
-	"UPDATE board",
-	updated.length === 1 && updated[0]!.name === "CRUD Board v2",
+	"UPDATE repository",
+	updated.length === 1 && updated[0]!.name === "CRUD Repo v2",
 	`before=${before[0]?.name} after=${updated[0]?.name}`,
 );
 
-// ---- Thread with FKs to the CRUD entities ----------------------------------
-const threadId = crypto.randomUUID();
-const thread = await db
-	.insert(Thread.Thread.table)
-	.values({
-		id: threadId,
-		boardId,
-		authorId: userId,
-		title: "CRUD Thread",
-		pinned: true,
-		locked: false,
-		created_at: new Date().toISOString(),
-		updated_at: new Date().toISOString(),
-	})
-	.returning();
-ok("INSERT thread (FK board+author)", thread.length === 1 && thread[0]!.pinned === 1);
-
-// ---- Post with contentHash + author JSON (the denormalised shape) ----------
-const post = await db
-	.insert(Post.Post.table)
-	.values({
-		id: crypto.randomUUID(),
-		title: "CRUD Post",
-		body: "hello prod",
-		author: JSON.stringify({ id: userId, name: "CRUD Test", email: "crud@test.local", role: "member", age: 42, created_at: "" }),
-		authorId: userId,
-		contentHash: hashContent("hello prod"),
-		published: true,
-		created_at: new Date().toISOString(),
-		updated_at: new Date().toISOString(),
-	})
-	.returning();
-ok("INSERT post (hash + author snapshot)", post.length === 1);
-
-// ---- DELETE (thread cascades? boards reference users) ----------------------
+// ---- DELETE (repository → user, owner FK setNull) ---------------------------
 const del = await db
-	.delete(Thread.Thread.table)
-	.where(eq(Thread.Thread.table.id, threadId));
-ok("DELETE thread", del.meta?.changes > 0 || true, `changes=${del.meta?.changes}`);
+	.delete(Repository.Repository.table)
+	.where(eq(Repository.Repository.table.id, repoId));
+ok("DELETE repository", del.meta?.changes > 0 || true, `changes=${del.meta?.changes}`);
 
 const afterDelete = await db
 	.select()
-	.from(Thread.Thread.table)
-	.where(eq(Thread.Thread.table.id, threadId));
-ok("thread gone after DELETE", afterDelete.length === 0);
-
-const delBoard = await db
-	.delete(Board.Board.table)
-	.where(eq(Board.Board.table.id, boardId));
-ok("DELETE board", delBoard.meta?.changes > 0 || true);
+	.from(Repository.Repository.table)
+	.where(eq(Repository.Repository.table.id, repoId));
+ok("repository gone after DELETE", afterDelete.length === 0);
 
 const delUser = await db
 	.delete(User.User.table)

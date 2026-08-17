@@ -224,14 +224,14 @@ console.log(User.routeSpec());
 The `?param=` surface is **row-level `WHERE` filtering only**. There is no
 `?groupBy=`, `?orderBy=count`, or `?aggregate=`. So:
 
-> `GET /threads?authorId=<id>` works, but "rank users by post count" does not.
+> `GET /repositories?ownerId=<id>` works, but "rank users by repo count" does not.
 
 Aggregation (a multi-row read-model) is kept out of the generic filter. **Since
 the `Aggregable` capacity, single-table roll-ups are generic too** — `GET
 /…/aggregate` (`?groupBy=&count=&orderBy=`), see
 [`capacity-aggregable.md`](./capacity-aggregable.md). The join-heavy read-models
-— `/stats`, `/boards/:id/hot`, `/stats/top-posters` (`src/http/app.ts`) — remain
-**hand-written** endpoints, each using `client.unsafe(sql)` **server-side only**.
+— `/stats` (`src/http/app.ts`) — remain **hand-written** endpoints, each using
+`client.unsafe(sql)` **server-side only**.
 
 **Raw SQL is never a client passthrough.** A `?sql=` route would be a direct
 SQL-injection / data-exfiltration hole (`DROP`, cross-table reads). The only
@@ -296,10 +296,10 @@ absent it derives its own field plans from `options.fields`. But composing
 - [`capacity-hashable.md`](./capacity-hashable.md) — the `contentHash` field
   the routes read/serve (derived SHA-256; never a filter param).
 - [`data-models-storage.md`](../docs/data-models-storage.md) — the whole
-  capacity model, the BBS models, storage layers, and the "query latest posts"
-  / "query post history" recipes.
+  capacity model, the current models, storage layers, and the "query
+  repositories of a user" / "query history" recipes.
 - `src/capacities/servable.ts` — the route generator (`buildFilters`,
   `runList`/`runById`/`runCreate`/`runUpdate`/`runDelete`, `routeSpec`).
 - `src/capacities/queriable.ts` — the matcher engine + `deriveFieldPlans`.
-- `src/http/app.ts` — the hand-written aggregation read-models (`/stats`,
-  `/boards/:id/hot`, `/stats/top-posters`) and the `*.serve(app, client)` wiring.
+- `src/http/app.ts` — the hand-written read-models (`/stats`,
+  `/repositories/:id`) and the `*.serve(app, client)` wiring.

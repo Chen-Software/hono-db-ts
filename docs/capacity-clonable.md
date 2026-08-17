@@ -5,8 +5,8 @@
 > semantics are available from either side of the model boundary, and the
 > *strictness* of the copy is driven by whether `Validatable` is also declared.
 
-`Clonable` is the capacity `User`, `Board`, `Thread`, `Reply`, and `Post` compose
-to get a typia-backed deep copy. It is a small, behavioural mixin — there is no
+`Clonable` is the capacity `User` and `Repository` compose to get a
+typia-backed deep copy. It is a small, behavioural mixin — there is no
 `ClonableSchema` type marker — that consumes **only the clone slice**
 (`clone` / `assertClone` / `isClone` / `validateClone`) from the model's
 `SchemaModule` and exposes it as a single `clone` entry point.
@@ -155,7 +155,7 @@ const UserBase = defineModel<UserData>({
 });
 ```
 
-`Board`, `Thread`, `Reply`, and `Post` all compose `Clonable` the same way (Post
+`User` and `Repository` both compose `Clonable` the same way (Repository
 wears it between `ProtobufEncodable` and `Comparable`). To opt out of validation:
 
 ```ts

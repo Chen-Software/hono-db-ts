@@ -51,22 +51,22 @@ type ProtobufEncodableSchema = Record<never, never>;
  * @example
  * // In the model:
  * const schemaModule = {
- *   schema: typia.json.schema<[PostData]>(),
- *   classify: (d) => typia.plain.assertClassify<PostData>(d),
- *   toJSON: typia.json.createAssertStringify<PostData>(),
- *   fromJSON: typia.json.createAssertParse<PostData>(),
- *   encode: typia.protobuf.createAssertEncode<PostData>(),
- *   decode: typia.protobuf.createAssertDecode<PostData>(),
- *   message: typia.protobuf.message<PostData>(),
+ *   schema: typia.json.schema<[RepositoryData]>(),
+ *   classify: (d) => typia.plain.assertClassify<RepositoryData>(d),
+ *   toJSON: typia.json.createAssertStringify<RepositoryData>(),
+ *   fromJSON: typia.json.createAssertParse<RepositoryData>(),
+ *   encode: typia.protobuf.createAssertEncode<RepositoryData>(),
+ *   decode: typia.protobuf.createAssertDecode<RepositoryData>(),
+ *   message: typia.protobuf.message<RepositoryData>(),
  * };
- * const PostBase = defineModel<PostData>({
- *   schemaName: "PostData",
+ * const RepositoryBase = defineModel<RepositoryData>({
+ *   schemaName: "RepositoryData",
  *   schemaModule,
  *   capacities: [JsonSerialisable, ProtobufEncodable],
  * });
- * Post.encode(valid);   // → Uint8Array (pulled from the module)
- * Post.decode(bytes);   // → validated data
- * Post.message;         // → "syntax = \"proto3\";\nmessage Post { … }"
+ * Repository.encode(valid);   // → Uint8Array (pulled from the module)
+ * Repository.decode(bytes);   // → validated data
+ * Repository.message;         // → "syntax = \"proto3\";\nmessage Repository { … }"
  */
 function ProtobufEncodable<TBase extends CapacityComposer>(
 	Base: TBase,

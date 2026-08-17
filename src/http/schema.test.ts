@@ -67,18 +67,18 @@ describe("resolveDatabaseTarget — the three deliberate backends", () => {
 	});
 
 	it("classifies remote D1 targets", () => {
-		expect(resolveDatabaseTarget("d1:bbs-db", "d1")).toEqual({
+		expect(resolveDatabaseTarget("d1:codeforge", "d1")).toEqual({
 			kind: "d1",
-			url: "bbs-db",
+			url: "codeforge",
 		});
-		expect(resolveDatabaseTarget("d1://bbs-db", "d1")).toEqual({
+		expect(resolveDatabaseTarget("d1://codeforge", "d1")).toEqual({
 			kind: "d1",
-			url: "bbs-db",
+			url: "codeforge",
 		});
 		// A bare database name under DATABASE_TYPE=d1 is treated as D1.
-		expect(resolveDatabaseTarget("bbs-db", "d1")).toEqual({
+		expect(resolveDatabaseTarget("codeforge", "d1")).toEqual({
 			kind: "d1",
-			url: "bbs-db",
+			url: "codeforge",
 		});
 	});
 

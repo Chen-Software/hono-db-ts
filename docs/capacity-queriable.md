@@ -184,22 +184,24 @@ predicates against *individual rows*. There is deliberately **no**
 
 but you **cannot** ask:
 
-> "rank users by how many posts they authored"  (a `GROUP BY authorId ORDER BY COUNT(*) DESC`)
+> "rank users by how many repositories they own"  (a `GROUP BY ownerId ORDER BY COUNT(*) DESC`)
 
 That is an **aggregation** (a multi-row read-model), which the architecture
-keeps out of the generic filter surface and puts in **hand-written join
-endpoints** — exactly the `/stats`, `/boards/:id/hot`, and `/stats/top-posters`
-pattern (`src/http/app.ts`). Those use `client.unsafe(sql)` **server-side
-only**; the REST API does **not** accept arbitrary SQL from clients (that would
-be a SQL-injection / data-exfiltration hole).
+keeps out of the generic filter surface. The generated answer is the
+`Aggregable` capacity — `GET /repositories/aggregate?groupBy=ownerId&count=*`
+(`src/capacities/aggregable.ts`) — and join-heavy variants are hand-written
+read-models in `src/http/app.ts` (e.g. `/stats`). Those use
+`client.unsafe(sql)` **server-side only**; the REST API does **not** accept
+arbitrary SQL from clients (that would be a SQL-injection / data-exfiltration
+hole).
 
 If you need client-triggerable but server-vetted aggregation, add a **named
 query registry** (predefined SQL keyed by a safe name) — never a raw `?sql=`
 passthrough.
 
 ```http
-# the supported way to answer "who posted the most throughout history"
-GET /stats/top-posters?limit=10
+# the supported way to answer "who owns the most repositories"
+GET /repositories/aggregate?groupBy=ownerId&count=*&orderBy=count:desc&limit=10
 ```
 
 ---
@@ -252,9 +254,8 @@ console.log(User.routeSpec());
 - [`capacity-hashable.md`](./capacity-hashable.md) — the `contentHash` field
   (a derived SHA-256 of the payload, not a query key) these params never filter.
 - [`data-models-storage.md`](../docs/data-models-storage.md) — the whole capacity
-  model, the BBS models (`Board`/`Thread`/`Reply`), the storage layers, and the
-  "query latest posts" / "query post history" recipes.
+  model, the current models, the storage layers, and the "query repositories of
+  a user" / "query history" recipes.
 - `src/capacities/queriable.ts` — the matcher engine + `deriveFieldPlans`.
 - `src/capacities/servable.ts` — the SQL route generator + `buildFilters`.
-- `src/http/app.ts` — the hand-written aggregation read-models (`/stats`,
-  `/boards/:id/hot`, `/stats/top-posters`).
+- `src/http/app.ts` — the hand-written read-models (`/stats`, `/repositories/:id`).

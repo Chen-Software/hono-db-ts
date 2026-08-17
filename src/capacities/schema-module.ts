@@ -87,8 +87,8 @@ export interface HttpSchemaModule {
  * Why this exists: typia is a *compile-time* transformer. It cannot resolve a
  * generic type argument inside a mixin or factory ("non-specified generic
  * argument" — proven empirically). So every typia function must be bound
- * ONCE, concretely, at the model site (where `UserSchema` / `PostData` are
- * concrete), gathered into this single object, and handed to `defineModel`.
+ * ONCE, concretely, at the model site (where `UserSchema` / `RepositorySchema`
+ * are concrete), gathered into this single object, and handed to `defineModel`.
  *
  * The base model consumes what it needs (`schema`, `classify`); each capacity
  * consumes only its own slice (e.g. `toJSON`/`fromJSON`, `encode`/`decode`,

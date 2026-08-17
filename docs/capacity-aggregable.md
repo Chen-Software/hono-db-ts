@@ -12,8 +12,8 @@ This document is the focused companion to
 [`capacity-queriable.md`](./capacity-queriable.md) (the matcher engine),
 [`capacity-servable.md`](./capacity-servable.md) (the row-level HTTP layer), and
 [`data-models-storage.md`](../docs/data-models-storage.md) (the whole capacity
-model). It focuses on what happens when a model — specifically the BBS models
-`Board`, `Thread`, `Reply`, `Post`, `User` — composes `Aggregable`.
+model). It focuses on what happens when a model — specifically the current
+models `User` and `Repository` — composes `Aggregable`.
 
 ---
 
@@ -213,15 +213,14 @@ per post id (the identity map keeps the latest version of each id). So:
 - `COUNT(*) GROUP BY authorId` ≈ "how many posts each user currently holds" ≈
   **cumulative posts** (an id never truly disappears), which is almost always
   the intended ranking.
-- It does **not** count *edit versions* — each post's full edit history lives in
-  the **append-only version store** (`postRepo.historyOf(id)`, see
+- It does **not** count *edit versions* — a repository's full history lives in
+  the **append-only version store** (`repo.historyOf(id)`, see
   `data-models-storage.md` §5), which has **no aggregation surface** of its own.
 
-For the hand-written, join-heavy sibling — `/stats/top-posters`
-(`src/http/app.ts`) — a `LEFT JOIN users` returns `name`/`email`/`role` and
-includes users with **zero** posts. That is a rich read-model; `GET
-/posts/aggregate` is the generic single-table capacity. Both answer the same
-question; they are different layers.
+The generic single-table capacity is `GET /repositories/aggregate`; a richer,
+join-heavy read-model (e.g. owner names on the grouped rows) would be a
+hand-written sibling in `src/http/app.ts`. Both answer the same question; they
+are different layers.
 
 ---
 
@@ -265,9 +264,9 @@ aggregate route automatically (e.g. `?mail=` on `/users/aggregate`).
 - [`capacity-sql-serialisable.md`](./capacity-sql-serialisable.md) — the
   foundation: how the drizzle table, column kinds, PK/FK are derived.
 - [`data-models-storage.md`](../docs/data-models-storage.md) — the whole capacity
-  model, the BBS models, storage layers, and the `/stats/top-posters` read-model.
+  model, the current models, and the storage layers.
 - `src/capacities/aggregable.ts` — the capacity factory (`aggregate`,
   `serveAggregate`, `aggregateSpec`).
-- `src/http/app.ts` — the `*.serveAggregate(app, client)` wiring for all five
-  BBS models, registered **before** the per-model CRUD so a literal
-  `/users/aggregate` beats the generic `GET /users/:id`.
+- `src/http/app.ts` — the `*.serveAggregate(app, client)` wiring, registered
+  **before** the per-model CRUD so a literal `/users/aggregate` beats the
+  generic `GET /users/:id`.

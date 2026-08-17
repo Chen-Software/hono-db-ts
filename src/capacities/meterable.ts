@@ -4,16 +4,16 @@ import type { ComposeContext } from "./compose";
 export interface MeterableOptions {
 	/**
 	 * Metric name prefix for this model's operations, e.g. `"User"` or
-	 * `"Post"`. Defaults to the model's `schemaName` (`"UserSchema"`,
-	 * `"PostData"`, …). Surfaces as `db.operation.name` in OTEL and as the
-	 * prefix in `/debug/operations` (e.g. `User.load`, `Post.create`).
+	 * `"Repository"`. Defaults to the model's `schemaName` (`"UserSchema"`,
+	 * `"RepositorySchema"`, …). Surfaces as `db.operation.name` in OTEL and as
+	 * the prefix in `/debug/operations` (e.g. `User.load`, `Repository.create`).
 	 */
 	name?: string;
 }
 
 /** Static surface the `Meterable` capacity stamps onto the adorned model. */
 export interface MeterableStatic {
-	/** Read by `Repository` / `PostRepo` to decide whether to time each op. */
+	/** Read by `Repository` / `UserRepo` to decide whether to time each op. */
 	isMeterable: boolean;
 	/** Display prefix for operation metrics. */
 	meterName: string;

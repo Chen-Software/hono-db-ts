@@ -80,12 +80,12 @@ timestamp order) to the DB via `drizzle-orm/bun-sql` + `databaseUrl()` (the
 
 ### `db:seed [counts…]`
 
-Seed the DB with a BBS dataset using `Randomisable.random()` (format-bound
-fields are stamped: uuid ids, emails, slug patterns, SHA-256 content hashes,
-FK wiring). Defaults (positional-overridable):
+Seed the DB with a forge dataset using `Randomisable.random()` (format-bound
+fields are stamped: uuid ids, emails, slug patterns, FK wiring). Defaults
+(positional-overridable):
 
 ```
-50 users · 100 boards · 1000 posts · 1000 threads · 2000 replies
+50 users · 200 repositories
 ```
 
 Idempotent via `INSERT OR REPLACE` by primary key.
@@ -129,8 +129,8 @@ Multiple operators on one column AND too:
 #### Examples
 
 ```bash
-# count boards
-bun run src/main.ts query boards --count
+# count repositories
+bun run src/main.ts query repositories --count
 
 # equality
 bun run src/main.ts query users '{"role":"admin"}' --limit 5
@@ -139,13 +139,10 @@ bun run src/main.ts query users '{"role":"admin"}' --limit 5
 bun run src/main.ts query users '{"age":{">=":20,"<":30}}' --count
 
 # LIKE search + sort + limit
-bun run src/main.ts query threads '{"title":{"contains":"a"}}' --sort updated_at:desc --limit 20
+bun run src/main.ts query repositories '{"name":{"contains":"a"}}' --sort created_at:desc --limit 20
 
 # boolean coercion + FK equality
-bun run src/main.ts query threads '{"boardId":"<id>","pinned":"true"}'
-
-# newest published posts
-bun run src/main.ts query posts '{"published":"true"}' --sort updated_at:desc --limit 3
+bun run src/main.ts query repositories '{"ownerId":"<id>","isPrivate":"true"}'
 ```
 
 ### `serve [port] [mode]`
@@ -177,13 +174,11 @@ bun run src/main.ts serve api                   # JSON API only
 
 #### Routes
 
-- **JSON query API — always under `/api`**: `GET /api/stats`, `/api/boards`,
-  `/api/boards/:id`, `/api/boards/:id/threads`, `/api/boards/:id/hot`,
-  `/api/threads/:id`, `/api/threads/:id/replies`, `/api/users/:id`,
-  `/api/users/:id/threads`, `/api/users/:id/posts`, `/api/users/:id/replies`,
-  `/api/search?q=`, `/api/latest-posts`.
+- **JSON query API — always under `/api`**: `GET /api/stats`,
+  `/api/repositories`, `/api/repositories/:id`, `/api/users/:id`,
+  `/api/search?q=`.
   Two kinds of API routes coexist:
-  1. **Hand-written "good queries"** — the multi-model read models that need
+  1. **Hand-written read models** — the multi-model read models that need
      joins/aggregation, registered in `src/http/app.ts` (`buildQueryApp`).
   2. **Generated per-model routes** — the `Servable` capacity (see
      `docs/data-models-storage.md` §6) turns any `SqlSerialisable` model into
@@ -194,8 +189,8 @@ bun run src/main.ts serve api                   # JSON API only
   UI (SSR + islands + `/static/*` assets).
 
 If `dist/index.js` does not exist (UI not built), the JSON API is ALSO
-mounted at `/` for back-compatibility — so `/boards` works, but `/api/boards`
-is the canonical route.
+mounted at `/` for back-compatibility — so `/repositories` works, but
+`/api/repositories` is the canonical route.
 
 Every endpoint reads the SAME database the CLI `query` command and the
 `db:generate`/`db:migrate`/`db:seed` pipeline use, through the derived drizzle
@@ -246,7 +241,7 @@ export DATABASE_URL="file:./dev.db"
 
 bun run src/main.ts db:generate && bun run src/main.ts db:migrate   # schema
 bun run src/main.ts db:seed                                          # data
-bun run src/main.ts query boards --count                             # verify
+bun run src/main.ts query repositories --count                       # verify
 
 # JSON API only
 bun run src/main.ts serve &            # API at /api/... and /... on :8787

@@ -16,7 +16,7 @@ focuses on the *capacity mechanism itself*.
 
 ## 1. What is a capacity?
 
-A model (`User`, `Post`, `Board`, …) is produced by `defineModel`
+A model (`User`, `Repository`, …) is produced by `defineModel`
 (`src/models/base.ts`), which takes three things:
 
 1. A **reflected typia schema** (`schemaName`) — the shape of the entity.
@@ -241,7 +241,7 @@ documented in-source (file noted).
 - **"I want to make a model queryable / servable"** →
   [capacity-queriable.md](./capacity-queriable.md) →
   [capacity-servable.md](./capacity-servable.md).
-- **"I want to aggregate / rank (who posted the most?)"** →
+- **"I want to aggregate / rank (who owns the most repositories?)"** →
   [capacity-aggregable.md](./capacity-aggregable.md).
 - **"I want versioning / content addressing"** →
   [capacity-versionable.md](./capacity-versionable.md) →

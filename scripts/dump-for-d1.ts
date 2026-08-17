@@ -3,10 +3,10 @@
  * Cloudflare D1 (`wrangler d1 execute --remote --file`).
  *
  *     bun run scripts/dump-for-d1.ts > /tmp/d1-seed.sql
- *     wrangler d1 execute bbs-db --remote --file=/tmp/d1-seed.sql
+ *     wrangler d1 execute codeforge --remote --file=/tmp/d1-seed.sql
  *
  * Reads `DATABASE_URL` (default `file:./dev.db`), writes `INSERT OR REPLACE`
- * statements for users / boards / threads / replies / posts (idempotent).
+ * statements for users / repositories (idempotent).
  */
 
 import { SQL } from "bun";
@@ -15,7 +15,7 @@ import { databaseUrl } from "../src/macros/envs" with { type: "macro" };
 const url = databaseUrl();
 const client = new SQL(url);
 
-const tables = ["users", "boards", "threads", "replies", "posts"] as const;
+const tables = ["users", "repositories"] as const;
 
 function esc(v: unknown): string {
 	if (v === null || v === undefined) return "NULL";

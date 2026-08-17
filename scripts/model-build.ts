@@ -3,7 +3,7 @@
  *
  * This is the `models:build` step. It:
  *
- *  1. Imports every model module (`User`, `Post`, …), which RUNS the typia
+ *  1. Imports every model module (`User`, `Repository`, …), which RUNS the typia
  *     transform (wired via the `@ttsc/unplugin/bun` plugin in `bunfig.toml`)
  *     and triggers each model's `defineModel` composition — including the
  *     `SqlSerialisable` capacity that derives the real drizzle tables from the

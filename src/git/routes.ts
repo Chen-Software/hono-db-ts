@@ -48,12 +48,13 @@ export function mountGitRoutes(app: Hono, opts: GitRouteOptions): void {
 			const s = await getSession(c).catch(() => null);
 			if (!s?.user) return new Response("authentication required", { status: 401 });
 		}
-		// A first push targets a repo that has no git data yet. Create the
-		// bare repo so the receive-pack advertisement can list zero refs and
-		// the subsequent POST git-receive-pack has somewhere to write objects.
-		if (service === "git-receive-pack") {
-			await gitBackend.ensureRepo(owner, repo);
-		}
+		// A repo that exists in the DB but has no git data yet (freshly created,
+		// or this is its first interaction) must be initialised before EITHER
+		// advertisement: `git clone` of an empty repo (upload-pack) needs a bare
+		// repo to advertise zero refs, and the first `git push` (receive-pack)
+		// needs somewhere to write objects. ensureRepo is idempotent (stats HEAD
+		// and returns when already initialised), so it is cheap on every refs hit.
+		await gitBackend.ensureRepo(owner, repo);
 		const gitdir = gitBackend.gitdirFor(owner, repo);
 		const fs = gitBackend.fsFor(owner, repo);
 		const bytes =

@@ -187,7 +187,7 @@ function betterAuthEnabled(): boolean {
 	return process.env.BETTER_AUTH_ENABLED !== "false";
 }
 
-/** Public base URL of the Better Auth endpoints, e.g. https://bbs.example.workers.dev. */
+/** Public base URL of the Better Auth endpoints, e.g. https://codeforge.example.workers.dev. */
 function betterAuthUrl(): string | undefined {
 	return process.env.BETTER_AUTH_URL;
 }

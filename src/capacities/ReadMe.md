@@ -2,7 +2,7 @@
 
 This directory holds the **capacity** system: a set of small, single-purpose
 mixins that each own one cross-cutting concern and contribute a slice of a
-model's API. A model (`User`, `Post`, `Board`, …) is *only* intent — it names
+model's API. A model (`User`, `Repository`, …) is *only* intent — it names
 the capacities it wants — and every capacity is reusable across models.
 
 > **Start here first:** [`docs/capacity-introduction.md`](../docs/capacity-introduction.md)
@@ -68,7 +68,7 @@ See `docs/capacity-introduction.md` §2–§4 for the full contract.
 | `SqlSerialisable` | `sql-serialisable.ts` | Drizzle table + `toRow`/`fromRow` mappers + FK/CHECK from the reflected schema. | [`docs/capacity-sql-serialisable.md`](../docs/capacity-sql-serialisable.md) |
 | `JsonSerialisable` | `json-serialisable.ts` | `toJSON` / `fromJSON` + JSON-override constructor. | [`docs/capacity-json-serialisable.md`](../docs/capacity-json-serialisable.md) |
 | `ProtobufEncodable` | `protobuf-encodable.ts` | `encode` / `decode` / `message` (binary wire format; **mutates in place** — the one in-place-only codec). | [`docs/capacity-protobuf-encodable.md`](../docs/capacity-protobuf-encodable.md) |
-| `Referencible` | `referencible.ts` | In-memory FK accessors (`user.getPosts()`) through the identity map; owner side from `Reference<>` tags, inverse side auto-derived by `wireInverseRelations()`. `onDelete` (restrict/cascade/setNull) is **executed** by `ModelBase.delete()`. Not in `REGISTRY` (array form only). | [`docs/capacity-referencible.md`](../docs/capacity-referencible.md) |
+| `Referencible` | `referencible.ts` | In-memory FK accessors (`user.getRepositories()`) through the identity map; owner side from `Reference<>` tags, inverse side auto-derived by `wireInverseRelations()`. `onDelete` (restrict/cascade/setNull) is **executed** by `ModelBase.delete()`. Not in `REGISTRY` (array form only). | [`docs/capacity-referencible.md`](../docs/capacity-referencible.md) |
 | `Versionable` | `versionable.ts` | Append-only version rules (`updated_at` = version), `update`, history toolkit. Plays with `Immutable`. | [`docs/capacity-versionable.md`](../docs/capacity-versionable.md) |
 | `Immutable` | `immutable.ts` + `immutable-setter.ts` + `immutable-validatable.ts` | `Object.freeze` + setter-rewrite; `update` reconstructs a **new frozen** instance. Declared **last** so freeze wraps the finished object. | [`docs/capacity-immutable.md`](../docs/capacity-immutable.md) |
 | `Hashable` | `hashable.ts` | `contentHash` (SHA-256) of a named content field; `hash`/`verify`/`address`. | [`docs/capacity-hashable.md`](../docs/capacity-hashable.md) |
