@@ -5,6 +5,23 @@ import { defineConfig, type Plugin } from "vite";
 import honox from "honox/vite";
 import { guardedTtsc } from "./scripts/ttsc-island-guard";
 
+/**
+ * isomorphic-git ships dual entry points: the `node` export condition
+ * (`./index.cjs`, used by Vite's SSR resolver by default) pulls in
+ * `tar-stream`/`bl`/`sha.js`/`inherits` — CJS packages that call
+ * `createRequire(import.meta.url)("util")` at module load. The Workers
+ * runtime's `nodejs_compat` cannot resolve bare `"util"`/`"buffer"` through
+ * that dynamic require, so the worker crashes on boot
+ * (`Uncaught TypeError: The argument 'path' ... must be ... an absolute path
+ * string`). The browser entry (`./index.js`) uses Web-Platform-only deps
+ * (`pako`, `crc-32`, `diff3`, `sha.js/sha1.js`, …) and is what the git
+ * backend is written against (`Workers-safe`). Force it via alias.
+ */
+const isomorphicGitBrowser = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"node_modules/isomorphic-git/index.js",
+);
+
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -115,6 +132,8 @@ export default defineConfig({
 		alias: {
 			"design-system": resolve(rootDir, "design-system"),
 			"@": resolve(rootDir, "src"),
+			// isomorphic-git browser entry — see the header comment.
+			"isomorphic-git": isomorphicGitBrowser,
 		},
 	},
 	// esbuild-transpile (vite 5) reads `build.target` (not `ssr.target`) for the
