@@ -1,4 +1,5 @@
+import * as Issue from "./issue";
 import * as Repository from "./repository";
 import * as User from "./user";
 
-export { Repository, User };
+export { Issue, Repository, User };

@@ -43,7 +43,8 @@ registers the model under `schemaName` (so `Reference` tags resolve it), and run
 |---|---|---|---|---|
 | `user.ts` | `UserSchema` | `users` | `Aggregable`, `Queriable` (`?mail=` alias), `Servable`, `Meterable`. | **None** — `getRepositories()` is auto-derived from `Repository.ownerId`'s `Reference` tag. |
 | `repository.ts` | `RepositorySchema` | `repositories` | Git forge metadata catalog: owner, `defaultBranch`, `objectFormatName` (`'sha1'`/`'sha256'`), counters, `status`. | `ownerId → User` (`setNull`); inverse `user.getRepositories()` auto-derived. |
-| `index.ts` | — | — | Re-exports `Repository, User` as namespaces. | — |
+| `issue.ts` | `IssueSchema` | `issues` | Work items in a repo (Forgejo `Issue`): `repoId`/`posterId` FKs, `index`, `title`/`content`, `isClosed`/`isPull`, counters, unix timestamps. SQL-persisted subset only — derived relations (`labels`, `comments`, …) are omitted until those models land. | `repoId → Repository`, `posterId → User` (both `cascade`); inverses `repo.getIssues()` / `user.getIssues()` auto-derived. `milestoneId` kept as a plain nullable column. |
+| `index.ts` | — | — | Re-exports `Issue, Repository, User` as namespaces. | — |
 | `base.ts` | — | — | `defineModel` engine + `ModelBase` (constructor, `update`, `toValueObject`, `delete`). | — |
 
 ---
@@ -57,6 +58,12 @@ All foreign keys are declared by the `Reference<>` tag (`../tags/reference.ts`);
 ```
 User  (UserSchema)
  └─ Repository.ownerId    → setNull (left)  →  user.getRepositories()
+
+Repository (RepositorySchema)
+ └─ Issue.repoId          → cascade (left)  →  repo.getIssues()
+
+User  (UserSchema)
+ └─ Issue.posterId        → cascade (left)  →  user.getIssues()
 ```
 
 **`onDelete` is executed in memory** by `ModelBase.delete()` (see §4). `setNull`

@@ -15,7 +15,10 @@ import type { FsClient } from "isomorphic-git";
  *  @cloudflare/workers-types, which is not installed in this repo). */
 export interface R2Like {
 	head(key: string): Promise<{ size: number } | null>;
-	get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; size?: number } | null>;
+	get(
+		key: string,
+		opts?: { range?: { offset: number; length: number } },
+	): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; size?: number } | null>;
 	put(key: string, value: Uint8Array | string | ArrayBuffer): Promise<unknown>;
 	delete(key: string): Promise<void>;
 	list(opts: {
@@ -42,8 +45,19 @@ function eNoent(path: string): Error {
 	return e;
 }
 
-/** Build an FsClient over an R2 bucket. */
-export function r2Fs(bucket: R2Like): FsClient {
+/** Match `…/objects/<2-hex>/<38-hex>` → the gitdir prefix + oid. */
+const OBJECT_PATH_RE = /^(.*)\/objects\/([0-9a-f]{2})\/([0-9a-f]{38})$/;
+
+/** Optional pack-indexed read layer (P2-1): resolves object paths through the
+ *  canonical pack instead of one loose-object GET per object. */
+export interface PackAware {
+	readObject(gitdir: string, oid: string): Promise<Uint8Array | null>;
+}
+
+/** Build an FsClient over an R2 bucket. When `packAware` is provided, object
+ *  reads (`objects/xx/yyyy…`) resolve through the canonical pack; everything
+ *  else (refs, config, HEAD) still hits the bucket directly. */
+export function r2Fs(bucket: R2Like, packAware?: PackAware): FsClient {
 	async function existsAsFile(key: string): Promise<boolean> {
 		const head = await bucket.head(key);
 		return head != null;
@@ -55,7 +69,21 @@ export function r2Fs(bucket: R2Like): FsClient {
 	return {
 		promises: {
 			readFile: async (path: string, opts?: { encoding?: string }) => {
-				const obj = await bucket.get(keyOf(path));
+				const key = keyOf(path);
+				// P2-1: route object reads through the canonical pack first.
+				if (packAware) {
+					const m = key.match(OBJECT_PATH_RE);
+					if (m) {
+						const oid = m[2]! + m[3]!;
+						const packed = await packAware.readObject(m[1]!, oid);
+						if (packed) {
+							if (opts?.encoding) return new TextDecoder().decode(packed);
+							return packed;
+						}
+						// Fall through to the loose GET (repo not yet canonicalized).
+					}
+				}
+				const obj = await bucket.get(key);
 				if (!obj) throw eNoent(path);
 				const bytes = new Uint8Array(await obj.arrayBuffer());
 				if (opts?.encoding) return new TextDecoder().decode(bytes);

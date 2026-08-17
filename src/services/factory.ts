@@ -12,6 +12,10 @@ import * as search from './search'
 import * as users from './users'
 import * as webhooks from './webhooks'
 import * as runs from './workflow-runs'
+import * as issues from './issues'
+import * as releases from './releases'
+import * as labels from './labels'
+import * as milestones from './milestones'
 
 type AnyModule = Record<string, unknown>
 
@@ -34,6 +38,10 @@ export function createServices(db: Db) {
 		users: bind(users, db),
 		webhooks: bind(webhooks, db),
 		runs: bind(runs, db),
+		issues: bind(issues, db),
+		releases: bind(releases, db),
+		labels: bind(labels, db),
+		milestones: bind(milestones, db),
 	}
 }
 

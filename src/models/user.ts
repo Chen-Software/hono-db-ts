@@ -30,20 +30,84 @@ import { defineModel } from "./base";
  * what the JSON (de)serialisers and `assertClassify` below need.
  */
 interface UserSchema extends IdentifiableSchema<UUID>, TimestampedSchema {
-	/** Name of the user. */
+	// --- identity (forgejo models/user/user.go:86-104) ---
+	/** Login name — unique, case-insensitive key for `/{owner}` URLs & git transport. */
 	name: string & tags.MinLength<1> & tags.MaxLength<100>;
 
-	/** Email address of the user. Exposed as `?mail=` via the Queriable `fields` option. */
+	/** Lower-cased login name — Forgejo keeps `lower_name` as the lookup key. */
+	lowerName?: string & tags.MinLength<1> & tags.MaxLength<100>;
+
+	/** Display name. */
+	fullName?: string & tags.MaxLength<255>;
+
+	/** Primary email (communication). Organizations use a noreply placeholder. */
 	email: string & tags.Format<"email"> & tags.MaxLength<255>;
 
-	/** User role for permission and access control. */
-	role: "admin" | "member" | "viewer";
+	// --- type discriminator (forgejo UserType; user.go:104) ---
+	/** Account kind. Single-table: organizations are `User` rows with `type: "organization"`. */
+	type?: "individual" | "organization" | "bot";
 
-	/** Age of the user. */
-	age: number &
-		tags.Type<"uint32"> &
-		tags.ExclusiveMinimum<19> &
-		tags.Maximum<100>;
+	// --- visibility (forgejo structs.VisibleType; user.go:152) ---
+	visibility?: "public" | "private" | "limited";
+
+	// --- permission / account flags (forgejo user.go) ---
+	/** Site superuser — the ONLY global privilege flag in Forgejo (no `role` column). */
+	isAdmin?: boolean;
+	/** Primary email activated; may access Web UI + Git/SSH. */
+	isActive?: boolean;
+	/** Restricted: may only see orgs/repos they have explicit rights to. */
+	isRestricted?: boolean;
+	/** Login prohibited (Web UI); Git/SSH may still be allowed. */
+	prohibitLogin?: boolean;
+	/** May run custom Git hooks. */
+	allowGitHook?: boolean;
+	/** May migrate repositories by local path. */
+	allowImportLocal?: boolean;
+	/** May create organizations. */
+	allowCreateOrganization?: boolean;
+	/** Keep the primary email private (expose noreply address instead). */
+	keepEmailPrivate?: boolean;
+
+	// --- profile (forgejo user.go:105-161) ---
+	location?: string & tags.MaxLength<255>;
+	website?: string & tags.MaxLength<255>;
+	pronouns?: string & tags.MaxLength<255>;
+	description?: string & tags.MaxLength<255>;
+	/** UI language (BCP-47-ish, e.g. "en-US"). */
+	language?: string & tags.MaxLength<5>;
+	/** Avatar URL or storage path. */
+	avatar?: string & tags.MaxLength<2048>;
+	/** Whether `avatar` is a user-uploaded custom image (vs generated identicon). */
+	useCustomAvatar?: boolean;
+	keepPronounsPrivate?: boolean;
+	keepActivityPrivate?: boolean;
+
+	// --- preferences ---
+	/** Diff view style. */
+	diffViewStyle?: "unified" | "split";
+	/** UI theme name. */
+	theme?: string;
+	/** Email notification preference. */
+	emailNotificationsPreference?: "enabled" | "onmention" | "disabled";
+
+	// --- limits / counters ---
+	/** Max repository creation; -1 = global default (forgejo MaxRepoCreation). */
+	maxRepoCreation?: number;
+	numRepos?: number;
+	numStars?: number;
+	numFollowers?: number;
+	numFollowing?: number;
+	// org-only denormalized counters (forgejo user.go:150-151)
+	numTeams?: number;
+	numMembers?: number;
+
+	// --- org-only flag (forgejo user.go:153) ---
+	/** Org: let repository admins change team access. */
+	repoAdminChangeTeamAccess?: boolean;
+
+	// --- timestamps (unix seconds; `created_at` comes from Timestamped) ---
+	updatedUnix?: number;
+	lastLoginUnix?: number;
 }
 
 /**
@@ -192,10 +256,10 @@ const UserModel = defineModel<UserSchema>({
 				sort: { field: "created_at", dir: "desc" },
 			},
 		},
-		// Aggregable: turns `User` into an aggregateable entity — `User.aggregate`
-		// (in-memory) + `User.serveAggregate(app, client)` → `GET /users/aggregate`.
-		// Numeric roll-ups work out of the box (`?groupBy=role&avg=age`); the
-		// `mail` alias override is honored for aggregate-row filters too.
+	// Aggregable: turns `User` into an aggregateable entity — `User.aggregate`
+	// (in-memory) + `User.serveAggregate(app, client)` → `GET /users/aggregate`.
+	// Numeric roll-ups work out of the box (`?groupBy=type&avg=maxRepoCreation`);
+	// the `mail` alias override is honored for aggregate-row filters too.
 		{
 			capacity: Aggregable,
 			options: { path: "/users/aggregate" },

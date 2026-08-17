@@ -38,8 +38,8 @@ test("repository service: create/read/listByOwner/update + keyset cursor + ON DE
 
 	// A real user so the ownerId FK is legitimate (libSQL enforces FKs).
 	await client.execute({
-		sql: `INSERT INTO "users" ("id","created_at","name","email","role","age") VALUES (?,?,?,?,?,?)`,
-		args: ["u1", new Date().toISOString(), "Test User", "t@example.com", "member", 30],
+		sql: `INSERT INTO "users" ("id","created_at","name","email") VALUES (?,?,?,?)`,
+		args: ["u1", new Date().toISOString(), "Test User", "t@example.com"],
 	});
 
 	const id1 = await repo.create(db, {
@@ -93,8 +93,8 @@ test("repository service: create enforces name grammar + (owner, name) uniquenes
 
 	const insertUser = (id: string, name: string) =>
 		client.execute({
-			sql: `INSERT INTO "users" ("id","created_at","name","email","role","age") VALUES (?,?,?,?,?,?)`,
-			args: [id, new Date().toISOString(), name, `${id}@example.com`, "member", 30],
+			sql: `INSERT INTO "users" ("id","created_at","name","email") VALUES (?,?,?,?)`,
+			args: [id, new Date().toISOString(), name, `${id}@example.com`],
 		});
 	await insertUser("u9", "octocat");
 	await insertUser("u10", "other-user");

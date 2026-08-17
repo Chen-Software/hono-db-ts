@@ -32,10 +32,13 @@ import * as Models from '@/models'
 import { createServices } from '@/services'
 import { DuplicateRepositoryError, InvalidRepositoryNameError } from '@/services/repository'
 import type { GitBackend } from '@/git/backend'
-import { findReadme, listTree, logCommits, readBlob } from '@/git/read'
+import { findReadme, getCommit, listTree, logCommits, readBlob } from '@/git/read'
 import { diffCommit, diffCommits } from '@/git/diff'
 import { branchesContaining, createBranch, deleteBranch, listBranches, renameBranch } from '@/git/branches'
 import { createTag, deleteTag, listTags } from '@/git/tags'
+import { archiveRepo } from '@/git/archive'
+import { searchCommits, commitsForPath, aheadBehind } from '@/git/search'
+import { blameFile } from '@/git/blame'
 
 /** UUID path segment — matches the id shape every table uses. */
 const UUID = '[0-9a-f-]{36}'
@@ -163,6 +166,53 @@ export function buildQueryApp(
 		return json({ repository: repo, owner })
 	})
 
+	// POST /page/repositories/by-owner/:owner/:name/settings — save repository
+	// settings. Dispatches on a hidden `action` field (Forgejo's `SettingsPost`
+	// switch) for the repo addressed by its canonical `{owner}/{name}` URL:
+	//   - save      → name, slug, visibility, description, default branch,
+	//                 website, template (following a rename in the redirect)
+	//   - archive / unarchive → toggle the archived state
+	app.post(`/page/repositories/by-owner/:owner/:name/settings`, async (c) => {
+		const owner = c.req.param('owner')
+		const repo = await svc.repository.getByOwnerAndName(owner, c.req.param('name'))
+		if (!repo) return fail('repository not found', 404)
+
+		const body = await c.req.parseBody()
+		const action = typeof body['action'] === 'string' ? body['action'] : ''
+		const settingsUrl = `/${owner}/${repo.lowerName || repo.name}/settings`
+
+		if (action === 'archive' || action === 'unarchive') {
+			try {
+				await svc.repository.update(repo.id, { isArchived: action === 'archive' })
+			} catch {
+				return c.redirect(settingsUrl)
+			}
+			return c.redirect(settingsUrl)
+		}
+
+		if (action !== 'save') {
+			return c.redirect(settingsUrl)
+		}
+
+		const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+		const lowerName = typeof body['lowerName'] === 'string' ? body['lowerName'].trim() : ''
+		const description = typeof body['description'] === 'string' ? body['description'].trim() : ''
+		const defaultBranch = typeof body['defaultBranch'] === 'string' ? body['defaultBranch'].trim() : ''
+		const website = typeof body['website'] === 'string' ? body['website'].trim() : ''
+		const isPrivate = body['visibility'] === 'private'
+		const isTemplate = body['template'] === 'on'
+
+		if (name && lowerName) {
+			try {
+				await svc.repository.update(repo.id, { name, lowerName, description, isPrivate, isTemplate, defaultBranch, website })
+			} catch {
+				return c.redirect(settingsUrl)
+			}
+		}
+		// Follow a rename: redirect to the new canonical URL.
+		return c.redirect(`/${owner}/${lowerName || repo.lowerName || repo.name}/settings`)
+	})
+
 	// GET /page/repositories/:id
 	app.get(`/page/repositories/:id`, async (c) => json(await svc.repository.getPage(c.req.param('id'))))
 
@@ -173,6 +223,60 @@ export function buildQueryApp(
 	// login name (the `/{owner}` forge URL). Registered before the `:id` route;
 	// it has 2 segments after `/page/users` so it can never collide with `:id`.
 	app.get(`/page/users/by-name/:name`, async (c) => json(await svc.users.getProfileByName(c.req.param('name'))))
+
+	// GET /page/users/:id/settings — the signed-in user's settings payload:
+	// their profile plus the personal access tokens they own (token hashes are
+	// never returned). 404 when the user does not exist.
+	app.get(`/page/users/by-name/:name/settings`, async (c) => {
+		const user = await svc.users.getByName(c.req.param('name'))
+		if (!user) return fail('user not found', 404)
+		const tokens = await svc.accessTokens.listByUser(user.id)
+		return json({ user, tokens })
+	})
+
+	// POST /page/users/by-name/:name/settings — save profile settings
+	// (username / email). A username change renames the public `/{owner}` URL,
+	// so the handler redirects to the new settings address to follow the rename.
+	app.post(`/page/users/by-name/:name/settings`, async (c) => {
+		const user = await svc.users.getByName(c.req.param('name'))
+		if (!user) return fail('user not found', 404)
+
+		const body = await c.req.parseBody()
+		const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+		const email = typeof body['email'] === 'string' ? body['email'].trim() : ''
+		try {
+			await svc.users.update(user.id, { name: name || undefined, email: email || undefined })
+		} catch {
+			// e.g. a name that already exists — fall back to the current name.
+			return c.redirect(`/${user.name}/settings`)
+		}
+		return c.redirect(`/${name || user.name}/settings`)
+	})
+
+	// POST /page/users/by-name/:name/settings/tokens — create a personal access
+	// token for the user. The raw token is returned exactly once (the service
+	// stores only its SHA-256). Scopes default to read+write repository.
+	app.post(`/page/users/by-name/:name/settings/tokens`, async (c) => {
+		const user = await svc.users.getByName(c.req.param('name'))
+		if (!user) return fail('user not found', 404)
+		const body = await c.req.parseBody()
+		const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+		if (!name) return fail('token name is required', 400)
+		const created = await svc.accessTokens.create({ userId: user.id, name })
+		return json({ ok: true, id: created.id, token: created.token })
+	})
+
+	// POST /page/users/by-name/:name/settings/tokens/delete — delete an access
+	// token that belongs to the user (scoped in the service so a user can only
+	// delete their own).
+	app.post(`/page/users/by-name/:name/settings/tokens/delete`, async (c) => {
+		const user = await svc.users.getByName(c.req.param('name'))
+		if (!user) return fail('user not found', 404)
+		const body = await c.req.parseBody()
+		const tokenId = typeof body['id'] === 'string' ? body['id'] : ''
+		if (tokenId) await svc.accessTokens.remove(tokenId, user.id)
+		return json({ ok: true })
+	})
 
 	// GET /page/users/:id
 	app.get(`/page/users/:id`, async (c) => json(await svc.users.getProfile(c.req.param('id'))))
@@ -273,6 +377,21 @@ export function buildQueryApp(
 			return json({ run, steps })
 		})
 
+		// GET /api/page/repositories/:id/commit/:oid — a single commit's metadata
+		// plus its diff against the parent (root commits diff the empty tree).
+		app.get(`/page/repositories/:id/commit/:oid`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			try {
+				const commit = await getCommit(ctx.fs, ctx.gitdir, c.req.param('oid'))
+				if (!commit) return fail('commit not found', 404)
+				const diff = await diffCommit(ctx.fs, ctx.gitdir, c.req.param('oid'))
+				return json({ commit, diff })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
 		// GET /api/page/repositories/:id/commit/:oid/diff — a single commit's diff
 		// against its parent (root commits diff against the empty tree).
 		app.get(`/page/repositories/:id/commit/:oid/diff`, async (c) => {
@@ -302,13 +421,15 @@ export function buildQueryApp(
 			}
 		})
 
-		// GET /api/page/repositories/:id/branches — branch list with tips.
+		// GET /api/page/repositories/:id/branches?page=&perPage= — branch list.
 		app.get(`/page/repositories/:id/branches`, async (c) => {
 			const ctx = await resolveGitRepo(c.req.param('id'))
 			if (!ctx) return fail('repository not found', 404)
+			const page = num(c.req.query('page'), 1)
+			const perPage = num(c.req.query('perPage'), 30)
 			try {
-				const branches = await listBranches(ctx.fs, ctx.gitdir)
-				return json({ branches })
+			const { branches, total } = await listBranches(ctx.fs, ctx.gitdir, { page, perPage })
+			return json({ branches, total, page })
 			} catch (e) {
 				return fail(String((e as Error)?.message ?? e), 404)
 			}
@@ -397,12 +518,16 @@ export function buildQueryApp(
 			const taggerName = typeof body['taggerName'] === 'string' ? body['taggerName'].trim() : ''
 			const taggerEmail = typeof body['taggerEmail'] === 'string' ? body['taggerEmail'].trim() : ''
 			if (!name) return fail('tag name required', 400)
+			// Annotated when a message (and tagger identity) is supplied;
+			// otherwise a lightweight tag pointing straight at the target.
+			const annotated = Boolean(message && taggerName && taggerEmail)
 			try {
-				const commit = await createTag(ctx.fs, ctx.gitdir, name, target, {
+				const tag = await createTag(ctx.fs, ctx.gitdir, name, target, {
+					annotated,
 					message: message || undefined,
 					tagger: taggerName && taggerEmail ? { name: taggerName, email: taggerEmail } : undefined,
 				})
-				return json({ ok: true, name, commit })
+				return json({ ok: true, name, tag })
 			} catch (e) {
 				return fail(String((e as Error)?.message ?? e), 409)
 			}
@@ -417,6 +542,302 @@ export function buildQueryApp(
 				return json({ ok: true })
 			} catch (e) {
 				return fail(String((e as Error)?.message ?? e), 409)
+			}
+		})
+
+		// GET /api/page/repositories/:id/archive?ref=&format= — download ZIP / TAR.GZ.
+		// `format` is `zip` (default) or `tar.gz`. Streamed with Content-Disposition.
+		// (Route uses query params rather than a `:ref.:format` path segment so a
+		// tag like `v1.0` — which contains a dot — doesn't break routing.)
+		app.get(`/page/repositories/:id/archive`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const format = c.req.query('format') === 'tar.gz' ? 'tar.gz' : 'zip'
+			try {
+				const { contentType, body, filename } = await archiveRepo(ctx.fs, ctx.gitdir, ref, format, ctx.name)
+				return new Response(body, {
+					status: 200,
+					headers: {
+						'content-type': contentType,
+						'content-disposition': `attachment; filename="${filename}"`,
+					},
+				})
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/commits/search?q=&author=&committer=&before=&after=&page= — commit search UI.
+		app.get(`/page/repositories/:id/commits/search`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const before = c.req.query('before')
+			const after = c.req.query('after')
+			try {
+				const res = await searchCommits(ctx.fs, ctx.gitdir, ref, {
+					query: c.req.query('q') ?? undefined,
+					author: c.req.query('author') ?? undefined,
+					committer: c.req.query('committer') ?? undefined,
+					before: before ? Number(before) : undefined,
+					after: after ? Number(after) : undefined,
+					page: num(c.req.query('page'), 1),
+					perPage: num(c.req.query('perPage'), 30),
+				})
+				return json(res)
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/commits/for-path?path=&ref=&page= — file history.
+		app.get(`/page/repositories/:id/commits/for-path`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const path = c.req.query('path')
+			if (!path) return fail('for-path requires ?path=', 400)
+			try {
+				const res = await commitsForPath(ctx.fs, ctx.gitdir, ref, path, {
+					page: num(c.req.query('page'), 1),
+					perPage: num(c.req.query('perPage'), 30),
+				})
+				return json(res)
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/blame?path=&ref= — per-line commit attribution.
+		app.get(`/page/repositories/:id/blame`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const path = c.req.query('path')
+			if (!path) return fail('blame requires ?path=', 400)
+			try {
+				const res = await blameFile(ctx.fs, ctx.gitdir, ref, path)
+				return json(res)
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/ahead-behind?base=&head= — PR compare divergence.
+		app.get(`/page/repositories/:id/ahead-behind`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const base = c.req.query('base') || ctx.defaultBranch
+			const head = c.req.query('head') || ctx.defaultBranch
+			try {
+				const res = await aheadBehind(ctx.fs, ctx.gitdir, base, head)
+				return json(res)
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// ------------------------------------------------------------------
+		// Issue / PR / label / milestone / release endpoints (Phase 3).
+		// These are DB-only entities — keyed by the repo `:id`, no git repo is
+		// required (unlike the tree/commit endpoints above).
+		// ------------------------------------------------------------------
+
+		// GET /page/repositories/:id/issues?state=&page= — list issues (newest first).
+		app.get(`/page/repositories/:id/issues`, async (c) => {
+			const id = c.req.param('id')
+			const state = c.req.query('state') === 'closed' ? 'closed' : c.req.query('state') === 'open' ? 'open' : undefined
+			const page = Math.max(1, Number(c.req.query('page') || '1') || 1)
+			try {
+				return json(await svc.issues.listByRepo(id, { state, page }))
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/issues — create an issue (or, with
+		// `is_pull=1`, the issue half of a pull request).
+		app.post(`/page/repositories/:id/issues`, async (c) => {
+			const id = c.req.param('id')
+			const body = await c.req.parseBody()
+			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+			if (!title) return fail('issue title is required', 400)
+			const posterId = c.req.query('poster') || ''
+			const session = await getSession(c).catch(() => null)
+			const poster = session?.user?.id ?? posterId
+			try {
+				const issue = await svc.issues.create({
+					repoId: id,
+					posterId: poster,
+					title,
+					body: typeof body['body'] === 'string' ? body['body'] : '',
+					isPull: body['is_pull'] === '1',
+				})
+				return json({ ok: true, issue })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// GET /page/repositories/:id/issues/:index — one issue + its comments.
+		app.get(`/page/repositories/:id/issues/:index`, async (c) => {
+			const id = c.req.param('id')
+			const index = Number(c.req.param('index'))
+			try {
+				const issue = await svc.issues.getByIndex(id, index)
+				if (!issue) return fail('issue not found', 404)
+				const comments = await svc.issues.listComments(index, id)
+				const pr = issue.is_pull ? await svc.issues.getPullRequestForIssue(issue.id) : null
+				return json({ issue, comments, pr })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// POST /page/repositories/:id/issues/:index/state — open/close an issue.
+		app.post(`/page/repositories/:id/issues/:index/state`, async (c) => {
+			const id = c.req.param('id')
+			const index = Number(c.req.param('index'))
+			const body = await c.req.parseBody()
+			const state = body['state'] === 'closed' ? 'closed' : 'open'
+			try {
+				const ok = await svc.issues.setState(id, index, state)
+				if (!ok) return fail('issue not found', 404)
+				return json({ ok: true, state })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/issues/:index/comments — add a comment.
+		app.post(`/page/repositories/:id/issues/:index/comments`, async (c) => {
+			const id = c.req.param('id')
+			const index = Number(c.req.param('index'))
+			const body = await c.req.parseBody()
+			const text = typeof body['body'] === 'string' ? body['body'].trim() : ''
+			if (!text) return fail('comment body is required', 400)
+			const posterId = c.req.query('poster') || ''
+			const session = await getSession(c).catch(() => null)
+			const poster = session?.user?.id ?? posterId
+			try {
+				const comment = await svc.issues.addComment(id, index, poster, text)
+				if (!comment) return fail('issue not found', 404)
+				return json({ ok: true, comment })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// GET /page/repositories/:id/labels — list repo labels.
+		app.get(`/page/repositories/:id/labels`, async (c) => {
+			try {
+				return json({ labels: await svc.labels.listByRepo(c.req.param('id')) })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/labels — create a label.
+		app.post(`/page/repositories/:id/labels`, async (c) => {
+			const body = await c.req.parseBody()
+			const name = typeof body['name'] === 'string' ? body['name'].trim() : ''
+			const color = typeof body['color'] === 'string' ? body['color'].trim() : '#888'
+			if (!name) return fail('label name is required', 400)
+			try {
+				const label = await svc.labels.create({
+					repoId: c.req.param('id'),
+					name,
+					color,
+					description: typeof body['description'] === 'string' ? body['description'] : '',
+				})
+				if (!label) return fail('invalid color', 400)
+				return json({ ok: true, label })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/labels/:label/delete — delete a label.
+		app.post(`/page/repositories/:id/labels/:label/delete`, async (c) => {
+			try {
+				await svc.labels.remove(c.req.param('id'), c.req.param('label'))
+				return json({ ok: true })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// GET /page/repositories/:id/milestones — list milestones.
+		app.get(`/page/repositories/:id/milestones`, async (c) => {
+			try {
+				return json({ milestones: await svc.milestones.listByRepo(c.req.param('id')) })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/milestones — create a milestone.
+		app.post(`/page/repositories/:id/milestones`, async (c) => {
+			const body = await c.req.parseBody()
+			const title = typeof body['title'] === 'string' ? body['title'].trim() : ''
+			if (!title) return fail('milestone title is required', 400)
+			try {
+				const milestone = await svc.milestones.create({
+					repoId: c.req.param('id'),
+					title,
+					description: typeof body['description'] === 'string' ? body['description'] : '',
+					dueDate: typeof body['dueDate'] === 'string' && body['dueDate'] ? body['dueDate'] : null,
+				})
+				return json({ ok: true, milestone })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// GET /page/repositories/:id/releases — list releases.
+		app.get(`/page/repositories/:id/releases`, async (c) => {
+			try {
+				return json({ releases: await svc.releases.listByRepo(c.req.param('id')) })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/releases — create a release (tag must exist).
+		app.post(`/page/repositories/:id/releases`, async (c) => {
+			const id = c.req.param('id')
+			const body = await c.req.parseBody()
+			const tagName = typeof body['tagName'] === 'string' ? body['tagName'].trim() : ''
+			const target = typeof body['target'] === 'string' ? body['target'].trim() : ''
+			if (!tagName || !target) return fail('tagName and target are required', 400)
+			const session = await getSession(c).catch(() => null)
+			const publisherId = session?.user?.id ?? ''
+			try {
+				const release = await svc.releases.create({
+					repoId: id,
+					publisherId,
+					tagName,
+					target,
+					title: typeof body['title'] === 'string' ? body['title'] : undefined,
+					note: typeof body['note'] === 'string' ? body['note'] : undefined,
+					draft: body['draft'] === 'on' || body['draft'] === '1',
+					prerelease: body['prerelease'] === 'on' || body['prerelease'] === '1',
+				})
+				if (!release) return fail('tag already has a release', 409)
+				return json({ ok: true, release })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
+			}
+		})
+
+		// POST /page/repositories/:id/releases/:tag/delete — delete a release.
+		app.post(`/page/repositories/:id/releases/:tag/delete`, async (c) => {
+			try {
+				await svc.releases.remove(c.req.param('id'), c.req.param('tag'))
+				return json({ ok: true })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 500)
 			}
 		})
 	}

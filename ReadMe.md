@@ -153,6 +153,61 @@ metadata-only (`src/git/read.ts`):
 | `GET /api/page/repositories/:id/tree?ref=&path=` | `{ entries:[{name,type,oid,mode}], readme, ref, path, branches }` — root tree + rendered README (case-insensitive, common extensions) |
 | `GET /api/page/repositories/:id/read?ref=&path=` | single file `{ path, ref, encoding, content }` (`utf8` or `base64`) |
 | `GET /api/page/repositories/:id/commits?ref=&page=` | `{ commits:[{oid,message,author,committer,timestamp,parent}], ref, page }` (30/page) |
+| `GET /api/page/repositories/:id/commit/:oid` | `{ commit:{…}, diff:{base,head,files,stats} }` — single commit metadata + diff against parent |
+| `GET /api/page/repositories/:id/commit/:oid/diff` | `{ diff }` — just the commit's diff |
+| `GET /api/page/repositories/:id/compare?from=&to=` | `{ diff }` — diff between two refs (branches/tags/SHAs) |
+| `GET /api/page/repositories/:id/branches?page=&perPage=` | `{ branches, total }` — paginated branch list with tip commits |
+| `GET /api/page/repositories/:id/tags` | `{ tags }` — lightweight + annotated tags (peeled to commit) |
+| `GET /api/page/repositories/:id/raw?ref=&path=` | streamed raw file bytes (`Content-Disposition: inline`) |
+
+### Forge UI routes (`app/routes`)
+
+The Honox UI renders a GitHub/Forgejo-style web forge, all server-side. Repository
+pages live under `/{owner}/{repo}` (the canonical forge URL — the same address the
+git transport uses, so a repo's web page and clone URL always agree):
+
+| Route | What it shows |
+| --- | --- |
+| `/{owner}/{repo}` | repo home — default-branch tree + README + recent commits + branch selector + clone URL |
+| `/{owner}/{repo}/src/{ref}/{path…}` | **file / tree browser** — resolves `ref + path` and renders either the directory tree or the blob (mirrors Forgejo's `/src/branch\|commit/*` → `repo.Home`) |
+| `/{owner}/{repo}/commit/{oid}` | single commit — title/body, author, timestamp + unified diff against parent |
+| `/{owner}/{repo}/commits?ref=&page=` | paginated commit history; each links to its commit diff page |
+| `/{owner}/{repo}/compare?from=&to=` | cross-ref diff (Forgejo's `/compare/{base}...{head}`) with a "Create PR" placeholder |
+| `/{owner}/{repo}/branches` | branch management — paginated list + create / delete |
+| `/{owner}/{repo}/tags` | tag list + create / delete (lightweight + annotated) |
+| `/{owner}/{repo}/releases` | release list + delete; `/releases/new` to publish (tag, target, notes, draft/prerelease) |
+| `/{owner}/{repo}/issues` | issue list with open/closed toggle + pagination |
+| `/{owner}/{repo}/issues/new` | create-issue form |
+| `/{owner}/{repo}/issues/{index}` | issue detail — body, comments, open/close toggle, comment form |
+| `/{owner}/{repo}/settings` | repository settings — name/slug, visibility, description, default branch, website, template, archive/unarchive (Forgejo-style left settings nav) |
+| `/{owner}/settings` | user settings — username/email, password, **personal access tokens**, danger zone |
+| `/user/settings` | session-scoped settings entry (redirects to `/{owner}/settings`) |
+
+### Issues, releases, labels & milestones (DB-backed work items)
+
+Phase 3 adds the collaboration layer — DB entities (SQLite via Drizzle, same as
+`users`/`repositories`) that sit alongside the git objects. The schema is in
+`drizzle/2026-08-17T19-00-00-000Z_phase3_issues_releases_sqlite_create.sql`:
+
+- **`issues`** — repo-scoped, per-repo `{index}` numbering, `state` (open/closed),
+  `is_pull` (a pull request is an issue + a `pull_requests` row), milestone /
+  assignee / labels, comment count.
+- **`pull_requests`** — 1:1 with an `is_pull` issue; carries `head_branch` /
+  `base_branch` / `merged` state.
+- **`issue_comments`**, **`labels`** (hex color), **`milestones`** (due date),
+  **`releases`** (tag_name + target commitish, draft/prerelease flags).
+
+Services (`src/services/{issues,releases,labels,milestones}.ts`) are bound via
+`createServices(db)`; the HTTP endpoints are under
+`/api/page/repositories/:id/{issues,labels,milestones,releases}*`.
+
+### Personal access tokens
+
+`src/services/access-tokens.ts` implements Forgejo-style PATs: a token is a
+40-hex string; only its **SHA-256** is stored, and the raw token is returned
+**exactly once** on creation. Tokens authenticate the git smart-HTTP transport
+via HTTP Basic auth. Manage them at `/{owner}/settings` (Applications section)
+or `/user/settings`.
 
 ### Object format: SHA-1 now, SHA-256 later
 
@@ -197,12 +252,14 @@ request ─▶ src/http/app.ts  (buildQueryApp(db, auth?))
 ```
 
 - **`src/services/`** — the data-access service layer. `createServices(db)`
-  returns a bound object (today: `{ db, repository, users, … }`; the BBS example
-  also registers `boards`/`threads`/`posts`/`home`/`search`); every function is
-  partially-applied with `db`, so handlers call `svc.repository.getPage(id)`
+  returns a bound object (`{ db, repository, users, home, search, webhooks,
+  runs, accessTokens, issues, releases, labels, milestones }`); every function
+  is partially-applied with `db`, so handlers call `svc.repository.getPage(id)`
   without threading `db` through. None of these functions use `sql.unsafe` — all
   dynamic values reach SQL through `?` bind params (see `toSql` in
-  `src/services/types.ts`).
+  `src/services/types.ts`). The forge services (`issues`/`releases`/
+  `labels`/`milestones`/`accessTokens`) use the hand-written `all`/`run` helpers;
+  the primary models (`User`/`Repository`) use the full typia/capacity pipeline.
 - **`src/http/app.ts`** — `buildQueryApp(db, authInstance?)` wires the service
   layer to the routes. Hand-written read models are registered first; the
   generated aggregate + CRUD routes are registered last so the rich read models
@@ -332,7 +389,9 @@ src/
   storage/        identity map + store
   tags/           custom typia tags (Reference, Sha256, …)
   macros/         build-time macros (env, databaseUrl, databaseType, …)
-  services/       data-access service layer (repository, users, …) bound via createServices(db) — no sql.unsafe
+  services/       data-access service layer (repository, users, issues, releases, labels,
+                  milestones, accessTokens, webhooks, runs, home, search) bound via
+                  createServices(db) — no sql.unsafe
   git/            the git server backend: protocol.ts (pkt-line), upload.ts/receive.ts (smart-HTTP
                   v1), read.ts (tree/blob/README/commits), backend.ts (local + R2), routes.ts, refs.ts
   http/           buildQueryApp(db, auth?, gitBackend?) — the reusable Hono query/REST app
@@ -347,6 +406,26 @@ scripts/
   ui-build.ts     ui:build      — build the Honox UI -> dist/index.js (+ static)
   ui-cf-build.ts  ui:cf-build   — build the UI into a CF Worker -> dist/ui-cf/index.js
 app/              Honox UI (routes/, islands/, client.ts, style.css — Panda CSS)
+  routes/
+    index.tsx                       home — hero, stats, repository grid
+    user/settings.tsx               session-scoped account settings entry
+    [userId].tsx                    user profile — repo list
+    [userId]/settings.tsx           user settings (profile/password/tokens)
+    [userId]/[repositoryName].tsx   repo home (tree + README + commits)
+    [userId]/[repositoryName]/
+      src/[...path].tsx             file/tree browser (/src/{ref}/{path})
+      commit/[oid].tsx              single commit + diff
+      commits.tsx                   commit history (paginated)
+      compare.tsx                   cross-ref diff
+      branches.tsx / tags.tsx       branch & tag management
+      issues.tsx / issues/new / issues/[index]
+      releases.tsx / releases/new
+      settings.tsx                  repository settings
+  components/
+    repo-layout.tsx          shared repo page shell (header + tab bar + breadcrumb)
+    repo-settings-layout.tsx shared repo settings shell (Forgejo left nav)
+    user-settings-layout.tsx shared user settings shell
+    diff-view.tsx             unified diff renderer (stats + per-file hunks)
   server.ts       local UI server entry (bun:sql, mounts /api)
   server.cf.ts    CF Worker UI entry (D1, mounts /api)
 panda.config.ts   Panda CSS config (tokens + utilities -> design-system/)

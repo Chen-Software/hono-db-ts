@@ -91,28 +91,28 @@ describe("Queriable — schema-inferred matching (User)", () => {
 			id: "u1",
 			name: "Ada",
 			email: "ada@example.com",
-			role: "admin",
-			age: 30,
+			type: "individual",
+			maxRepoCreation: 30,
 			created_at: "2000-01-01T00:00:00.000Z",
 		},
 		{
 			id: "u2",
 			name: "Bob",
 			email: "bob@example.com",
-			role: "member",
-			age: 17,
+			type: "organization",
+			maxRepoCreation: 17,
 			created_at: "2010-05-05T00:00:00.000Z",
 		},
 		// `User.random()` shape is unvalidated; plain objects suffice for filter.
 	] as any[];
 
-	it("infers substring for `role`", () => {
-		expect(User.filter(users, { role: "member" })).toHaveLength(1);
+	it("infers substring for `type`", () => {
+		expect(User.filter(users, { type: "organization" })).toHaveLength(1);
 	});
 
-	it("infers numeric equality for `age`", () => {
-		expect(User.filter(users, { age: "17" })).toHaveLength(1);
-		expect(User.filter(users, { age: "99" })).toHaveLength(0);
+	it("infers numeric equality for `maxRepoCreation`", () => {
+		expect(User.filter(users, { maxRepoCreation: "17" })).toHaveLength(1);
+		expect(User.filter(users, { maxRepoCreation: "99" })).toHaveLength(0);
 	});
 
 	it("exposes email via the `?mail=` alias (Queryable tag + fields override)", () => {
@@ -129,11 +129,11 @@ describe("Queriable — schema-inferred matching (User)", () => {
 		expect(r).toHaveLength(1); // only 2010
 	});
 
-	it("infers numeric RANGE for `age` via [min,max] tuple", () => {
-		expect(User.filter(users, { age: "[10,20]" })).toHaveLength(1); // only 17
-		expect(User.filter(users, { age: "[18,40]" })).toHaveLength(1); // only 30
-		expect(User.filter(users, { age: "[0,100]" })).toHaveLength(2);
-		// bare age is still an exact numeric match
-		expect(User.filter(users, { age: "17" })).toHaveLength(1);
+	it("infers numeric RANGE for `maxRepoCreation` via [min,max] tuple", () => {
+		expect(User.filter(users, { maxRepoCreation: "[10,20]" })).toHaveLength(1); // only 17
+		expect(User.filter(users, { maxRepoCreation: "[18,40]" })).toHaveLength(1); // only 30
+		expect(User.filter(users, { maxRepoCreation: "[0,100]" })).toHaveLength(2);
+		// bare maxRepoCreation is still an exact numeric match
+		expect(User.filter(users, { maxRepoCreation: "17" })).toHaveLength(1);
 	});
 });

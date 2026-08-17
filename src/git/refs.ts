@@ -18,16 +18,35 @@ export interface AdvertisedRef {
 
 /** List advertised refs: HEAD (with symref), each branch, then each tag. */
 export async function listRefs(fs: FsClient, gitdir: string): Promise<AdvertisedRef[]> {
-	const branches = await git.listBranches({ fs, gitdir });
+	// A fresh bare repo (first push) has no refs yet — `git.listBranches`
+	// throws `Could not find refs/heads/main` because HEAD is a symref to a
+	// not-yet-created branch. Treat that as "no branches" so the advertisement
+	// can return an empty ref list (git clients expect this for a first push).
+	let branches: string[] = [];
+	try {
+		branches = await git.listBranches({ fs, gitdir });
+	} catch {
+		branches = [];
+	}
 	const refs: AdvertisedRef[] = [];
 	for (const b of branches) {
-		const oid = await git.resolveRef({ fs, gitdir, ref: `refs/heads/${b}` });
-		refs.push({ ref: `refs/heads/${b}`, oid });
+		try {
+			const oid = await git.resolveRef({ fs, gitdir, ref: `refs/heads/${b}` });
+			refs.push({ ref: `refs/heads/${b}`, oid });
+		} catch {
+			// Skip an unresolvable branch rather than failing the whole ad.
+		}
 	}
 
 	// Tags (B3): advertise each tag, and peel annotated tags to their target
 	// commit with a `refs/tags/<name>^{}` line (mirrors Forgejo/GitHub).
-	for (const t of await git.listTags({ fs, gitdir })) {
+	let tags: string[] = [];
+	try {
+		tags = await git.listTags({ fs, gitdir });
+	} catch {
+		tags = [];
+	}
+	for (const t of tags) {
 		const ref = `refs/tags/${t}`;
 		const oid = await git.resolveRef({ fs, gitdir, ref });
 		refs.push({ ref, oid });

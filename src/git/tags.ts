@@ -77,6 +77,11 @@ export async function createTag(
 			dir: gitdir,
 			gitdir,
 			type: "tag",
+			// `format: "content"` stores the hand-serialized tag bytes verbatim.
+			// The default ("parsed") would run GitAnnotatedTag.from() over a
+			// Uint8Array, which treats it as a tag *object* (not a Buffer) and
+			// tries to render it → "Cannot destructure property 'name'".
+			format: "content",
 			object: new TextEncoder().encode(
 				`object ${targetOid}\n` +
 					`type commit\n` +

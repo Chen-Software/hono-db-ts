@@ -115,7 +115,7 @@ describe("ensureSchema", () => {
 		const client = new SQL(":memory:");
 		await ensureSchema(client);
 		await client.unsafe(
-			`INSERT INTO "users" ("id","name","email","role","age","created_at") VALUES ('u1','Ada','a@x.io','member',30,'2000-01-01T00:00:00.000Z')`,
+			`INSERT INTO "users" ("id","created_at","name","email") VALUES ('u1','2000-01-01T00:00:00.000Z','Ada','a@x.io')`,
 		);
 
 		const createdAgain = await ensureSchema(client);

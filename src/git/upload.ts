@@ -79,6 +79,7 @@ async function collectIncludedTags(
 /** Build the `info/refs?service=git-upload-pack` advertisement body. */
 export async function uploadPackAdvertise(fs: FsClient, gitdir: string): Promise<Uint8Array> {
 	const refs = await listRefs(fs, gitdir);
+	console.error(`[adv] gitdir=${gitdir} refs=${refs.length} ${refs.map((r) => r.ref + "=" + r.oid.slice(0, 8)).join(",")} | listBranches=${JSON.stringify(await git.listBranches({ fs, gitdir }).catch(() => "ERR"))}`);
 	const chunks: Uint8Array[] = [pktLineStr("# service=git-upload-pack\n"), FLUSH];
 	if (refs.length === 0) {
 		chunks.push(FLUSH); // empty repo: service line + flush + flush

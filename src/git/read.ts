@@ -74,6 +74,23 @@ export async function findReadme(fs: FsClient, gitdir: string, ref: string): Pro
 	return readme ? { path: readme.name, oid: readme.oid } : null;
 }
 
+/** A single commit by oid, or null when it does not exist. */
+export async function getCommit(fs: FsClient, gitdir: string, oid: string): Promise<CommitInfo | null> {
+	try {
+		const { commit } = await git.readCommit({ fs, gitdir, oid })
+		return {
+			oid,
+			message: commit.message,
+			author: { name: commit.author.name, email: commit.author.email },
+			committer: { name: commit.committer.name, email: commit.committer.email },
+			timestamp: commit.author.timestamp,
+			parent: commit.parent ?? [],
+		}
+	} catch {
+		return null
+	}
+}
+
 /** Paginated commit history for a ref. */
 export async function logCommits(
 	fs: FsClient,

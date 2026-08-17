@@ -231,7 +231,10 @@ export interface UpdateRepositoryInput {
 	lowerName?: string
 	description?: string
 	defaultBranch?: string
+	website?: string
 	isPrivate?: boolean
+	isTemplate?: boolean
+	isArchived?: boolean
 }
 
 export async function update(db: Db, id: string, patch: UpdateRepositoryInput): Promise<void> {
@@ -240,7 +243,10 @@ export async function update(db: Db, id: string, patch: UpdateRepositoryInput): 
 	if (patch.lowerName != null) set['lowerName'] = patch.lowerName
 	if (patch.description != null) set['description'] = patch.description
 	if (patch.defaultBranch != null) set['defaultBranch'] = patch.defaultBranch
+	if (patch.website != null) set['website'] = patch.website
 	if (patch.isPrivate != null) set['isPrivate'] = patch.isPrivate ? 1 : 0
+	if (patch.isTemplate != null) set['isTemplate'] = patch.isTemplate ? 1 : 0
+	if (patch.isArchived != null) set['isArchived'] = patch.isArchived ? 1 : 0
 	if (!Object.keys(set).length) return
 	await db.update(repos).set(set).where(eq(repos.id, id))
 }

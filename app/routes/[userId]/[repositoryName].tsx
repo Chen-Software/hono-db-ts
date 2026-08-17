@@ -162,14 +162,16 @@ export default createRoute(async (c) => {
 	const pathParts = (path || '/').split('/').filter(Boolean)
 	const latest = commits[0] ?? null
 
-	// Build a "browse path" URL helper that keeps the current ref.
+	// Build a `/src/{ref}/{path}` URL helper that keeps the current ref —
+	// matching Forgejo's `/src/branch|tag|commit/{ref}/{path}` addressing. The
+	// repo home (this page) serves the tree for the active ref; the catch-all
+	// `src/[...path]` route renders trees AND blobs for any ref/path.
 	const atPath = (p: string) => {
-		const q = new URLSearchParams()
-		q.set('ref', activeRef)
-		if (p && p !== '/') q.set('path', p)
-		const qs = q.toString()
-		return `/${ownerName}/${repositoryName}?${qs}`
+		const rel = p && p !== '/' ? `/${p}` : ''
+		return `/${ownerName}/${repositoryName}/src/${activeRef}${rel}`
 	}
+	// Root tree link for the active ref (points at the catch-all route).
+	const atRefRoot = (ref: string) => `/${ownerName}/${repositoryName}/src/${ref}`
 
 	return c.render(
 		<div class={css({ minHeight: '100vh', bg: '#f7f7f8', color: 'ink', fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' })}>
@@ -245,7 +247,27 @@ export default createRoute(async (c) => {
 					<span class={css({ px: 4, py: 2.5, fontSize: 'sm', fontWeight: 700, color: 'ink', borderBottom: '2px solid token(colors.accent)', mb: -1 })}>
 						Code
 					</span>
-					<span class={css({ px: 4, py: 2.5, fontSize: 'sm', color: 'muted' })}>Issues</span>
+					<Anchor
+						href={`/${ownerName}/${repositoryName}/commits?ref=${encodeURIComponent(activeRef)}`}
+						variant="plain"
+						class={css({ px: 4, py: 2.5, fontSize: 'sm', color: 'muted', _hover: { color: 'ink' } })}
+					>
+						Commits
+					</Anchor>
+					<Anchor
+						href={`/${ownerName}/${repositoryName}/branches`}
+						variant="plain"
+						class={css({ px: 4, py: 2.5, fontSize: 'sm', color: 'muted', _hover: { color: 'ink' } })}
+					>
+						Branches
+					</Anchor>
+					<Anchor
+						href={`/${ownerName}/${repositoryName}/issues`}
+						variant="plain"
+						class={css({ px: 4, py: 2.5, fontSize: 'sm', color: 'muted', _hover: { color: 'ink' } })}
+					>
+						Issues
+					</Anchor>
 					<span class={css({ px: 4, py: 2.5, fontSize: 'sm', color: 'muted' })}>Pull requests</span>
 				</nav>
 
@@ -284,7 +306,7 @@ export default createRoute(async (c) => {
 
 							{/* Breadcrumb */}
 							<Stack direction="horizontal" align="center" gap="1" class={css({ fontSize: 'sm' })}>
-								<Anchor href={`/${ownerName}/${repositoryName}?ref=${encodeURIComponent(activeRef)}`} variant="plain" class={css({ color: 'muted', _hover: { color: 'accent' } })}>
+								<Anchor href={atRefRoot(activeRef)} variant="plain" class={css({ color: 'muted', _hover: { color: 'accent' } })}>
 									{repository.name}
 								</Anchor>
 								{pathParts.map((part, i) => {

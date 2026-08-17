@@ -15,6 +15,7 @@ import * as git from "isomorphic-git";
 import type { FsClient } from "isomorphic-git";
 import { nodeFs } from "./fs-node";
 import { r2Fs, type R2Like } from "./fs-r2";
+import { canonicalizeRepo, PackIndexCache } from "./pack";
 
 export interface GitBackend {
 	/** "r2" (Cloudflare) or "local" (dev/test). */
@@ -25,6 +26,11 @@ export interface GitBackend {
 	fsFor(owner: string, repo: string): FsClient;
 	/** Create the bare repo if it does not yet exist (idempotent). */
 	ensureRepo(owner: string, repo: string): Promise<void>;
+	/**
+	 * P2-1: rebuild the canonical pack + index after a push (R2 only). Local
+	 * backend leaves this undefined — disk reads are cheap.
+	 */
+	canonicalize?(fs: FsClient, gitdir: string): Promise<void>;
 }
 
 /** Local disk backend (dev `serve` + tests). */
@@ -48,14 +54,20 @@ export function localGitBackend(root: string): GitBackend {
 	};
 }
 
-/** Cloudflare R2 backend (production Worker). */
-export function r2GitBackend(bucket: R2Like): GitBackend {
-	const fs = r2Fs(bucket);
+/** Cloudflare R2 backend (production Worker).
+ *
+ *  P2-1: carries the in-isolate pack LRU (`packCache`), which the FsClient
+ *  uses to serve object reads from the canonical pack, and which the
+ *  receive path invalidates after canonicalizing a push. */
+export function r2GitBackend(bucket: R2Like): GitBackend & { packCache: PackIndexCache } {
+	const packCache = new PackIndexCache(bucket);
+	const fs = r2Fs(bucket, packCache);
 	const dir = (owner: string, repo: string) => `${owner}/${repo}.git`;
 	return {
 		kind: "r2",
 		gitdirFor: dir,
 		fsFor: () => fs,
+		packCache,
 		async ensureRepo(owner, repo) {
 			const d = dir(owner, repo);
 			try {
@@ -65,6 +77,11 @@ export function r2GitBackend(bucket: R2Like): GitBackend {
 				/* not initialized yet */
 			}
 			await git.init({ fs, gitdir: d, bare: true, defaultBranch: "main" });
+		},
+		// P2-1: after every push, rebuild the canonical pack + index so object
+		// reads come from the pack (1-2 GETs per repo) instead of loose objects.
+		async canonicalize(_fs, gitdir) {
+			await canonicalizeRepo(bucket, fs, gitdir, packCache);
 		},
 	};
 }

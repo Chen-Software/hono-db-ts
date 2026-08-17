@@ -29,8 +29,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { SQL } from "bun";
-import { drizzle } from "drizzle-orm/bun-sql";
+import { Database } from "bun:sqlite";
 import { databaseUrl } from "../src/macros/envs" with { type: "macro" };
 
 const MIGRATIONS_DIR = resolve(import.meta.dir, "../drizzle");
@@ -61,8 +60,10 @@ export async function runMigrations(): Promise<string[]> {
 		return [];
 	}
 
-	const client = new SQL(url);
-	const db = drizzle({ client });
+	// dev.db is a local SQLite file (prod D1 is applied via `wrangler d1 migrations apply`,
+	// not this runner). drizzle-orm's `execute` swallows the underlying error on DDL, so we
+	// apply statements through `bun:sqlite`'s `Database.exec`, which is reliable.
+	const client = new Database(url.startsWith("file:") ? url.slice(5) : url);
 	const applied: string[] = [];
 
 	for (const file of files) {
@@ -70,7 +71,7 @@ export async function runMigrations(): Promise<string[]> {
 		const statements = splitStatements(sql);
 		console.log(`Applying ${file} (${statements.length} statement(s)) …`);
 		for (const stmt of statements) {
-			await db.execute(stmt);
+			client.exec(stmt);
 		}
 		applied.push(file);
 	}

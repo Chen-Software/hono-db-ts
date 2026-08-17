@@ -213,6 +213,18 @@ export function mountGitRoutes(app: Hono, opts: GitRouteOptions): void {
 			throw e;
 		}
 		const { report, commands } = await receivePackService(fs, gitdir, body);
+		// P2-1 (R2 only): rebuild the canonical pack + index so subsequent object
+		// reads come from the pack (1-2 GETs per repo) instead of one GET per
+		// loose object. Local backend leaves canonicalize undefined.
+		if (gitBackend.canonicalize) {
+			try {
+				await gitBackend.canonicalize(fs, gitdir);
+			} catch (e) {
+				// Never fail the push because pack building failed — the loose
+				// objects are still in the bucket and reads fall back to them.
+				console.error(`[git] canonicalize failed for ${owner}/${repo}:`, e);
+			}
+		}
 		// Publish a `repo.push` action for every ref update (never fail the push
 		// response because the queue is unavailable — log and continue).
 		if (opts.queue) {

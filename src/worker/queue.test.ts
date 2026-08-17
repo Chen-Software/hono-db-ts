@@ -43,8 +43,8 @@ const event: RepoPushEvent = {
 
 async function seed(client: Client, db: Db) {
 	await client.execute({
-		sql: `INSERT INTO "users" ("id","created_at","name","email","role","age") VALUES (?,?,?,?,?,?)`,
-		args: ["u1", new Date().toISOString(), "octocat", "octo@example.com", "member", 30],
+		sql: `INSERT INTO "users" ("id","created_at","name","email") VALUES (?,?,?,?)`,
+		args: ["u1", new Date().toISOString(), "octocat", "octo@example.com"],
 	});
 	const repoId = await repo.create(db, {
 		ownerId: "u1",

@@ -28,7 +28,7 @@
  * and there is NO reference to bun:sql anywhere in this file.
  */
 import type { Context } from "hono";
-import { authEnvFromBindings, authEnvFromProcessEnv } from "./hono";
+import { authEnvFromBindings, authEnvFromProcessEnv, googleFromEnv, oauthProvidersFromEnv } from "./hono";
 import { createAuth } from "./index";
 
 /** Build a Workers-side auth instance from the D1 binding. */
@@ -36,15 +36,15 @@ async function authFromD1(c: Context) {
 	const db = d1Binding(c);
 	if (!db) return null;
 	const { drizzle } = await import("drizzle-orm/d1");
-	const env = c.env as {
-		BETTER_AUTH_URL?: string;
-		BETTER_AUTH_SECRET?: string;
-	};
+	const env = c.env as Record<string, string | undefined>;
 	return createAuth(
 		drizzle(db as never),
 		env.BETTER_AUTH_SECRET !== undefined
 			? authEnvFromBindings(env)
 			: authEnvFromProcessEnv(),
+		{},
+		oauthProvidersFromEnv(env),
+		googleFromEnv(env),
 	);
 }
 

@@ -17,7 +17,7 @@
 import type { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import type { SqlQueryExecutor } from "@/capacities/servable";
-import { authEnvFromBindings, authEnvFromProcessEnv } from "./hono";
+import { authEnvFromBindings, authEnvFromProcessEnv, googleFromEnv, oauthProvidersFromEnv } from "./hono";
 import { createAuth } from "./index";
 import { ensureAuthSchema } from "./migrate";
 
@@ -50,6 +50,9 @@ export async function mountBetterAuth(
 	const auth = createAuth(
 		drizzle.sqlite({ client: client as SQL }),
 		authEnvFromProcessEnv(),
+		{},
+		oauthProvidersFromEnv(process.env),
+		googleFromEnv(process.env),
 	);
 	return {
 		mount: (app) => {
@@ -62,9 +65,9 @@ export async function mountBetterAuth(
 /** Mount Better Auth on a Hono app from Worker bindings + an already-wired drizzle db. */
 export function mountBetterAuthFromBindings<E extends import("hono").Env>(
 	app: import("hono").Hono<E>,
-	env: { BETTER_AUTH_URL?: string; BETTER_AUTH_SECRET?: string },
+	env: Record<string, string | undefined>,
 	db: import("./index").AuthDatabase,
 ): void {
-	const auth = createAuth(db, authEnvFromBindings(env));
+	const auth = createAuth(db, authEnvFromBindings(env), {}, oauthProvidersFromEnv(env), googleFromEnv(env));
 	app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 }

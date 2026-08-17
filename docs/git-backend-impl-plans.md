@@ -2,7 +2,11 @@
 
 > Companion to `docs/git-backend-review.md`. Turns the gap analysis into concrete, file-level implementation plans grouped by milestone (P0 correctness → P1 v1 features → P2 parity/scale). Each plan lists: goal, files touched, key decisions, acceptance criteria, and risks.
 >
-> **Status: Milestone P0 is DONE (2026-08-17).** All 7 P0 items are implemented and covered by e2e tests in `src/git/git.e2e.test.ts` (P0-1…P0-7 each have a passing assertion). P1/P2 remain as scoped below.
+> **Status: Milestone P0 is DONE (2026-08-17).** All 7 P0 items are implemented and covered by e2e tests in `src/git/git.e2e.test.ts` (P0-1…P0-7 each have a passing assertion).
+>
+> **Milestone P1 — ALL DONE (2026-08-17).** P1-1 `diff.ts` (diff/compare/rename/hunks), P1-2 `branches.ts` + `tags.ts` (CRUD/peel/containing), P1-3 `archive.ts` (dependency-free ZIP + TAR.GZ, Workers-safe), P1-4 `search.ts` (searchCommits/commitsForPath/aheadBehind), P1-5 `blame.ts` — all implemented with HTTP endpoints, covered by `p1-read.test.ts` + `p1-features.test.ts` + `phase1-check.test.ts`.
+>
+> **Milestone P2 — P2-1 first slice DONE (2026-08-17).** `src/git/objects.ts` provides a bounded-concurrency `batchReadObjects`; it is wired into the archive, diff, and blame read paths, collapsing the N-GET-per-object pattern into a single bounded-fan-out batch (8-way by default). The deeper pack-indexed backend (oid → (pack, offset, length) at `indexPack` time) remains as scoped in P2-1 below.
 
 ---
 
@@ -31,7 +35,7 @@
 **Risks:** token scopes need a model decision; better-auth sign-in path must share the same DB. Keep token lookup hash-only to avoid leaking secrets in logs/DB.
 
 > **P0 implementation notes (2026-08-17).** Two deliberate deviations from the plan above:
-> - **2FA rejection is STUBBED.** No `isTwoFactor` column exists in our schema and better-auth 2FA is a *separate plugin*, so "reject password auth for 2FA users" is not implementable yet. `src/git/auth.ts` currently allows password sign-in. Wire a `hasTwoFactor(userId)` check (from the 2FA plugin) before the password path once the plugin lands. PAT (token) auth is unaffected and remains the recommended CLI path.
+> - **2FA rejection — CLOSED (2026-08-17).** The better-auth 2FA plugin (`better-auth/plugins`, v1.6.28) is now enabled in `src/auth/options.ts`, the `user.twoFactorEnabled` column + `twoFactor` table are in `src/auth/schema.ts` (and healed onto existing DBs by `ensureAuthSchema`), and `src/git/auth.ts` `resolvePassword` rejects any user with `twoFactorEnabled` set — the plugin refuses to mint a session for them, and the belt-and-braces `u.twoFactorEnabled` check double-guards. Covered by `src/auth/2fa.test.ts`. PAT (token) auth is unaffected and remains the recommended CLI path.
 > - **Password verification uses `auth.api.signInEmail`** server-side (Better Auth's own verifier) rather than a direct hash compare — keeps us byte-compatible with better-auth's scrypt params without re-implementing them.
 > - PATs are stored **only** as `token_sha256` (raw returned once at creation, never persisted or logged), per plan.
 
@@ -113,6 +117,14 @@
 ---
 
 ## Milestone P1 — v1 forge features (read-side surface)
+
+> **Status: P1 is DONE (2026-08-17).** All five items implemented and covered by tests:
+> - P1-1 `src/git/diff.ts` (commit diff + compare + rename detection + hunks + size caps) — `src/git/p1-read.test.ts`.
+> - P1-2 `src/git/branches.ts` (list/create/delete/rename/containing, paginated) + `src/git/tags.ts` (list/create lightweight+annotated/delete/peel) — `src/git/p1-read.test.ts`.
+> - P1-3 `src/git/archive.ts` (dependency-free ZIP store + tar.gz via `CompressionStream`; `fflate` intentionally avoided to stay Workers-safe) — `src/git/p1-features.test.ts`.
+> - P1-4 `src/git/search.ts` (`searchCommits` message/author/date filter, `commitsForPath` via `git.log` `includeChanges`, `aheadBehind`) — `src/git/p1-features.test.ts`.
+> - P1-5 `src/git/blame.ts` (incremental line-tracking blame, no git CLI) — `src/git/p1-features.test.ts`.
+> Endpoints for all five are mounted in `buildQueryApp`. Full git suite: 22/22 green (9 P0 + 4 P1-1/2 + 6 P1-3/4/5 + 3 phase1-check). Code search (`grep`) remains DEFERRED to P2 (needs P2-1 pack-indexed backend).
 
 ### P1-1 · Diff layer (`src/git/diff.ts`)
 **Goal:** commit diff + two-ref compare + file diff, with rename detection and parsed hunks — unblocks the commit page and **PRs (v1)**.

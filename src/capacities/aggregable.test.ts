@@ -28,16 +28,16 @@ const repos = [
 ];
 
 const users = [
-	{ id: "u1", role: "admin", age: 40, name: "Ada", email: "ada@example.com" },
-	{ id: "u2", role: "member", age: 20, name: "Bob", email: "bob@example.com" },
+	{ id: "u1", type: "individual", maxRepoCreation: 40, name: "Ada", email: "ada@example.com" },
+	{ id: "u2", type: "organization", maxRepoCreation: 20, name: "Bob", email: "bob@example.com" },
 	{
 		id: "u3",
-		role: "member",
-		age: 30,
+		type: "organization",
+		maxRepoCreation: 30,
 		name: "Carol",
 		email: "carol@example.com",
 	},
-	{ id: "u4", role: "viewer", age: 25, name: "Dan", email: "dan@example.com" },
+	{ id: "u4", type: "individual", maxRepoCreation: 25, name: "Dan", email: "dan@example.com" },
 ];
 
 describe("Aggregable — in-memory COUNT + GROUP BY (Repository)", () => {
@@ -110,59 +110,58 @@ describe("Aggregable — in-memory COUNT + GROUP BY (Repository)", () => {
 });
 
 describe("Aggregable — in-memory numeric roll-ups (User)", () => {
-	it("averages a numeric field per group (avg=age)", () => {
-		const rows = User.aggregate(users as any, { groupBy: "role", avg: "age" });
-		// Default order: role asc → admin, member, viewer.
+	it("averages a numeric field per group (avg=maxRepoCreation)", () => {
+		const rows = User.aggregate(users as any, { groupBy: "type", avg: "maxRepoCreation" });
+		// Default order: type asc → individual, organization.
 		expect(rows).toEqual([
-			{ role: "admin", avg_age: 40 },
-			{ role: "member", avg_age: 25 }, // (20+30)/2
-			{ role: "viewer", avg_age: 25 },
+			{ type: "individual", avg_maxRepoCreation: 32.5 }, // (40+25)/2
+			{ type: "organization", avg_maxRepoCreation: 25 }, // (20+30)/2
 		]);
 	});
 
-	it("sums a numeric field per group (sum=age)", () => {
-		const rows = User.aggregate(users as any, { groupBy: "role", sum: "age" });
-		expect(rows.find((r) => r.role === "member")).toEqual({
-			role: "member",
-			sum_age: 50,
+	it("sums a numeric field per group (sum=maxRepoCreation)", () => {
+		const rows = User.aggregate(users as any, { groupBy: "type", sum: "maxRepoCreation" });
+		expect(rows.find((r) => r.type === "organization")).toEqual({
+			type: "organization",
+			sum_maxRepoCreation: 50,
 		});
 	});
 
-	it("computes min + max in one pass (min=age&max=age)", () => {
+	it("computes min + max in one pass (min=maxRepoCreation&max=maxRepoCreation)", () => {
 		const rows = User.aggregate(users as any, {
-			groupBy: "role",
-			min: "age",
-			max: "age",
+			groupBy: "type",
+			min: "maxRepoCreation",
+			max: "maxRepoCreation",
 		});
-		expect(rows.find((r) => r.role === "member")).toEqual({
-			role: "member",
-			min_age: 20,
-			max_age: 30,
+		expect(rows.find((r) => r.type === "organization")).toEqual({
+			type: "organization",
+			min_maxRepoCreation: 20,
+			max_maxRepoCreation: 30,
 		});
-		expect(rows.find((r) => r.role === "admin")).toEqual({
-			role: "admin",
-			min_age: 40,
-			max_age: 40,
+		expect(rows.find((r) => r.type === "individual")).toEqual({
+			type: "individual",
+			min_maxRepoCreation: 25,
+			max_maxRepoCreation: 40,
 		});
 	});
 
-	it("supports comma-separated counts (count=*,age)", () => {
+	it("supports comma-separated counts (count=*,maxRepoCreation)", () => {
 		const rows = User.aggregate(users as any, {
-			groupBy: "role",
-			count: "*,age",
+			groupBy: "type",
+			count: "*,maxRepoCreation",
 		});
-		// COUNT(*) == COUNT(age) here — every user has an age.
-		const admin = rows.find((r) => r.role === "admin");
-		expect(admin).toEqual({ role: "admin", count: 1, count_age: 1 });
+		// COUNT(*) == COUNT(maxRepoCreation) here — every user has a value.
+		const individual = rows.find((r) => r.type === "individual");
+		expect(individual).toEqual({ type: "individual", count: 2, count_maxRepoCreation: 2 });
 	});
 
 	it("honours the `mail` alias in the pre-aggregation filter", () => {
 		const rows = User.aggregate(users as any, {
-			groupBy: "role",
+			groupBy: "type",
 			count: "*",
-			mail: "ada", // alias for email → only Ada (admin)
+			mail: "ada", // alias for email → only Ada (individual)
 		});
-		expect(rows).toEqual([{ role: "admin", count: 1 }]);
+		expect(rows).toEqual([{ type: "individual", count: 1 }]);
 	});
 });
 
@@ -183,8 +182,8 @@ CREATE TABLE "users" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
-	"role" text NOT NULL,
-	"age" integer NOT NULL,
+	"type" text NOT NULL,
+	"maxRepoCreation" integer NOT NULL,
 	"created_at" text NOT NULL
 );
 `;
@@ -196,10 +195,10 @@ INSERT INTO "repositories" ("id","name","ownerId","isPrivate","created_at","upda
 	('r3','t3','u2',0,'2020-03-01T00:00:00.000Z','2020-03-01T00:00:00.000Z'),
 	('r4','t4','u2',1,'2020-04-01T00:00:00.000Z','2020-04-01T00:00:00.000Z'),
 	('r5','t5','u3',0,'2020-05-01T00:00:00.000Z','2020-05-01T00:00:00.000Z');
-INSERT INTO "users" ("id","name","email","role","age","created_at") VALUES
-	('u1','Ada','ada@example.com','admin',30,'2000-01-01T00:00:00.000Z'),
-	('u2','Bob','bob@example.com','member',25,'2001-06-15T00:00:00.000Z'),
-	('u3','Carol','carol@example.com','viewer',40,'2002-12-31T00:00:00.000Z');
+INSERT INTO "users" ("id","name","email","type","maxRepoCreation","created_at") VALUES
+	('u1','Ada','ada@example.com','individual',30,'2000-01-01T00:00:00.000Z'),
+	('u2','Bob','bob@example.com','organization',25,'2001-06-15T00:00:00.000Z'),
+	('u3','Carol','carol@example.com','individual',40,'2002-12-31T00:00:00.000Z');
 `;
 
 let db: TestDb["db"];
@@ -270,21 +269,19 @@ describe("Aggregable — generated SQL route (Repository)", () => {
 
 describe("Aggregable — generated SQL route (User)", () => {
 	it("averages a numeric field per group", async () => {
-		const { status, body } = await get("/users/aggregate?groupBy=role&avg=age");
+		const { status, body } = await get("/users/aggregate?groupBy=type&avg=maxRepoCreation");
 		expect(status).toBe(200);
 		expect(body.data).toEqual([
-			{ role: "admin", avg_age: 30 },
-			{ role: "member", avg_age: 25 },
-			{ role: "viewer", avg_age: 40 },
+			{ type: "individual", avg_maxRepoCreation: 35 }, // (30+40)/2
+			{ type: "organization", avg_maxRepoCreation: 25 },
 		]);
 	});
 
-	it("counts per role over SQL", async () => {
-		const { body } = await get("/users/aggregate?groupBy=role&count=*");
+	it("counts per type over SQL", async () => {
+		const { body } = await get("/users/aggregate?groupBy=type&count=*");
 		expect(body.data).toEqual([
-			{ role: "admin", count: 1 },
-			{ role: "member", count: 1 },
-			{ role: "viewer", count: 1 },
+			{ type: "individual", count: 2 },
+			{ type: "organization", count: 1 },
 		]);
 	});
 });
@@ -303,9 +300,9 @@ describe("Aggregable — introspection", () => {
 
 	it("exposes numeric fields as SUM/AVG/MIN/MAX targets on User", () => {
 		const spec = (User as any).aggregateSpec();
-		expect(spec.aggregates.sum).toContain("age");
-		expect(spec.aggregates.avg).toContain("age");
-		expect(spec.aggregates.min).toContain("age");
-		expect(spec.aggregates.max).toContain("age");
+		expect(spec.aggregates.sum).toContain("maxRepoCreation");
+		expect(spec.aggregates.avg).toContain("maxRepoCreation");
+		expect(spec.aggregates.min).toContain("maxRepoCreation");
+		expect(spec.aggregates.max).toContain("maxRepoCreation");
 	});
 });

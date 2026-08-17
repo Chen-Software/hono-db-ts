@@ -22,6 +22,31 @@ const isomorphicGitBrowser = resolve(
 	"node_modules/isomorphic-git/index.js",
 );
 
+/**
+ * `inherits` (CJS) is pulled in by isomorphic-git's browser deps (`sha.js`).
+ * Its main entry (`inherits.js`) calls `require("util")` at module load, which
+ * the Workers runtime cannot resolve through `createRequire`. The package
+ * ships a browser entry (`inherits_browser.js`) with no node deps — alias to
+ * it for the Workers build.
+ */
+const inheritsBrowser = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"node_modules/inherits/inherits_browser.js",
+);
+
+/**
+ * `sha.js` (CJS) is a direct dep of isomorphic-git's browser build and at
+ * module load calls `createRequire(import.meta.url)("buffer")` via
+ * `safe-buffer`/`to-buffer` — another bare-name dynamic require the Workers
+ * runtime cannot resolve. isomorphic-git only uses `new Hash().update(d).digest('hex')`,
+ * which `node:crypto`'s synchronous `createHash('sha1')` provides natively on
+ * Workers. Alias `sha.js/sha1.js` to the shim in `scripts/shims/sha1.ts`.
+ */
+const sha1Shim = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"scripts/shims/sha1.ts",
+);
+
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -134,6 +159,10 @@ export default defineConfig({
 			"@": resolve(rootDir, "src"),
 			// isomorphic-git browser entry — see the header comment.
 			"isomorphic-git": isomorphicGitBrowser,
+			// inherits browser entry — see the header comment.
+			"inherits": inheritsBrowser,
+			// sha1 shim — see the header comment.
+			"sha.js/sha1.js": sha1Shim,
 		},
 	},
 	// esbuild-transpile (vite 5) reads `build.target` (not `ssr.target`) for the

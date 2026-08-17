@@ -73,7 +73,7 @@ function makeHttp(app: Hono, defaultHeaders: Record<string, string> = {}) {
 
 async function seed(db: any) {
 	const now = new Date().toISOString();
-	await run(db, `INSERT INTO users (id, created_at, name, email, role, age) VALUES (?, ?, ?, ?, ?, ?)`, [OWNER_ID, now, OWNER, "owner@example.com", "admin", 30]);
+	await run(db, `INSERT INTO users (id, created_at, name, email) VALUES (?, ?, ?, ?)`, [OWNER_ID, now, OWNER, "owner@example.com"]);
 	// 21 columns, matching the drizzle repositories schema exactly. The first
 	// 8 are bound with ? from params (id/created_at/ownerId/name/lowerName/
 	// description/defaultBranch/website); the rest are literal defaults.

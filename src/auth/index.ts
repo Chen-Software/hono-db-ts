@@ -25,7 +25,13 @@
 import type { BetterAuthOptions } from "better-auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { betterAuthOptions } from "./options";
+import {
+	betterAuthOptions,
+	googleSocialProvider,
+	oauthPluginFromProviders,
+	type GoogleOAuthConfig,
+	type OAuthProviderConfig,
+} from "./options";
 import { authSchema } from "./schema";
 
 /** Runtime pieces Better Auth needs that differ per deployment. */
@@ -50,10 +56,24 @@ export function createAuth(
 	db: AuthDatabase,
 	env: AuthEnv,
 	options: BetterAuthOptions = {},
+	oauthProviders?: OAuthProviderConfig[],
+	google?: GoogleOAuthConfig,
 ) {
+	// Generic OAuth (https://better-auth.com/docs/plugins/generic-oauth) is
+	// added dynamically from env-provided providers so `options.ts` stays pure.
+	// When none are configured, the plugin is omitted entirely.
+	const oauth = oauthPluginFromProviders(oauthProviders);
+	const plugins = oauth ? [...(betterAuthOptions.plugins ?? []), oauth] : betterAuthOptions.plugins;
+	// Google (https://www.better-auth.com/docs/authentication/social#google)
+	// is a core `socialProviders` entry — no plugin. Merged only when configured.
+	const googleProvider = googleSocialProvider(google);
 	return betterAuth({
 		...betterAuthOptions,
 		...options,
+		plugins: options.plugins ?? plugins,
+		...(googleProvider
+			? { socialProviders: { ...options.socialProviders, google: googleProvider } }
+			: {}),
 		baseURL: env.baseURL,
 		secret: env.secret,
 		database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),

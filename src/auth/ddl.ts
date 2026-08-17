@@ -48,6 +48,7 @@ const FOREIGN_KEYS: Record<
 > = {
 	session: [{ column: "userId", target: "user", onDelete: "cascade" }],
 	account: [{ column: "userId", target: "user", onDelete: "cascade" }],
+	twoFactor: [{ column: "userId", target: "user", onDelete: "cascade" }],
 };
 
 /** Render one auth table as a `CREATE TABLE IF NOT EXISTS` statement. */

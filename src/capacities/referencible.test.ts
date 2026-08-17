@@ -17,8 +17,6 @@ const ownerData = {
 	id: "11111111-1111-4111-8111-111111111111",
 	name: "Ada",
 	email: "ada@example.com",
-	role: "admin" as const,
-	age: 36,
 	created_at: "2026-08-09T12:00:00.000Z",
 };
 

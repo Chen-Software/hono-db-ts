@@ -33,8 +33,8 @@ export type UserRow = {
 	id: string
 	name: string
 	email?: string
-	role?: string
-	age?: number
+	type?: "individual" | "organization" | "bot"
+	isAdmin?: boolean
 	created_at?: string
 }
 
@@ -45,14 +45,28 @@ export async function getById(db: Db, id: string): Promise<UserRow | null> {
 			id: users.id,
 			name: users.name,
 			email: users.email,
-			role: users.role,
-			age: users.age,
+			type: users.type,
+			isAdmin: users.isAdmin,
 			created_at: users.created_at,
 		})
 		.from(users)
 		.where(eq(users.id, id))
 		.limit(1)
 	return (rows[0] ?? null) as UserRow | null
+}
+
+export interface UpdateUserInput {
+	name?: string
+	email?: string
+}
+
+/** Update a user's profile fields (username / email). Pass only what changed. */
+export async function update(db: Db, id: string, patch: UpdateUserInput): Promise<void> {
+	const set: Record<string, unknown> = {}
+	if (patch.name != null && patch.name.trim()) set['name'] = patch.name.trim()
+	if (patch.email != null && patch.email.trim()) set['email'] = patch.email.trim()
+	if (!Object.keys(set).length) return
+	await db.update(users).set(set).where(eq(users.id, id))
 }
 
 /** Recent users (moderator picker). */
@@ -93,8 +107,8 @@ export async function getByName(db: Db, name: string): Promise<UserRow | null> {
 			id: users.id,
 			name: users.name,
 			email: users.email,
-			role: users.role,
-			age: users.age,
+			type: users.type,
+			isAdmin: users.isAdmin,
 			created_at: users.created_at,
 		})
 		.from(users)
@@ -120,9 +134,9 @@ export async function getProfileByName(db: Db, name: string) {
  * (`/users/:id`) and the repo queries (`WHERE "ownerId" = ?`) line up with
  * the signed-in account.
  *
- * The `users` table requires `name`, `email`, `role` and `age > 19`, so we seed
- * those from the session when upserting a brand-new row. Returns `null` only
- * when there is no session and no seeded user to fall back to.
+ * The `users` table requires `name` and `email`; we seed `type: "individual"`
+ * and `isAdmin: false` for a brand-new row. Returns `null` only when there is
+ * no session and no seeded user to fall back to.
  */
 export async function ensureUser(
 	db: Db,
@@ -150,8 +164,8 @@ export async function ensureUser(
 				created_at: now,
 				name,
 				email,
-				role: 'member',
-				age: 20,
+				type: 'individual',
+				isAdmin: false,
 			})
 			return sessionId
 		} catch (err) {

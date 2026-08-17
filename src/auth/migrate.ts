@@ -60,5 +60,19 @@ export async function ensureAuthSchema(
 			applied++;
 		}
 	}
+
+	// The 2FA plugin adds `user.twoFactorEnabled` (src/auth/schema.ts). On a
+	// FRESH database the newest `*_auth_*.sql` CREATE statement includes the
+	// column, but `CREATE TABLE IF NOT EXISTS` is a no-op on an EXISTING `user`
+	// table — so older databases need a column addition. SQLite has no
+	// `ADD COLUMN IF NOT EXISTS`, so guard with a pragma check; idempotent on
+	// every startup, and a no-op for fresh DBs (column already present).
+	const has2faCol = await client.unsafe(
+		`SELECT count(*) AS c FROM pragma_table_info('user') WHERE name = 'twoFactorEnabled'`,
+	);
+	if (!(has2faCol as Array<{ c: number }>)?.[0]?.c) {
+		await client.unsafe(`ALTER TABLE "user" ADD COLUMN "twoFactorEnabled" integer DEFAULT 0`);
+		applied++;
+	}
 	return applied > 0;
 }

@@ -20,8 +20,8 @@ CREATE TABLE "users" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
-	"role" text NOT NULL,
-	"age" integer NOT NULL,
+	"type" text NOT NULL,
+	"maxRepoCreation" integer NOT NULL,
 	"created_at" text NOT NULL
 );
 CREATE TABLE "repositories" (
@@ -50,10 +50,10 @@ CREATE TABLE "repositories" (
 `;
 
 const SEED = `
-INSERT INTO "users" ("id","name","email","role","age","created_at") VALUES
-	('u1','Ada','ada@example.com','admin',30,'2000-01-01T00:00:00.000Z'),
-	('u2','Bob','bob@example.com','member',25,'2001-06-15T00:00:00.000Z'),
-	('u3','Carol','carol@example.com','viewer',40,'2002-12-31T00:00:00.000Z');
+INSERT INTO "users" ("id","name","email","type","maxRepoCreation","created_at") VALUES
+	('u1','Ada','ada@example.com','individual',30,'2000-01-01T00:00:00.000Z'),
+	('u2','Bob','bob@example.com','organization',25,'2001-06-15T00:00:00.000Z'),
+	('u3','Carol','carol@example.com','individual',40,'2002-12-31T00:00:00.000Z');
 INSERT INTO "repositories" (
 	"id","created_at","ownerId","name","lowerName","description",
 	"defaultBranch","website","isPrivate","isArchived","isMirror","isTemplate",
@@ -114,12 +114,12 @@ describe("Servable — generated list routes", () => {
 	});
 
 	it("filters numbers with exact equality (bare range value)", async () => {
-		const { body } = await get("/users?age=30");
+		const { body } = await get("/users?maxRepoCreation=30");
 		expect(body.data.rows.map((r: any) => r.id)).toEqual(["u1"]);
 	});
 
 	it("filters numbers with a [min,max] range", async () => {
-		const { body } = await get("/users?age=[25,35]");
+		const { body } = await get("/users?maxRepoCreation=[25,35]");
 		expect(body.data.rows.map((r: any) => r.id).sort()).toEqual(["u1", "u2"]);
 	});
 

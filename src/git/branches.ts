@@ -18,14 +18,20 @@ export interface BranchInfo {
 	latestCommit?: { oid: string; message: string; author: string; timestamp: number };
 }
 
+/** Paginated branch listing result. */
+export interface BranchList {
+	branches: BranchInfo[];
+	/** Total branch count (before pagination) — for UI paging. */
+	total: number;
+}
+
 /** List branches, paginated, with the tip commit on each (Forgejo `repo_branch.go` parity). */
 export async function listBranches(
 	fs: FsClient,
 	gitdir: string,
 	opts: { page?: number; perPage?: number } = {},
-): Promise<{ branches: BranchInfo[]; total: number }> {
+): Promise<BranchList> {
 	const names = await git.listBranches({ fs, gitdir });
-	const total = names.length;
 	const sorted = [...names].sort();
 	const perPage = Math.max(1, opts.perPage ?? 30);
 	const page = Math.max(1, opts.page ?? 1);
@@ -51,7 +57,7 @@ export async function listBranches(
 		}
 		branches.push({ name, oid, latestCommit });
 	}
-	return { branches, total };
+	return { branches, total: sorted.length };
 }
 
 /** Create a branch `name` pointing at `from` (a ref or oid). Throws if it already exists. */

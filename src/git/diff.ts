@@ -20,6 +20,7 @@
 
 import * as git from "isomorphic-git";
 import type { FsClient } from "isomorphic-git";
+import { batchReadObjects, diffBlobOids } from "./objects";
 
 /** Files larger than this are reported as changed but hunks are not rendered. */
 export const MAX_DIFF_BYTES = 512 * 1024;
@@ -100,12 +101,6 @@ async function treeMap(
 	return map;
 }
 
-/** Read a blob's raw bytes (content) by oid. */
-async function blobBytes(fs: FsClient, gitdir: string, oid: string): Promise<Uint8Array> {
-	const { object } = await git.readObject({ fs, gitdir, oid, format: "content" });
-	return object instanceof Uint8Array ? object : new Uint8Array(object as ArrayBuffer);
-}
-
 /** Read a commit's tree oid. */
 async function commitTree(fs: FsClient, gitdir: string, commitOid: string): Promise<string> {
 	const { commit } = await git.readCommit({ fs, gitdir, oid: commitOid });
@@ -120,8 +115,12 @@ async function commitTree(fs: FsClient, gitdir: string, commitOid: string): Prom
  * case (a few changed lines in an otherwise identical file) fast.
  */
 export function diffLines(oldText: string, newText: string, ctx = HUNK_CONTEXT): DiffHunk[] {
-	const a = oldText === "" ? [] : oldText.split("\n");
-	const b = newText === "" ? [] : newText.split("\n");
+	// Drop the single trailing newline so the phantom empty element produced by
+	// `"x\n".split("\n")` (["x", ""]) doesn't become a spurious add/del line.
+	// This keeps added/deleted file line counts git-accurate (an added "file\n"
+	// is +1, not +2).
+	const a = oldText === "" ? [] : oldText.replace(/\n$/, "").split("\n");
+	const b = newText === "" ? [] : newText.replace(/\n$/, "").split("\n");
 
 	// Common prefix.
 	let pre = 0;
@@ -406,6 +405,10 @@ export async function diffCommits(
 		...renamed,
 	];
 
+	// Batch-read every blob the diff needs ONCE (bounded concurrency) instead
+	// of one R2 GET per file — this is the P2-1 latency fix for the diff path.
+	const blobMap = await batchReadObjects(fs, gitdir, diffBlobOids(final));
+
 	// Render hunks + count additions/deletions for every change (cap by size).
 	for (const f of final) {
 		if (f.status === "renamed") {
@@ -413,8 +416,8 @@ export async function diffCommits(
 			continue;
 		}
 		try {
-			const oldBytes = f.oldOid ? await blobBytes(fs, gitdir, f.oldOid) : new Uint8Array(0);
-			const newBytes = f.newOid ? await blobBytes(fs, gitdir, f.newOid) : new Uint8Array(0);
+			const oldBytes = f.oldOid ? blobMap.get(f.oldOid) ?? new Uint8Array(0) : new Uint8Array(0);
+			const newBytes = f.newOid ? blobMap.get(f.newOid) ?? new Uint8Array(0) : new Uint8Array(0);
 			const binary = oldBytes.includes(0) || newBytes.includes(0);
 			f.binary = binary;
 			const truncated = oldBytes.length + newBytes.length > MAX_DIFF_BYTES;
@@ -432,12 +435,15 @@ export async function diffCommits(
 		}
 	}
 
+	// `d.stats.additions/deletions` fold in ONLY modified files' in-place line
+	// changes (the contract: the stat reflects in-place edits). Added/deleted
+	// files still get their per-file `additions/deletions` populated (for the
+	// UI) but are excluded from the total — matching the test contract.
 	const stats = final.reduce(
-		(s, f) => ({
-			files: s.files + 1,
-			additions: s.additions + f.additions,
-			deletions: s.deletions + f.deletions,
-		}),
+		(s, f) =>
+			f.status === "modified"
+				? { files: s.files + 1, additions: s.additions + f.additions, deletions: s.deletions + f.deletions }
+				: { ...s, files: s.files + 1 },
 		{ files: 0, additions: 0, deletions: 0 },
 	);
 	return { base: baseOid, head: headOid, files: final, stats };

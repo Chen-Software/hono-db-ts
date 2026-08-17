@@ -5,6 +5,7 @@ import { authEnvFromBindings } from '../src/auth/hono'
 import { buildQueryApp } from '../src/http/app'
 import { r2GitBackend } from '../src/git/backend'
 import { mountGitRoutes } from '../src/git/routes'
+import { handleQueueBatch, type QueueBatchLike } from '../src/worker/queue'
 import type { R2Like } from '../src/git/fs-r2'
 import type { Db } from '../src/services/types'
 
@@ -207,5 +208,31 @@ const app = createApp({
 		})
 	},
 })
+
+// Cloudflare Queues CONSUMER — the honox `@hono/vite-build/cloudflare-workers`
+// adapter collects every enumerable own property of the default export EXCEPT
+// `fetch` and merges it into the worker's platform export
+// (`export default { ...merged, fetch: app.fetch }`), so attaching `app.queue`
+// wires the same `repo.push` / `ci.run` consumer `src/worker.ts` used to. The
+// per-request bindings are not available here — the queue handler reaches D1
+// via `drizzle(lazyD1)` (same lazy facade as the fetch path) and measures repo
+// size by listing the R2 gitdir prefix through `lazyR2` (no fs walk).
+const queueDb = drizzle(lazyD1) as Db
+;(app as Record<string, unknown>).queue = (batch: QueueBatchLike): Promise<void> =>
+	handleQueueBatch(batch, {
+		db: queueDb,
+		log: (...args: unknown[]) => console.log('[queue]', ...args),
+		measureRepoSize: async (owner, repo) => {
+			const gitdir = gitBackend.gitdirFor(owner, repo)
+			let total = 0
+			let cursor: string | undefined
+			do {
+				const page = await lazyR2.list({ prefix: `${gitdir}/`, limit: 1000, cursor })
+				for (const obj of page.objects) total += obj.size ?? 0
+				cursor = page.truncated ? page.cursor : undefined
+			} while (cursor)
+			return total
+		},
+	})
 
 export default app

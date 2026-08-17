@@ -11,9 +11,10 @@
  * Design decisions (docs/git-backend-impl-plans.md P0-1):
  *   - PATs are stored ONLY as the SHA-256 of the raw token; the raw token is
  *     returned once at creation and never persisted or logged.
- *   - 2FA rejection of password auth is STUBBED: better-auth 2FA is a plugin and
- *     this project has no `isTwoFactor` column yet, so password login is
- *     currently allowed. Wire `hasTwoFactor()` once the 2FA plugin lands.
+ *   - 2FA: the better-auth 2FA plugin is enabled (see `src/auth/options.ts`),
+ *     and password auth REJECTS users with `twoFactorEnabled` set — the plugin
+ *     refuses to mint a session for them, and `resolvePassword` double-checks
+ *     the response. PAT auth is unaffected (token-based, no password).
  *
  * Uses only Web Crypto + Web Platform globals (atob / crypto.subtle /
  * crypto.getRandomValues) so this module is Workers-safe.
@@ -95,9 +96,6 @@ async function resolveToken(db: Db, rawToken: string): Promise<GitUser | null> {
 }
 
 async function resolvePassword(c: Context, user: string, password: string): Promise<GitUser | null> {
-	// TODO(P0-1): reject when the user has 2FA enrolled. The better-auth 2FA
-	// plugin is not installed and there is no isTwoFactor column, so password
-	// login is allowed for now.
 	const inst = await getAuthInstance(c);
 	if (!inst) return null;
 	try {
@@ -105,11 +103,18 @@ async function resolvePassword(c: Context, user: string, password: string): Prom
 			body: { email: user, password },
 			headers: new Headers(),
 		});
-		const id =
-			(res as { user?: { id?: string } })?.user?.id ??
-			(res as { session?: { user?: { id?: string } } })?.session?.user?.id;
-		if (!id) return null;
-		return { id, type: "password" };
+		// 2FA-enrolled users must not authenticate to the git transport with a
+		// password. The 2FA plugin (src/auth/options.ts) already refuses to mint
+		// a session for them — its sign-in hook deletes the freshly-created
+		// session and nulls the response user while the 2FA challenge is
+		// pending — so `u` is normally undefined here. Belt-and-braces: if a
+		// user object ever surfaces with `twoFactorEnabled` set, treat it as a
+		// failed login anyway. PAT auth (resolveToken) is unaffected.
+		const u =
+			(res as { user?: { id?: string; twoFactorEnabled?: boolean } })?.user ??
+			(res as { session?: { user?: { id?: string; twoFactorEnabled?: boolean } } })?.session?.user;
+		if (!u?.id || u.twoFactorEnabled) return null;
+		return { id: u.id, type: "password" };
 	} catch {
 		return null;
 	}

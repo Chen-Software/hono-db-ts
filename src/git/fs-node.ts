@@ -38,10 +38,10 @@ export function nodeFs(): FsClient {
 				const data = await readFile(path, opts?.encoding ? { encoding: opts.encoding } : undefined);
 				return data as unknown as Uint8Array | string;
 			},
-			writeFile: async (path: string, data: Uint8Array | string) => {
-				await mkdir(dirname(path), { recursive: true }).catch(() => {});
-				await writeFile(path, data as never);
-			},
+		writeFile: async (path: string, data: Uint8Array | string) => {
+			await mkdir(dirname(path), { recursive: true }).catch(() => {});
+			await writeFile(path, data as never);
+		},
 			unlink: async (path: string) => {
 				await unlink(path);
 			},
