@@ -25,11 +25,14 @@
  */
 
 import { Hono } from 'hono'
+import * as git from 'isomorphic-git'
 
 import type { Db } from '@/services/types'
 import { getSession } from '@/auth/context'
 import * as Models from '@/models'
 import { createServices } from '@/services'
+import type { GitBackend } from '@/git/backend'
+import { findReadme, listTree, logCommits, readBlob } from '@/git/read'
 
 /** UUID path segment — matches the id shape every table uses. */
 const UUID = '[0-9a-f-]{36}'
@@ -51,6 +54,23 @@ function num(v: string | null | undefined, def: number): number {
 	return Number.isFinite(n) && n > 0 ? n : def
 }
 
+/** Base64-encode bytes without relying on a global Buffer (Works-runtime safe). */
+function base64(bytes: Uint8Array): string {
+	const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	let out = ""
+	for (let i = 0; i < bytes.length; i += 3) {
+		const b0 = bytes[i]
+		const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0
+		const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0
+		const e0 = b0 >> 2
+		const e1 = ((b0 & 3) << 4) | (b1 >> 4)
+		const e2 = ((b1 & 15) << 2) | (b2 >> 6)
+		const e3 = b2 & 63
+		out += CHARS[e0] + CHARS[e1] + (i + 1 < bytes.length ? CHARS[e2] : "=") + (i + 2 < bytes.length ? CHARS[e3] : "=")
+	}
+	return out
+}
+
 /**
  * Build the Hono query app bound to the given Drizzle SQLite database.
  *
@@ -62,6 +82,7 @@ function num(v: string | null | undefined, def: number): number {
 export function buildQueryApp(
 	db: Db,
 	authInstance?: unknown | null,
+	gitBackend?: GitBackend | null,
 ): Hono {
 	const svc = createServices(db)
 
@@ -100,14 +121,14 @@ export function buildQueryApp(
 	})
 
 	// GET /repositories/:id
-	app.get(`/repositories/:id{${UUID}}`, async (c) => {
+	app.get(`/repositories/:id`, async (c) => {
 		const repo = await svc.repository.getWithOwner(c.req.param('id'))
 		if (!repo) return fail('repository not found', 404)
 		return json(repo)
 	})
 
 	// GET /users/:id
-	app.get(`/users/:id{${UUID}}`, async (c) => {
+	app.get(`/users/:id`, async (c) => {
 		const user = await svc.users.getById(c.req.param('id'))
 		if (!user) return fail('user not found', 404)
 		return json(user)
@@ -133,13 +154,94 @@ export function buildQueryApp(
 	app.get('/page/repositories', async (c) => json(await svc.repository.listIndex(c.req.query('cursor') ?? undefined)))
 
 	// GET /page/repositories/:id
-	app.get(`/page/repositories/:id{${UUID}}`, async (c) => json(await svc.repository.getPage(c.req.param('id'))))
+	app.get(`/page/repositories/:id`, async (c) => json(await svc.repository.getPage(c.req.param('id'))))
 
 	// GET /page/repositories/:id/edit
-	app.get(`/page/repositories/:id{${UUID}}/edit`, async (c) => json(await svc.repository.getEdit(c.req.param('id'))))
+	app.get(`/page/repositories/:id/edit`, async (c) => json(await svc.repository.getEdit(c.req.param('id'))))
 
 	// GET /page/users/:id
-	app.get(`/page/users/:id{${UUID}}`, async (c) => json(await svc.users.getProfile(c.req.param('id'))))
+	app.get(`/page/users/:id`, async (c) => json(await svc.users.getProfile(c.req.param('id'))))
+
+	// ------------------------------------------------------------------
+	// Git read endpoints (require a gitBackend — R2 on Workers, local fs in
+	// dev/test). The `Repository` DB row is the catalog; objects come from the
+	// storage backend via isomorphic-git.
+	// ------------------------------------------------------------------
+
+	if (gitBackend) {
+		async function resolveGitRepo(id: string) {
+			const page = await svc.repository.getPage(id)
+			if (!page.repository) return null
+			const owner = page.owner?.name
+			const name = page.repository.lowerName ?? page.repository.name
+			if (!owner) return null
+			return {
+				owner,
+				name,
+				defaultBranch: page.repository.defaultBranch || 'main',
+				gitdir: gitBackend.gitdirFor(owner, name),
+				fs: gitBackend.fsFor(owner, name),
+			}
+		}
+
+		// GET /api/page/repositories/:id/tree?ref=&path=  (root tree + README)
+		app.get(`/page/repositories/:id/tree`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const path = c.req.query('path') || '/'
+			try {
+				const entries = await listTree(ctx.fs, ctx.gitdir, ref, path)
+				let readmeContent: string | null = null
+				if (path === '/' || path === '') {
+					const readme = await findReadme(ctx.fs, ctx.gitdir, ref)
+					if (readme) {
+						const bytes = await readBlob(ctx.fs, ctx.gitdir, ref, readme.path)
+						readmeContent = new TextDecoder().decode(bytes)
+					}
+				}
+				const branches = await git.listBranches({ fs: ctx.fs, gitdir: ctx.gitdir })
+				return json({ entries, readme: readmeContent, ref, path, branches })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/read?ref=&path=  (single file content)
+		app.get(`/page/repositories/:id/read`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const path = c.req.query('path') || ''
+			if (!path) return fail('read requires ?path=')
+			try {
+				const bytes = await readBlob(ctx.fs, ctx.gitdir, ref, path)
+				const text = bytes.indexOf(0) === -1
+				return json({
+					path,
+					ref,
+					encoding: text ? 'utf8' : 'base64',
+					content: text ? new TextDecoder().decode(bytes) : base64(bytes),
+				})
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+
+		// GET /api/page/repositories/:id/commits?ref=&page=
+		app.get(`/page/repositories/:id/commits`, async (c) => {
+			const ctx = await resolveGitRepo(c.req.param('id'))
+			if (!ctx) return fail('repository not found', 404)
+			const ref = c.req.query('ref') || ctx.defaultBranch
+			const pageNum = num(c.req.query('page'), 1)
+			try {
+				const commits = await logCommits(ctx.fs, ctx.gitdir, ref, { skip: (pageNum - 1) * 30, max: 30 })
+				return json({ commits, ref, page: pageNum })
+			} catch (e) {
+				return fail(String((e as Error)?.message ?? e), 404)
+			}
+		})
+	}
 
 	// ------------------------------------------------------------------
 	// Mutation endpoints (the former SSR POST handlers, now behind the service
@@ -168,7 +270,7 @@ export function buildQueryApp(
 	})
 
 	// POST /page/repositories/:id/edit — save edited fields.
-	app.post(`/page/repositories/:id{${UUID}}/edit`, async (c) => {
+	app.post(`/page/repositories/:id/edit`, async (c) => {
 		const id = c.req.param('id')
 		const body = await c.req.parseBody()
 		if (typeof body['action'] !== 'string' || body['action'] !== 'save') return c.redirect(`/repositories/${id}/edit`)

@@ -14,6 +14,8 @@ import type { SqlQueryExecutor } from "@/capacities/servable";
 /** Worker bindings — the D1 database is `env.DB`. */
 export interface WorkerEnv {
 	DB?: D1Database;
+	/** R2 bucket for git objects (binding `REPOS`). */
+	REPOS?: unknown;
 	/** Public auth base URL (Better Auth). Defaults to the worker URL. */
 	BETTER_AUTH_URL?: string;
 	/** Better Auth signing secret — set as a Cloudflare secret binding. */

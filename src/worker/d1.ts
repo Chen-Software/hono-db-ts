@@ -14,6 +14,9 @@
 import { Hono } from "hono";
 import { buildQueryApp } from "@/http/app";
 import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
+import { localGitBackend, r2GitBackend, type GitBackend } from "@/git/backend";
+import { mountGitRoutes } from "@/git/routes";
+import type { R2Like } from "@/git/fs-r2";
 import type { SqlQueryExecutor, WorkerBackend, WorkerEnv } from "./types";
 
 /** Adapter turning the Workers D1 binding into the `SqlQueryExecutor` shape. */
@@ -34,6 +37,10 @@ export const backend: WorkerBackend = {
 		}
 		const app = new Hono();
 
+		// Git object backend: R2 in production (binding `REPOS`), local fs in dev.
+		const gitRoot = process.env.GIT_ROOT || ".gitdata";
+		const gitBackend: GitBackend | null = env.REPOS ? r2GitBackend(env.REPOS as R2Like) : localGitBackend(gitRoot);
+
 		// Better Auth is OPTIONAL. `betterAuthEnabled()` inlines to a literal at
 		// build time, so `BETTER_AUTH_ENABLED=false` drops the auth bundle
 		// (better-auth + drizzle adapter) from the deployed worker.
@@ -45,7 +52,9 @@ export const backend: WorkerBackend = {
 		}
 
 		// The query app (BBS read routes + generated CRUD) under /api.
-		app.route("/api", buildQueryApp(new D1Executor(env.DB)));
+		app.route("/api", buildQueryApp(new D1Executor(env.DB), undefined, gitBackend));
+		// Git smart-HTTP transport at the root (/owner/repo.git/...).
+		if (gitBackend) mountGitRoutes(app, { db: new D1Executor(env.DB), gitBackend });
 		return app;
 	},
 };

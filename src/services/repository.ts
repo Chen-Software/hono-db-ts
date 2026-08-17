@@ -162,6 +162,23 @@ export async function update(db: Db, id: string, patch: UpdateRepositoryInput): 
 	await run(db, `UPDATE "repositories" SET ${sets.join(', ')} WHERE "id" = ?`, [...params, id])
 }
 
+/** Resolve a repository by its owner's login + its (lower-cased) name — the
+ *  mapping the git smart-HTTP transport needs (`/owner/repo.git`). */
+export async function getByOwnerAndName(db: Db, ownerLogin: string, repoName: string): Promise<any | null> {
+	const rows = await all(
+		db,
+		`SELECT r.*, u.name AS owner_name, u.id AS owner_id
+		 FROM "repositories" r
+		 LEFT JOIN "users" u ON u.id = r."ownerId"
+		 WHERE u.name = ? AND r."lowerName" = ?
+		 LIMIT 1`,
+		[ownerLogin, repoName.toLowerCase()],
+	)
+	const repo = rows[0] ?? null
+	if (!repo) return null
+	return { ...repo, isPrivate: !!repo.isPrivate }
+}
+
 /** Repositories owned by a given user, newest first (the profile page). */
 export async function listByOwner(db: Db, ownerId: string, limit = 50): Promise<any[]> {
 	return all(

@@ -52,9 +52,15 @@ export interface Db {
 function toSql(query: string, params: unknown[]): SQL {
 	const segs = query.split('?')
 	let acc: SQL = sql``
+	// The number of `?` placeholders is (segs.length - 1). Binding a param
+	// after the FINAL segment would emit a trailing `?` and a SQL syntax error
+	// ("near ?: syntax error"), and binding more params than there are `?`s is
+	// always a caller bug. Cap binding at the placeholder count so a mismatch
+	// can never produce a trailing `?`.
+	const placeholders = segs.length - 1
 	for (let i = 0; i < segs.length; i++) {
 		if (segs[i]) acc = sql`${acc}${sql.raw(segs[i])}`
-		if (i < params.length) acc = sql`${acc}${params[i]}`
+		if (i < placeholders && i < params.length) acc = sql`${acc}${params[i]}`
 	}
 	return acc
 }

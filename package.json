@@ -52,6 +52,7 @@
 		"drizzle-orm": "^1.0.0-rc.4",
 		"hono": "^4.13.2",
 		"honox": "^0.1.60",
+		"isomorphic-git": "^1.41.4",
 		"typia": "^13.3.0"
 	}
 }

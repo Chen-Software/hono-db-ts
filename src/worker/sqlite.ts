@@ -16,6 +16,8 @@ import { Hono } from "hono";
 import { mountBetterAuth } from "@/auth/mount";
 import { buildQueryApp } from "@/http/app";
 import { betterAuthEnabled } from "@/macros/envs" with { type: "macro" };
+import { localGitBackend, type GitBackend } from "@/git/backend";
+import { mountGitRoutes } from "@/git/routes";
 import type { WorkerBackend, WorkerEnv } from "./types";
 
 /**
@@ -44,6 +46,10 @@ export const backend: WorkerBackend = {
 
 		const app = new Hono();
 
+		// Git object backend: local fs (dev only).
+		const gitRoot = process.env.GIT_ROOT || ".gitdata";
+		const gitBackend: GitBackend = localGitBackend(gitRoot);
+
 		// Better Auth is OPTIONAL. `betterAuthEnabled()` inlines to a literal at
 		// build time, so `BETTER_AUTH_ENABLED=false` drops the auth bundle from
 		// the sqlite worker too.
@@ -53,7 +59,8 @@ export const backend: WorkerBackend = {
 			localAuth.mount(app);
 		}
 
-		app.route("/api", buildQueryApp(client));
+		app.route("/api", buildQueryApp(client, undefined, gitBackend));
+		mountGitRoutes(app, { db: client, gitBackend });
 		return app;
 	},
 };

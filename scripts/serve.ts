@@ -69,6 +69,8 @@ import {
 import { buildQueryApp } from "../src/http/app";
 import { resolveDatabaseTarget } from "../src/http/schema";
 import { createQueryDb } from "../src/db/client";
+import { localGitBackend } from "../src/git/backend";
+import { mountGitRoutes } from "../src/git/routes";
 
 const rawUrl = databaseUrl() ?? "";
 if (!rawUrl) {
@@ -96,7 +98,13 @@ let authInstance: unknown = null;
 
 // Build the request-path Drizzle db. `createQueryDb` seeds the schema on the
 // same libSQL client (via an `unsafe` adapter), so queries see the tables.
-const queryApp = buildQueryApp(await createQueryDb(target), authInstance);
+const db = await createQueryDb(target);
+
+// Git object backend: local fs under GIT_ROOT (default `.gitdata`).
+const gitRoot = process.env.GIT_ROOT || ".gitdata";
+const gitBackend = localGitBackend(gitRoot);
+
+const queryApp = buildQueryApp(db, authInstance, gitBackend);
 
 // The combined server: /api → JSON queries; / → Honox UI (per mode).
 // Typed with the augmented `Env` so `c.env` carries the sql/DB/auth bindings
@@ -124,6 +132,9 @@ if (betterAuthEnabled()) {
 	authInstance = localAuth.instance;
 }
 if (mountAuth) mountAuth(app);
+
+// Git smart-HTTP transport at the root (/owner/repo.git/...).
+mountGitRoutes(app, { db, gitBackend });
 
 // The JSON query app (`buildQueryApp`) carries its own middleware that exposes
 // the SQL client + Better Auth instance on its request context (so guarded
